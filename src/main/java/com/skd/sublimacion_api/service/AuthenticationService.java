@@ -36,7 +36,7 @@ public class AuthenticationService {
                 .username(request.getUsername())
                 .correo(request.getCorreo())
                 .contrasenaHash(passwordEncoder.encode(request.getPassword()))
-                .rol(request.getRol() != null ? request.getRol() : Rol.CLIENTE)
+                .rol(request.getRol() != null ? request.getRol() : Rol.cliente)
                 .build();
 
         usuarioRepository.save(usuario);

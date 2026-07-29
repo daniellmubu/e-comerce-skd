@@ -52,7 +52,7 @@ public class Usuario implements UserDetails {
     @Enumerated(EnumType.STRING)
     @Column(name = "rol")
     @Builder.Default
-    private Rol rol = Rol.CLIENTE;
+    private Rol rol = Rol.cliente;
 
     @Column(name = "creado_en", updatable = false, insertable = false)
     private LocalDateTime creadoEn;
