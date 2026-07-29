@@ -7,6 +7,9 @@ import com.skd.sublimacion_api.dto.producto.ProductoResponse;
 
 public interface AdminProductoService {
 
-    Page<ProductoResponse> listar(Pageable pageable);
+    Page<ProductoResponse> listar(
+        String nombre,
+        Pageable pageable
+);
 
 }

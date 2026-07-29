@@ -11,6 +11,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.jpa.domain.Specification;
+
+import com.skd.sublimacion_api.specification.ProductoSpecification;
+
 @Service
 @RequiredArgsConstructor
 public class AdminProductoServiceImpl implements AdminProductoService {
@@ -18,10 +22,19 @@ public class AdminProductoServiceImpl implements AdminProductoService {
     private final ProductoRepository productoRepository;
 
     @Override
-    public Page<ProductoResponse> listar(Pageable pageable) {
+    public Page<ProductoResponse> listar(
+        String nombre,
+        Pageable pageable) {
 
-        return productoRepository.findAll(pageable)
-                .map(this::convertirResponse);
+    Specification<Producto> specification =
+            Specification.where(
+                    ProductoSpecification.nombreContiene(nombre)
+            );
+
+    return productoRepository
+            .findAll(specification, pageable)
+            .map(this::convertirResponse);
+
 
     }
 

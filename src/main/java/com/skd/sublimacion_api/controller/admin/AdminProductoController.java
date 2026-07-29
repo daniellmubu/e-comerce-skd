@@ -17,9 +17,18 @@ public class AdminProductoController {
 
     @GetMapping
     public Page<ProductoResponse> listar(
-            @PageableDefault(size = 10, sort = "id") Pageable pageable) {
 
-        return adminProductoService.listar(pageable);
+            @RequestParam(required = false)
+            String nombre,
+
+            @PageableDefault(size = 10, sort = "id")
+            Pageable pageable) {
+
+        return adminProductoService.listar(
+                nombre,
+                pageable
+        );
+
     }
 
 }
