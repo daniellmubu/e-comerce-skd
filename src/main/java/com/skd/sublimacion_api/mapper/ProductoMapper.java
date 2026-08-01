@@ -1,14 +1,18 @@
 package com.skd.sublimacion_api.mapper;
 
-import com.skd.sublimacion_api.dto.producto.ProductoRequest;
+import org.springframework.stereotype.Component;
+
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
 import com.skd.sublimacion_api.entity.Producto;
 
+@Component
 public class ProductoMapper {
 
-    private ProductoMapper() {}
+    public ProductoResponse toResponse(Producto producto){
 
-    public static ProductoResponse toResponse(Producto producto) {
+        if(producto == null){
+            return null;
+        }
 
         return ProductoResponse.builder()
                 .id(producto.getId())
@@ -20,6 +24,7 @@ public class ProductoMapper {
                 .masVendido(producto.getMasVendido())
                 .categoria(producto.getCategoria().getNombre())
                 .build();
+
     }
 
 }
