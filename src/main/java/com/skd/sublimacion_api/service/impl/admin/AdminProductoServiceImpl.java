@@ -58,46 +58,28 @@ public class AdminProductoServiceImpl implements AdminProductoService {
         @Override
         public ProductoResponse obtenerPorId(Long id) {
 
-                Producto producto = productoRepository.findById(id)
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException(
-                                        "Producto no encontrado con id: " + id));
-
-                return productoMapper.toResponse(producto);
+        return productoMapper.toResponse(buscarProducto(id));
         }
 
         @Override
         public void eliminar(Long id) {
 
-        Producto producto = productoRepository.findById(id)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Producto no encontrado con id: " + id));
+                Producto producto = buscarProducto(id);
 
-        producto.setActivo(false);
+                producto.setActivo(false);
 
-        productoRepository.save(producto);        
+                productoRepository.save(producto);        
 
         }
 
         @Override
         public ProductoResponse guardar(ProductoRequest request) {
 
-                Categoria categoria = categoriaRepository.findById(request.getCategoriaId())
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException(
-                                        "Categoría no encontrada con id: "
-                                                + request.getCategoriaId()));
+                Categoria categoria = buscarCategoria(request.getCategoriaId());
 
-                Producto producto = Producto.builder()
-                        .nombre(request.getNombre())
-                        .descripcion(request.getDescripcion())
-                        .precio(request.getPrecio())
-                        .stock(request.getStock())
-                        .activo(request.getActivo())
-                        .masVendido(request.getMasVendido())
-                        .categoria(categoria)
-                        .build();
+                Producto producto = new Producto();
+
+                actualizarDatosProducto(producto, request, categoria);
 
                 Producto guardado = productoRepository.save(producto);
 
@@ -107,40 +89,54 @@ public class AdminProductoServiceImpl implements AdminProductoService {
         @Override
         public ProductoResponse actualizar(Long id, ProductoRequest request) {
 
-        Producto producto = productoRepository.findById(id)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Producto no encontrado con id: " + id));
+                Producto producto = buscarProducto(id);
 
-        Categoria categoria = categoriaRepository.findById(request.getCategoriaId())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Categoría no encontrada con id: "
-                                        + request.getCategoriaId()));
+                Categoria categoria = buscarCategoria(request.getCategoriaId());
 
-        producto.setNombre(request.getNombre());
-        producto.setDescripcion(request.getDescripcion());
-        producto.setPrecio(request.getPrecio());
-        producto.setStock(request.getStock());
-        producto.setActivo(request.getActivo());
-        producto.setMasVendido(request.getMasVendido());
-        producto.setCategoria(categoria);
+                actualizarDatosProducto(producto, request, categoria);
 
-        Producto actualizado = productoRepository.save(producto);
+                Producto actualizado = productoRepository.save(producto);
 
-        return productoMapper.toResponse(actualizado);
+                return productoMapper.toResponse(actualizado);
         }
         
         @Override
         public void restaurar(Long id) {
 
-        Producto producto = productoRepository.findById(id)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Producto no encontrado con id: " + id));
+        Producto producto = buscarProducto(id);
 
         producto.setActivo(true);
 
         productoRepository.save(producto);
+        }
+
+        private Producto buscarProducto(Long id) {
+
+        return productoRepository.findById(id)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Producto no encontrado con id: " + id));
+        }
+
+        private Categoria buscarCategoria(Long id) {
+
+        return categoriaRepository.findById(id)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Categoría no encontrada con id: " + id));
+        }
+
+        private void actualizarDatosProducto(
+                Producto producto,
+                ProductoRequest request,
+                Categoria categoria) {
+
+                producto.setNombre(request.getNombre());
+                producto.setDescripcion(request.getDescripcion());
+                producto.setPrecio(request.getPrecio());
+                producto.setStock(request.getStock());
+                producto.setActivo(request.getActivo());
+                producto.setMasVendido(request.getMasVendido());
+                producto.setCategoria(categoria);
         }
 }
