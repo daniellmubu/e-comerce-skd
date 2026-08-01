@@ -1,0 +1,256 @@
+package com.skd.sublimacion_api.config;
+
+import com.skd.sublimacion_api.entity.Carrito;
+import com.skd.sublimacion_api.entity.Categoria;
+import com.skd.sublimacion_api.entity.Cupon;
+import com.skd.sublimacion_api.entity.Direccion;
+import com.skd.sublimacion_api.entity.Empaque;
+import com.skd.sublimacion_api.entity.Producto;
+import com.skd.sublimacion_api.entity.Rol;
+import com.skd.sublimacion_api.entity.Usuario;
+import com.skd.sublimacion_api.entity.item_carrito;
+import com.skd.sublimacion_api.repository.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+
+@Component
+@RequiredArgsConstructor
+public class DataInitializer implements CommandLineRunner {
+
+    private final UsuarioRepository usuarioRepository;
+    private final CategoriaRepository categoriaRepository;
+    private final ProductoRepository productoRepository;
+    private final EmpaqueRepository empaqueRepository;
+    private final CuponRepository cuponRepository;
+    private final DireccionRepository direccionRepository;
+    private final CarritoRepository carritoRepository;
+    private final ItemCarritoRepository itemCarritoRepository;
+
+    private final PasswordEncoder passwordEncoder;
+
+    @Override
+    @Transactional
+    public void run(String... args) {
+
+        System.out.println("=================================");
+        System.out.println("Cargando datos de prueba...");
+        System.out.println("=================================");
+
+        crearUsuarios();
+        crearCategorias();
+        crearProductos();
+        crearEmpaques();
+        crearCupones();
+        crearDirecciones();
+        crearCarritoConItems();
+
+        System.out.println("=================================");
+        System.out.println("Datos de prueba verificados/cargados.");
+        System.out.println("=================================");
+    }
+
+    private void crearUsuarios() {
+
+        if (!usuarioRepository.existsByUsername("admin")) {
+
+            Usuario admin = Usuario.builder()
+                    .nombre("Administrador")
+                    .username("admin")
+                    .correo("admin@skd.com")
+                    .contrasenaHash(passwordEncoder.encode("Admin123*"))
+                    .rol(Rol.admin)
+                    .build();
+
+            usuarioRepository.save(admin);
+        }
+
+        if (!usuarioRepository.existsByUsername("daniel")) {
+
+            Usuario cliente = Usuario.builder()
+                    .nombre("Daniel")
+                    .username("daniel")
+                    .correo("daniel@correo.com")
+                    .contrasenaHash(passwordEncoder.encode("123456"))
+                    .rol(Rol.cliente)
+                    .build();
+
+            usuarioRepository.save(cliente);
+        }
+
+        System.out.println("✔ Usuarios verificados");
+    }
+
+    private void crearCategorias() {
+
+        crearCategoriaSiNoExiste("Camisetas", "Camisetas personalizadas");
+        crearCategoriaSiNoExiste("Mugs", "Mugs personalizados");
+        crearCategoriaSiNoExiste("Gorras", "Gorras sublimadas");
+        crearCategoriaSiNoExiste("Cojines", "Cojines personalizados");
+        crearCategoriaSiNoExiste("Llaveros", "Llaveros personalizados");
+
+        System.out.println("✔ Categorías verificadas");
+    }
+
+    private void crearCategoriaSiNoExiste(String nombre, String descripcion) {
+        if (categoriaRepository.findByNombre(nombre).isEmpty()) {
+            Categoria categoria = Categoria.builder()
+                    .nombre(nombre)
+                    .descripcion(descripcion)
+                    .build();
+            categoriaRepository.save(categoria);
+        }
+    }
+
+    private void crearProductos() {
+
+        Categoria camisetas = categoriaRepository.findByNombre("Camisetas")
+                .orElseThrow(() -> new IllegalStateException("Categoría Camisetas no existe"));
+        Categoria mugs = categoriaRepository.findByNombre("Mugs")
+                .orElseThrow(() -> new IllegalStateException("Categoría Mugs no existe"));
+        Categoria gorras = categoriaRepository.findByNombre("Gorras")
+                .orElseThrow(() -> new IllegalStateException("Categoría Gorras no existe"));
+        Categoria cojines = categoriaRepository.findByNombre("Cojines")
+                .orElseThrow(() -> new IllegalStateException("Categoría Cojines no existe"));
+        Categoria llaveros = categoriaRepository.findByNombre("Llaveros")
+                .orElseThrow(() -> new IllegalStateException("Categoría Llaveros no existe"));
+
+        crearProductoSiNoExiste("Camiseta Blanca Sublimable", "Camiseta 100% poliéster ideal para sublimación", new BigDecimal("35000"), 50, camisetas);
+        crearProductoSiNoExiste("Camiseta Deportiva Dry Fit", "Camiseta deportiva de secado rápido", new BigDecimal("42000"), 40, camisetas);
+        crearProductoSiNoExiste("Mug Cerámico Blanco 11oz", "Mug clásico para sublimación", new BigDecimal("18000"), 100, mugs);
+        crearProductoSiNoExiste("Mug Mágico Negro", "Mug que revela el diseño con el calor", new BigDecimal("25000"), 60, mugs);
+        crearProductoSiNoExiste("Gorra Trucker Sublimable", "Gorra malla trasera con frente sublimable", new BigDecimal("28000"), 45, gorras);
+        crearProductoSiNoExiste("Gorra Clásica Algodón", "Gorra de algodón con panel sublimable", new BigDecimal("26000"), 45, gorras);
+        crearProductoSiNoExiste("Cojín Cuadrado 40x40", "Cojín decorativo con funda sublimable", new BigDecimal("32000"), 30, cojines);
+        crearProductoSiNoExiste("Cojín Decorativo Redondo", "Cojín redondo edición especial", new BigDecimal("34000"), 25, cojines);
+        crearProductoSiNoExiste("Llavero Acrílico Personalizado", "Llavero acrílico transparente con impresión", new BigDecimal("9000"), 150, llaveros);
+        crearProductoSiNoExiste("Llavero Metálico Grabado", "Llavero metálico grabado por sublimación", new BigDecimal("12000"), 120, llaveros);
+
+        System.out.println("✔ Productos verificados");
+    }
+
+    private void crearProductoSiNoExiste(String nombre, String descripcion, BigDecimal precio, int stock, Categoria categoria) {
+        if (productoRepository.findByNombre(nombre).isEmpty()) {
+            Producto producto = Producto.builder()
+                    .nombre(nombre)
+                    .descripcion(descripcion)
+                    .precio(precio)
+                    .stock(stock)
+                    .categoria(categoria)
+                    .activo(true)
+                    .build();
+            productoRepository.save(producto);
+        }
+    }
+
+    private void crearEmpaques() {
+
+        crearEmpaqueSiNoExiste("Estandar", "Empaque estándar en bolsa sellada", BigDecimal.ZERO);
+        crearEmpaqueSiNoExiste("Premium", "Caja premium con papel de seda", new BigDecimal("5000"));
+        crearEmpaqueSiNoExiste("Regalo", "Empaque tipo regalo con moño y tarjeta", new BigDecimal("8000"));
+
+        System.out.println("✔ Empaques verificados");
+    }
+
+    private void crearEmpaqueSiNoExiste(String tipo, String descripcion, BigDecimal costoAdicional) {
+        if (empaqueRepository.findByTipo(tipo).isEmpty()) {
+            Empaque empaque = Empaque.builder()
+                    .tipo(tipo)
+                    .descripcion(descripcion)
+                    .costoAdicional(costoAdicional)
+                    .build();
+            empaqueRepository.save(empaque);
+        }
+    }
+
+    private void crearCupones() {
+
+        crearCuponSiNoExiste("BIENVENIDA10", new BigDecimal("10.00"),
+                LocalDate.now(), LocalDate.now().plusMonths(6), 100);
+        crearCuponSiNoExiste("SKD20", new BigDecimal("20.00"),
+                LocalDate.now(), LocalDate.now().plusMonths(1), 50);
+
+        System.out.println("✔ Cupones verificados");
+    }
+
+    private void crearCuponSiNoExiste(String codigo, BigDecimal descuentoPorcentaje, LocalDate inicio, LocalDate fin, int usosMaximos) {
+        if (cuponRepository.findByCodigo(codigo).isEmpty()) {
+            Cupon cupon = Cupon.builder()
+                    .codigo(codigo)
+                    .descuentoPorcentaje(descuentoPorcentaje)
+                    .fechaInicio(inicio)
+                    .fechaFin(fin)
+                    .usosMaximos(usosMaximos)
+                    .usosActuales(0)
+                    .activo(true)
+                    .build();
+            cuponRepository.save(cupon);
+        }
+    }
+
+    private void crearDirecciones() {
+
+        Usuario daniel = usuarioRepository.findByUsername("daniel")
+                .orElseThrow(() -> new IllegalStateException("Usuario daniel no existe"));
+
+        if (direccionRepository.findByUsuarioId(daniel.getId()).isEmpty()) {
+            Direccion direccion = Direccion.builder()
+                    .usuario(daniel)
+                    .calle("Calle 45 # 12-30")
+                    .ciudad("Ibagué")
+                    .departamento("Tolima")
+                    .codigoPostal("730001")
+                    .predeterminada(true)
+                    .build();
+            direccionRepository.save(direccion);
+        }
+
+        System.out.println("✔ Direcciones verificadas");
+    }
+
+    private void crearCarritoConItems() {
+
+        Usuario daniel = usuarioRepository.findByUsername("daniel")
+                .orElseThrow(() -> new IllegalStateException("Usuario daniel no existe"));
+
+        Carrito carrito = carritoRepository.findByUsuarioId(daniel.getId())
+                .orElseGet(() -> {
+                    Carrito nuevo = Carrito.builder()
+                            .usuario(daniel)
+                            .build();
+                    return carritoRepository.save(nuevo);
+                });
+
+        if (itemCarritoRepository.findByCarritoId(carrito.getId()).isEmpty()) {
+
+            Producto camiseta = productoRepository.findByNombre("Camiseta Blanca Sublimable")
+                    .orElseThrow(() -> new IllegalStateException("Producto Camiseta Blanca Sublimable no existe"));
+            Producto mug = productoRepository.findByNombre("Mug Cerámico Blanco 11oz")
+                    .orElseThrow(() -> new IllegalStateException("Producto Mug Cerámico Blanco 11oz no existe"));
+
+            item_carrito itemUno = item_carrito.builder()
+                    .carrito(carrito)
+                    .producto(camiseta)
+                    .cantidad(2)
+                    .precioUnitario(camiseta.getPrecio())
+                    .build();
+
+            item_carrito itemDos = item_carrito.builder()
+                    .carrito(carrito)
+                    .producto(mug)
+                    .cantidad(1)
+                    .precioUnitario(mug.getPrecio())
+                    .build();
+
+            itemCarritoRepository.saveAll(List.of(itemUno, itemDos));
+        }
+
+        System.out.println("✔ Carrito e items verificados");
+    }
+}

@@ -36,7 +36,7 @@ public class AuthenticationService {
                 .username(request.getUsername())
                 .correo(request.getCorreo())
                 .contrasenaHash(passwordEncoder.encode(request.getPassword()))
-                .rol(request.getRol() != null ? request.getRol() : Rol.CLIENTE)
+                .rol(request.getRol() != null ? request.getRol() : Rol.cliente)
                 .build();
 
         usuarioRepository.save(usuario);
@@ -47,6 +47,7 @@ public class AuthenticationService {
         return AuthResponse.builder()
                 .token(token)
                 .refreshToken(refreshToken)
+                .id(usuario.getId())
                 .nombre(usuario.getNombre())
                 .username(usuario.getUsername())
                 .correo(usuario.getCorreo())
@@ -72,6 +73,7 @@ public class AuthenticationService {
         return AuthResponse.builder()
                 .token(token)
                 .refreshToken(refreshToken)
+                .id(usuario.getId())
                 .nombre(usuario.getNombre())
                 .username(usuario.getUsername())
                 .correo(usuario.getCorreo())
