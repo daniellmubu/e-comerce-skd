@@ -43,22 +43,21 @@ public class AdminProductoServiceImpl implements AdminProductoService {
                 BigDecimal precioMax,
                 Pageable pageable) {
 
-        Specification<Producto> specification = Specification
-                .where(ProductoSpecification.nombreContiene(nombre))
-                .and(ProductoSpecification.categoriaEs(categoriaId))
-                .and(ProductoSpecification.activoEs(activo))
-                .and(ProductoSpecification.precioMayorIgual(precioMin))
-                .and(ProductoSpecification.precioMenorIgual(precioMax));
+                Specification<Producto> specification = Specification
+                        .where(ProductoSpecification.nombreContiene(nombre))
+                        .and(ProductoSpecification.categoriaEs(categoriaId))
+                        .and(ProductoSpecification.activoEs(activo))
+                        .and(ProductoSpecification.precioMayorIgual(precioMin))
+                        .and(ProductoSpecification.precioMenorIgual(precioMax));
 
-        return productoRepository
-                .findAll(specification, pageable)
-                .map(productoMapper::toResponse);
+                return productoRepository
+                        .findAll(specification, pageable)
+                        .map(productoMapper::toResponse);
         }
         
         @Override
         public ProductoResponse obtenerPorId(Long id) {
-
-        return productoMapper.toResponse(buscarProducto(id));
+                return productoMapper.toResponse(buscarProducto(id));
         }
 
         @Override
@@ -74,6 +73,8 @@ public class AdminProductoServiceImpl implements AdminProductoService {
 
         @Override
         public ProductoResponse guardar(ProductoRequest request) {
+
+                validarNombreProducto(request.getNombre(), null);
 
                 Categoria categoria = buscarCategoria(request.getCategoriaId());
 
@@ -103,27 +104,40 @@ public class AdminProductoServiceImpl implements AdminProductoService {
         @Override
         public void restaurar(Long id) {
 
-        Producto producto = buscarProducto(id);
+                Producto producto = buscarProducto(id);
 
-        producto.setActivo(true);
+                producto.setActivo(true);
 
-        productoRepository.save(producto);
+                productoRepository.save(producto);
         }
 
         private Producto buscarProducto(Long id) {
 
-        return productoRepository.findById(id)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Producto no encontrado con id: " + id));
+                return productoRepository.findById(id)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Producto no encontrado con id: " + id));
         }
 
         private Categoria buscarCategoria(Long id) {
 
-        return categoriaRepository.findById(id)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Categoría no encontrada con id: " + id));
+                return categoriaRepository.findById(id)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Categoría no encontrada con id: " + id));
+        }
+
+        private void validarNombreProducto(String nombre, Long idActual) {
+
+                productoRepository.findByNombre(nombre)
+                        .ifPresent(producto -> {
+
+                                if (idActual == null || !producto.getId().equals(idActual)) {
+                                throw new IllegalArgumentException(
+                                        "Ya existe un producto con el nombre: " + nombre);
+                                }
+
+                        });
         }
 
         private void actualizarDatosProducto(

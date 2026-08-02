@@ -9,4 +9,7 @@ public interface CategoriaRepository extends JpaRepository<Categoria, Long> {
 
     Optional<Categoria> findByNombre(String nombre);
 
+        // Validar si una categoría tiene subcategorías
+    boolean existsByCategoriaPadre(Categoria categoria);
+
 }
