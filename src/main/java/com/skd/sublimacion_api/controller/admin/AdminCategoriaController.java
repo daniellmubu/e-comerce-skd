@@ -21,13 +21,31 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestBody;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+
 @RestController
 @RequestMapping("/api/admin/categorias")
 @RequiredArgsConstructor
+@Tag(
+        name = "Administración - Categorías",
+        description = "Endpoints para la gestión de categorías del panel administrativo."
+)
 public class AdminCategoriaController {
 
     private final AdminCategoriaService adminCategoriaService;
 
+    @Operation(
+        summary = "Listar categorías",
+        description = "Obtiene un listado paginado de categorías."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Listado obtenido correctamente")
+    })
     @GetMapping
     public Page<CategoriaResponse> listar(
             @PageableDefault(size = 10, sort = "id")
@@ -36,6 +54,15 @@ public class AdminCategoriaController {
         return adminCategoriaService.listar(pageable);
     }
 
+
+    @Operation(
+        summary = "Obtener categoría por ID",
+        description = "Obtiene la información de una categoría."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Categoría encontrada"),
+            @ApiResponse(responseCode = "404", description = "Categoría no encontrada")
+    })
     @GetMapping("/{id}")
     public CategoriaResponse obtenerPorId(
             @PathVariable Long id) {
@@ -43,6 +70,15 @@ public class AdminCategoriaController {
         return adminCategoriaService.obtenerPorId(id);
     }
 
+
+    @Operation(
+        summary = "Crear categoría",
+        description = "Registra una nueva categoría."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Categoría creada correctamente"),
+            @ApiResponse(responseCode = "400", description = "Datos inválidos")
+    })
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CategoriaResponse guardar(
@@ -51,6 +87,16 @@ public class AdminCategoriaController {
         return adminCategoriaService.guardar(request);
     }
 
+
+    @Operation(
+            summary = "Actualizar categoría",
+            description = "Actualiza la información de una categoría."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Categoría actualizada"),
+            @ApiResponse(responseCode = "400", description = "Datos inválidos"),
+            @ApiResponse(responseCode = "404", description = "Categoría no encontrada")
+    })
     @PutMapping("/{id}")
     public CategoriaResponse actualizar(
             @PathVariable Long id,
@@ -59,6 +105,16 @@ public class AdminCategoriaController {
         return adminCategoriaService.actualizar(id, request);
     }
 
+
+    @Operation(
+        summary = "Eliminar categoría",
+        description = "Elimina una categoría siempre que no tenga productos o subcategorías asociadas."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Categoría eliminada"),
+            @ApiResponse(responseCode = "400", description = "La categoría tiene productos o subcategorías"),
+            @ApiResponse(responseCode = "404", description = "Categoría no encontrada")
+    })
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void eliminar(@PathVariable Long id) {
