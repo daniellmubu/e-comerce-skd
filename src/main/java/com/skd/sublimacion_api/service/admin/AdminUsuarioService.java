@@ -1,5 +1,34 @@
 package com.skd.sublimacion_api.service.admin;
 
-public class AdminUsuarioService {
-    
+import com.skd.sublimacion_api.dto.usuario.UsuarioRequest;
+import com.skd.sublimacion_api.dto.usuario.UsuarioResponse;
+import com.skd.sublimacion_api.entity.Rol;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
+import com.skd.sublimacion_api.dto.usuario.CambiarRolRequest;
+
+public interface AdminUsuarioService {
+
+    Page<UsuarioResponse> listar(
+        String nombre,
+        String username,
+        String correo,
+        Rol rol,
+        Boolean bloqueado,
+        Boolean verificado,
+        Pageable pageable);
+
+    UsuarioResponse obtenerPorId(Long id);
+
+    UsuarioResponse guardar(UsuarioRequest request);
+
+    UsuarioResponse actualizar(Long id, UsuarioRequest request);
+
+    void bloquear(Long id);
+
+    void desbloquear(Long id);
+
+    void cambiarRol(Long id, CambiarRolRequest request);
 }

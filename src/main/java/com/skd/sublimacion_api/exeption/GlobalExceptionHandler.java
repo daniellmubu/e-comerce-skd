@@ -10,6 +10,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import java.util.Arrays;
+import com.skd.sublimacion_api.entity.Rol;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -60,6 +64,35 @@ public class GlobalExceptionHandler {
                 errores.put(error.getField(), error.getDefaultMessage()));
 
         return ResponseEntity.badRequest().body(errores);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<?> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex) {
+
+        Map<String, Object> error = new HashMap<>();
+
+        error.put("timestamp", LocalDateTime.now());
+        error.put("status", 400);
+        error.put("error", "Bad Request");
+
+        if (ex.getMessage() != null &&
+                ex.getMessage().contains("Rol")) {
+
+            error.put(
+                    "message",
+                    "Rol inválido. Valores permitidos: "
+                            + Arrays.toString(Rol.values()));
+        } else {
+
+            error.put(
+                    "message",
+                    "El cuerpo de la petición contiene datos inválidos.");
+        }
+
+        return ResponseEntity
+                .badRequest()
+                .body(error);
     }
 
     // Cualquier otro error
