@@ -12,12 +12,23 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
+import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
 @RequiredArgsConstructor
 public class ApplicationConfig {
 
     private final UsuarioRepository usuarioRepository;
+
+    @Bean
+    public WebClient.Builder webClientBuilder() {
+        ExchangeStrategies strategies = ExchangeStrategies.builder()
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024)) // 10 MB
+                .build();
+
+        return WebClient.builder().exchangeStrategies(strategies);
+    }
 
     @Bean
     public UserDetailsService userDetailsService() {
