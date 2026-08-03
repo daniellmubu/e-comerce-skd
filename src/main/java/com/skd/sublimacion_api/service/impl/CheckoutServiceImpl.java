@@ -18,6 +18,7 @@ import com.skd.sublimacion_api.entity.Empaque;
 import com.skd.sublimacion_api.entity.Pago;
 import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.entity.Usuario;
+import com.skd.sublimacion_api.entity.ItemPedido;
 import com.skd.sublimacion_api.entity.item_carrito;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CarritoRepository;
@@ -26,6 +27,7 @@ import com.skd.sublimacion_api.repository.DireccionRepository;
 import com.skd.sublimacion_api.repository.EmpaqueRepository;
 import com.skd.sublimacion_api.repository.FacturaRepository;
 import com.skd.sublimacion_api.repository.ItemCarritoRepository;
+import com.skd.sublimacion_api.repository.ItemPedidoRepository;
 import com.skd.sublimacion_api.repository.PagoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
@@ -40,6 +42,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final UsuarioRepository usuarioRepository;
     private final CarritoRepository carritoRepository;
     private final ItemCarritoRepository itemCarritoRepository;
+    private final ItemPedidoRepository itemPedidoRepository;
     private final PedidoRepository pedidoRepository;
     private final PagoRepository pagoRepository;
     private final FacturaRepository facturaRepository;
@@ -98,6 +101,7 @@ public class CheckoutServiceImpl implements CheckoutService {
         total
         );
         Factura factura = crearFactura(pedido);
+        crearItemsPedido(pedido, items);
         actualizarStock(items);
 
         vaciarCarrito(items);
@@ -266,6 +270,19 @@ public class CheckoutServiceImpl implements CheckoutService {
             .build();
 
         return facturaRepository.save(factura);     
+    }
+    private void crearItemsPedido(Pedido pedido, List<item_carrito> items) {
+
+        List<ItemPedido> itemsPedido = items.stream()
+                .map(item -> ItemPedido.builder()
+                        .pedido(pedido)
+                        .producto(item.getProducto())
+                        .cantidad(item.getCantidad())
+                        .precioUnitario(item.getPrecioUnitario())
+                        .build())
+                .toList();
+
+        itemPedidoRepository.saveAll(itemsPedido);
     }
     private void actualizarStock(List<item_carrito> items) {
 

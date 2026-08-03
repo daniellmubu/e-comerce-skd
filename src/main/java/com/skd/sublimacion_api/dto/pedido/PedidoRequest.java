@@ -1,9 +1,10 @@
 package com.skd.sublimacion_api.dto.pedido;
 
-import lombok.Data;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
+
+import lombok.Data;
 
 @Data
 public class PedidoRequest {
@@ -25,5 +26,7 @@ public class PedidoRequest {
     private BigDecimal total;
 
     private LocalDate fechaEntregaDeseada;
+
+    private List<ItemPedidoRequest> items;
 
 }
