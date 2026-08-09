@@ -6,6 +6,8 @@ import camiseta from "../assets/images/products/camiseta.png";
 import mug from "../assets/images/products/mug.png";
 import termo from "../assets/images/products/termo.png";
 import { useAuth } from "../context/AuthContext";
+import { generarDiseno } from "../services/disenoService";
+import { getErrorMessage } from "../services/api";
 
 const PRODUCT_TYPES = [
   { id: "camiseta", name: "Camiseta", image: camiseta },
@@ -51,6 +53,8 @@ function Generador() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasResult, setHasResult] = useState(false);
   const [showAuthGate, setShowAuthGate] = useState(false);
+  const [imagenGenerada, setImagenGenerada] = useState(null);
+  const [errorGeneracion, setErrorGeneracion] = useState(null);
 
   const selectedProduct = useMemo(
     () => PRODUCT_TYPES.find((p) => p.id === productType),
@@ -68,7 +72,9 @@ function Generador() {
     navigate(".", { replace: true, state: null });
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    console.log("🔥 Entró a handleGenerate");
+
     if (!prompt.trim() || isGenerating) return;
 
     if (!usuario) {
@@ -76,15 +82,32 @@ function Generador() {
       return;
     }
 
-    setShowAuthGate(false);
     setIsGenerating(true);
-    setHasResult(false);
+    setErrorGeneracion(null);
 
-    // Simulación de generación — se reemplazará por la llamada real a la IA
-    setTimeout(() => {
-      setIsGenerating(false);
+    try {
+      const promptCompleto = `Producto: ${selectedProduct.name}
+Estilo: ${style}
+Color: ${selectedColor.label}
+
+${prompt}`;
+
+      const resultado = await generarDiseno({
+        prompt: promptCompleto,
+        productoId: productoOrigen?.id ?? null,
+      });
+
+      console.log("Respuesta:", resultado);
+
+      setImagenGenerada(resultado.imagenUrl ?? resultado.url ?? resultado.imagen ?? null);
       setHasResult(true);
-    }, 1800);
+    } catch (error) {
+      console.error(error);
+      console.error(error.response);
+      setErrorGeneracion(getErrorMessage(error));
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -260,6 +283,12 @@ function Generador() {
               )}
             </button>
 
+            {errorGeneracion && (
+              <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-center text-sm text-red-300">
+                {errorGeneracion}
+              </div>
+            )}
+
             {showAuthGate && (
               <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-6 text-center">
                 <FaLock className="mx-auto mb-3 text-xl text-cyan-400" />
@@ -296,34 +325,42 @@ function Generador() {
               </div>
 
               <div className="relative flex h-80 items-center justify-center overflow-hidden rounded-2xl bg-slate-950">
-                <img
-                  src={selectedProduct.image}
-                  alt={selectedProduct.name}
-                  className="h-64 object-contain opacity-90"
-                />
+                {hasResult && imagenGenerada ? (
+                  <img
+                    src={imagenGenerada}
+                    alt="Diseño generado por IA"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <>
+                    <img
+                      src={selectedProduct.image}
+                      alt={selectedProduct.name}
+                      className="h-64 object-contain opacity-90"
+                    />
 
-                {/* Overlay de diseño generado */}
-                <div
-                  className={`
-                    absolute h-28 w-28 rounded-2xl
-                    bg-gradient-to-br ${selectedColor.classes}
-                    shadow-lg
-                    transition-all duration-700
-                    ${
-                      hasResult
-                        ? "scale-100 opacity-90"
-                        : isGenerating
-                        ? "scale-90 opacity-50"
-                        : "scale-75 opacity-20"
-                    }
-                  `}
-                >
-                  {isGenerating && (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <FaSpinner className="animate-spin text-xl text-white" />
+                    {/* Overlay mientras se genera o antes de generar */}
+                    <div
+                      className={`
+                        absolute h-28 w-28 rounded-2xl
+                        bg-gradient-to-br ${selectedColor.classes}
+                        shadow-lg
+                        transition-all duration-700
+                        ${
+                          isGenerating
+                            ? "scale-90 opacity-50"
+                            : "scale-75 opacity-20"
+                        }
+                      `}
+                    >
+                      {isGenerating && (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <FaSpinner className="animate-spin text-xl text-white" />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
 
               {hasResult && (

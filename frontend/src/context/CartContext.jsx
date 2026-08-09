@@ -39,15 +39,33 @@ export function CartProvider({ children }) {
 
     try {
       setLoading(true);
+
       const usuarioId = obtenerUsuarioId();
       const carrito = await obtenerOCrearCarrito(usuarioId);
+
       setCarritoId(carrito.id);
 
       const detalles = await listarItemsDelCarrito(carrito.id);
-      setItems(detalles);
+
+      // 👇 PARA SABER QUÉ ESTÁ DEVOLVIENDO EL BACKEND
+      console.log("DETALLES DEL BACKEND:", detalles);
+
+      // 👇 EVITA QUE REACT SE ROMPA
+      if (Array.isArray(detalles)) {
+        setItems(detalles);
+      } else if (Array.isArray(detalles?.data)) {
+        setItems(detalles.data);
+      } else if (Array.isArray(detalles?.content)) {
+        setItems(detalles.content);
+      } else {
+        console.warn("El backend no devolvió un arreglo:", detalles);
+        setItems([]);
+      }
+
       setError(null);
     } catch (err) {
       console.error(err);
+      setItems([]);
       setError("No fue posible cargar tu carrito.");
     } finally {
       setLoading(false);
@@ -63,6 +81,7 @@ export function CartProvider({ children }) {
       setLoading(true);
 
       let idCarrito = carritoId;
+
       if (!idCarrito) {
         const usuarioId = obtenerUsuarioId();
         const carrito = await obtenerOCrearCarrito(usuarioId);
@@ -70,16 +89,24 @@ export function CartProvider({ children }) {
         setCarritoId(idCarrito);
       }
 
-      const existente = items.find((item) => item.productoId === producto.id);
+      const listaItems = Array.isArray(items) ? items : [];
+
+      const existente = listaItems.find(
+        (item) => item.productoId === producto.id
+      );
 
       let itemActualizado;
+
       if (existente) {
         itemActualizado = await actualizarCantidadItem(
           existente,
           existente.cantidad + 1
         );
+
         setItems((prev) =>
-          prev.map((item) => (item.id === existente.id ? itemActualizado : item))
+          prev.map((item) =>
+            item.id === existente.id ? itemActualizado : item
+          )
         );
       } else {
         itemActualizado = await agregarItem({
@@ -87,6 +114,7 @@ export function CartProvider({ children }) {
           productoId: producto.id,
           cantidad: 1,
         });
+
         setItems((prev) => [...prev, itemActualizado]);
       }
 
@@ -115,7 +143,9 @@ export function CartProvider({ children }) {
   };
 
   const cambiarCantidad = async (itemId, nuevaCantidad) => {
-    const item = items.find((i) => i.id === itemId);
+    const listaItems = Array.isArray(items) ? items : [];
+    const item = listaItems.find((i) => i.id === itemId);
+
     if (!item) return;
 
     if (nuevaCantidad <= 0) {
@@ -125,8 +155,16 @@ export function CartProvider({ children }) {
 
     try {
       setLoading(true);
-      const itemActualizado = await actualizarCantidadItem(item, nuevaCantidad);
-      setItems((prev) => prev.map((i) => (i.id === itemId ? itemActualizado : i)));
+
+      const itemActualizado = await actualizarCantidadItem(
+        item,
+        nuevaCantidad
+      );
+
+      setItems((prev) =>
+        prev.map((i) => (i.id === itemId ? itemActualizado : i))
+      );
+
       setError(null);
     } catch (err) {
       console.error(err);
@@ -137,19 +175,27 @@ export function CartProvider({ children }) {
   };
 
   const aumentarCantidad = (itemId) => {
-    const item = items.find((i) => i.id === itemId);
+    const listaItems = Array.isArray(items) ? items : [];
+    const item = listaItems.find((i) => i.id === itemId);
+
     if (item) cambiarCantidad(itemId, item.cantidad + 1);
   };
 
   const disminuirCantidad = (itemId) => {
-    const item = items.find((i) => i.id === itemId);
+    const listaItems = Array.isArray(items) ? items : [];
+    const item = listaItems.find((i) => i.id === itemId);
+
     if (item) cambiarCantidad(itemId, item.cantidad - 1);
   };
 
   const vaciarCarrito = async () => {
     try {
       setLoading(true);
-      await Promise.all(items.map((item) => eliminarItem(item.id)));
+
+      const listaItems = Array.isArray(items) ? items : [];
+
+      await Promise.all(listaItems.map((item) => eliminarItem(item.id)));
+
       setItems([]);
       setError(null);
     } catch (err) {
@@ -160,15 +206,18 @@ export function CartProvider({ children }) {
     }
   };
 
-  const cantidadProductos = useMemo(
-    () => items.reduce((acc, item) => acc + item.cantidad, 0),
-    [items]
-  );
+  const cantidadProductos = useMemo(() => {
+    const listaItems = Array.isArray(items) ? items : [];
+    return listaItems.reduce((acc, item) => acc + item.cantidad, 0);
+  }, [items]);
 
-  const total = useMemo(
-    () => items.reduce((acc, item) => acc + Number(item.subtotal), 0),
-    [items]
-  );
+  const total = useMemo(() => {
+    const listaItems = Array.isArray(items) ? items : [];
+    return listaItems.reduce(
+      (acc, item) => acc + Number(item.subtotal || 0),
+      0
+    );
+  }, [items]);
 
   return (
     <CartContext.Provider

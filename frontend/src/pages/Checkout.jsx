@@ -24,9 +24,17 @@ function formatPrice(value) {
   });
 }
 
+// yyyy-mm-dd de hoy, en zona horaria local (no UTC), para usar como
+// mínimo del input type="date" y evitar que se pueda elegir un día pasado.
+function obtenerFechaMinimaHoy() {
+  const hoy = new Date();
+  const offset = hoy.getTimezoneOffset();
+  const local = new Date(hoy.getTime() - offset * 60000);
+  return local.toISOString().split("T")[0];
+}
+
 const METODOS_PAGO = [
   { value: "tarjeta", label: "Tarjeta de crédito/débito" },
-  { value: "pse", label: "PSE" },
   { value: "efectivo", label: "Contraentrega" },
 ];
 
@@ -47,6 +55,7 @@ function Checkout() {
   const [cuponId, setCuponId] = useState("");
   const [metodoPago, setMetodoPago] = useState(METODOS_PAGO[0].value);
   const [fechaEntregaDeseada, setFechaEntregaDeseada] = useState("");
+  const fechaMinima = obtenerFechaMinimaHoy();
 
   const [nuevaDireccion, setNuevaDireccion] = useState({
     calle: "",
@@ -127,6 +136,11 @@ function Checkout() {
   const handleConfirmar = async () => {
     if (!direccionId || !empaqueId) {
       setErrorCheckout("Selecciona una dirección y un tipo de empaque.");
+      return;
+    }
+
+    if (fechaEntregaDeseada && fechaEntregaDeseada < fechaMinima) {
+      setErrorCheckout("La fecha de entrega deseada no puede ser anterior a hoy.");
       return;
     }
 
@@ -383,6 +397,7 @@ function Checkout() {
                   type="date"
                   label="Fecha de entrega deseada (opcional)"
                   value={fechaEntregaDeseada}
+                  min={fechaMinima}
                   onChange={(e) => setFechaEntregaDeseada(e.target.value)}
                 />
               </div>
