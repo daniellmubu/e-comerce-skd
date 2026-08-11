@@ -16,8 +16,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 @Service
 @RequiredArgsConstructor
@@ -34,9 +36,11 @@ public class DisenoServiceImpl implements DisenoService {
     @Value("${cloudflare.api.token}")
     private String cloudflareApiToken;
 
-    // FLUX.1 [schnell] via Cloudflare Workers AI: nivel gratuito real
-    // (10,000 Neurons/dia, sin tarjeta).
     private static final String MODELO = "@cf/black-forest-labs/flux-1-schnell";
+
+    // Si Cloudflare no responde en este tiempo, cortamos la espera en vez de
+    // dejar la petición colgada indefinidamente.
+    private static final Duration TIMEOUT_CLOUDFLARE = Duration.ofSeconds(30);
 
     @Override
     public DisenoResponse generar(DisenoRequest request, Long usuarioId) {
@@ -89,13 +93,23 @@ public class DisenoServiceImpl implements DisenoService {
 
         WebClient client = webClientBuilder.build();
 
-        Map<String, Object> respuesta = client.post()
-                .uri(url)
-                .header("Authorization", "Bearer " + cloudflareApiToken)
-                .bodyValue(Map.of("prompt", promptFinal))
-                .retrieve()
-                .bodyToMono(Map.class)
-                .block();
+        Map<String, Object> respuesta;
+        try {
+            respuesta = client.post()
+                    .uri(url)
+                    .header("Authorization", "Bearer " + cloudflareApiToken)
+                    .bodyValue(Map.of("prompt", promptFinal))
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(TIMEOUT_CLOUDFLARE)
+                    .block();
+        } catch (RuntimeException ex) {
+            if (ex.getCause() instanceof TimeoutException) {
+                throw new BadRequestException(
+                        "Cloudflare tardó demasiado en responder. Intenta de nuevo en unos segundos.");
+            }
+            throw new BadRequestException("Cloudflare no pudo generar la imagen. Intenta de nuevo.");
+        }
 
         if (respuesta == null || Boolean.FALSE.equals(respuesta.get("success"))) {
             throw new BadRequestException("Cloudflare no pudo generar la imagen. Intenta de nuevo.");
@@ -108,7 +122,6 @@ public class DisenoServiceImpl implements DisenoService {
 
         String base64 = (String) result.get("image");
 
-        // Guardamos la imagen como data URI directamente en la columna TEXT.
         return "data:image/jpeg;base64," + base64;
     }
 
