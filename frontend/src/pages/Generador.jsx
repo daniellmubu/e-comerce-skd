@@ -370,19 +370,39 @@ ${prompt}`;
                     dashboard.
                   </p>
 
-                  <Link
-                    to="/dashboard"
-                    className="
-                      mt-4 inline-flex items-center gap-3
-                      rounded-xl border border-cyan-500
-                      px-6 py-3 font-semibold
-                      transition duration-300
-                      hover:bg-cyan-500 hover:text-slate-950
-                    "
-                  >
-                    Ir a mi dashboard
-                    <FaArrowRight />
-                  </Link>
+                  <div className="mt-4 flex flex-col justify-center gap-3 sm:flex-row">
+                    {imagenGenerada && (
+                      <a
+                        href={imagenGenerada}
+                        download={`diseno-skd-${Date.now()}.png`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="
+                          inline-flex items-center justify-center gap-3
+                          rounded-xl border border-slate-700
+                          px-6 py-3 font-semibold text-slate-200
+                          transition duration-300
+                          hover:border-cyan-400 hover:text-cyan-400
+                        "
+                      >
+                        Descargar diseño
+                      </a>
+                    )}
+
+                    <Link
+                      to="/dashboard"
+                      className="
+                        inline-flex items-center gap-3
+                        rounded-xl border border-cyan-500
+                        px-6 py-3 font-semibold
+                        transition duration-300
+                        hover:bg-cyan-500 hover:text-slate-950
+                      "
+                    >
+                      Ir a mi dashboard
+                      <FaArrowRight />
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
