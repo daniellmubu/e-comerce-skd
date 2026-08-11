@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -27,5 +28,7 @@ public class PedidoResponse {
     private BigDecimal descuento;
 
     private BigDecimal total;
+
+    private List<ItemPedidoResponse> items;
 
 }

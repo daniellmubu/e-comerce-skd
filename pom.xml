@@ -80,6 +80,12 @@
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 			<version>3.0.3</version>
 		</dependency>
+		<!-- Generación de PDF (factura electrónica) -->
+		<dependency>
+			<groupId>com.github.librepdf</groupId>
+			<artifactId>openpdf</artifactId>
+			<version>2.0.3</version>
+		</dependency>
 
 		<!-- Test -->
 		<dependency>

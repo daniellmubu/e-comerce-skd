@@ -38,4 +38,4 @@ build/
 ### Sistema Operativo ###
 .DS_Store
 Thumbs.db
-   .env
+   .env*.log
