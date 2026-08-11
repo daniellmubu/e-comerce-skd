@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
@@ -44,6 +45,10 @@ public class DisenoServiceImpl implements DisenoService {
 
     private static final int PROMPT_MAX_CARACTERES = 300;
 
+    // Cuota de Cloudflare (10,000 Neurons/día) es compartida entre todos los
+    // usuarios de la app; este límite evita que uno solo la agote.
+    private static final int LIMITE_GENERACIONES_DIARIAS = 10;
+
     // Filtro básico de contenido inapropiado. No es exhaustivo: es una primera
     // barrera para bloquear los casos más obvios antes de gastar cuota de la IA.
     private static final List<String> PALABRAS_PROHIBIDAS = List.of(
@@ -54,6 +59,7 @@ public class DisenoServiceImpl implements DisenoService {
     public DisenoResponse generar(DisenoRequest request, Long usuarioId) {
 
         validarPrompt(request.getPrompt());
+        validarLimiteDiario(usuarioId);
 
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
@@ -84,6 +90,17 @@ public class DisenoServiceImpl implements DisenoService {
                 .stream()
                 .map(this::convertir)
                 .toList();
+    }
+
+    private void validarLimiteDiario(Long usuarioId) {
+        LocalDateTime inicioDelDia = LocalDateTime.now().toLocalDate().atStartOfDay();
+        long generadosHoy = disenoRepository.countByUsuarioIdAndCreatedAtAfter(usuarioId, inicioDelDia);
+
+        if (generadosHoy >= LIMITE_GENERACIONES_DIARIAS) {
+            throw new BadRequestException(
+                    "Alcanzaste el límite de " + LIMITE_GENERACIONES_DIARIAS
+                            + " diseños generados hoy. Intenta de nuevo mañana.");
+        }
     }
 
     private void validarPrompt(String prompt) {
