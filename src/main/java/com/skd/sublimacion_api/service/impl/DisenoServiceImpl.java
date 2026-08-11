@@ -42,8 +42,18 @@ public class DisenoServiceImpl implements DisenoService {
     // dejar la petición colgada indefinidamente.
     private static final Duration TIMEOUT_CLOUDFLARE = Duration.ofSeconds(30);
 
+    private static final int PROMPT_MAX_CARACTERES = 300;
+
+    // Filtro básico de contenido inapropiado. No es exhaustivo: es una primera
+    // barrera para bloquear los casos más obvios antes de gastar cuota de la IA.
+    private static final List<String> PALABRAS_PROHIBIDAS = List.of(
+            "desnudo", "desnuda", "porno", "sexual", "nazi", "violencia explicita"
+    );
+
     @Override
     public DisenoResponse generar(DisenoRequest request, Long usuarioId) {
+
+        validarPrompt(request.getPrompt());
 
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
@@ -74,6 +84,28 @@ public class DisenoServiceImpl implements DisenoService {
                 .stream()
                 .map(this::convertir)
                 .toList();
+    }
+
+    private void validarPrompt(String prompt) {
+        if (prompt == null || prompt.isBlank()) {
+            throw new BadRequestException("Debes escribir una descripción para generar el diseño.");
+        }
+
+        String limpio = prompt.trim();
+
+        if (limpio.length() > PROMPT_MAX_CARACTERES) {
+            throw new BadRequestException(
+                    "La descripción es muy larga (máximo " + PROMPT_MAX_CARACTERES + " caracteres).");
+        }
+
+        String enMinusculas = limpio.toLowerCase();
+        boolean contienePalabraProhibida = PALABRAS_PROHIBIDAS.stream()
+                .anyMatch(enMinusculas::contains);
+
+        if (contienePalabraProhibida) {
+            throw new BadRequestException(
+                    "Esa descripción incluye contenido no permitido. Intenta con otra.");
+        }
     }
 
     private String construirPrompt(DisenoRequest r, Producto producto) {
