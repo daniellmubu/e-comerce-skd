@@ -18,8 +18,10 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
 @Service
@@ -36,6 +38,15 @@ public class DisenoServiceImpl implements DisenoService {
 
     @Value("${cloudflare.api.token}")
     private String cloudflareApiToken;
+
+    @Value("${supabase.url}")
+    private String supabaseUrl;
+
+    @Value("${supabase.service.key}")
+    private String supabaseServiceKey;
+
+    @Value("${supabase.storage.bucket}")
+    private String supabaseBucket;
 
     private static final String MODELO = "@cf/black-forest-labs/flux-1-schnell";
 
@@ -170,8 +181,34 @@ public class DisenoServiceImpl implements DisenoService {
         }
 
         String base64 = (String) result.get("image");
+        byte[] imagenBytes = Base64.getDecoder().decode(base64);
 
-        return "data:image/jpeg;base64," + base64;
+        return subirImagenASupabase(imagenBytes);
+    }
+
+    private String subirImagenASupabase(byte[] imagenBytes) {
+        String nombreArchivo = UUID.randomUUID() + ".jpg";
+        String uploadUrl = supabaseUrl + "/storage/v1/object/" + supabaseBucket + "/" + nombreArchivo;
+
+        WebClient client = webClientBuilder.build();
+
+        try {
+            client.post()
+                    .uri(uploadUrl)
+                    .header("Authorization", "Bearer " + supabaseServiceKey)
+                    .header("apikey", supabaseServiceKey)
+                    .header("Content-Type", "image/jpeg")
+                    .bodyValue(imagenBytes)
+                    .retrieve()
+                    .toBodilessEntity()
+                    .timeout(TIMEOUT_CLOUDFLARE)
+                    .block();
+        } catch (RuntimeException ex) {
+            throw new BadRequestException(
+                    "No se pudo guardar la imagen del diseño. Intenta de nuevo.");
+        }
+
+        return supabaseUrl + "/storage/v1/object/public/" + supabaseBucket + "/" + nombreArchivo;
     }
 
     private DisenoResponse convertir(Diseno diseno) {
