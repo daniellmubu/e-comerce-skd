@@ -2,11 +2,13 @@ package com.skd.sublimacion_api.controller;
 
 import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoRequest;
 import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoResponse;
+import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.service.ItemCarritoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.util.List;
 
@@ -34,8 +36,9 @@ public class DetalleCarritoController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ItemCarritoResponse guardar(@Valid @RequestBody ItemCarritoRequest request) {
-        return detalleService.guardar(request);
+    public ItemCarritoResponse guardar(@Valid @RequestBody ItemCarritoRequest request,
+                                        @AuthenticationPrincipal Usuario usuario) {
+        return detalleService.guardar(request, usuario.getId());
     }
 
     @DeleteMapping("/{id}")

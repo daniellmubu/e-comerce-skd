@@ -11,7 +11,7 @@ public interface ItemCarritoService {
 
     ItemCarritoResponse obtenerPorId(Long id);
 
-    ItemCarritoResponse guardar(ItemCarritoRequest request);
+    ItemCarritoResponse guardar(ItemCarritoRequest request, Long usuarioId);
 
     void eliminar(Long id);
 
