@@ -3,8 +3,10 @@ package com.skd.sublimacion_api.service.impl;
 import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoRequest;
 import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoResponse;
 import com.skd.sublimacion_api.entity.Carrito;
+import com.skd.sublimacion_api.entity.Diseno;
 import com.skd.sublimacion_api.entity.ItemCarrito;
 import com.skd.sublimacion_api.entity.Producto;
+import com.skd.sublimacion_api.exeption.BadRequestException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CarritoRepository;
 import com.skd.sublimacion_api.repository.DisenoRepository;
@@ -13,8 +15,6 @@ import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.service.ItemCarritoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import com.skd.sublimacion_api.entity.Diseno;
-import com.skd.sublimacion_api.exeption.BadRequestException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -30,7 +30,6 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
 
     @Override
     public List<ItemCarritoResponse> listar() {
-
 
         return detalleCarritoRepository.findAll()
                 .stream()
@@ -48,7 +47,7 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
     }
 
     @Override
-        public ItemCarritoResponse guardar(ItemCarritoRequest request, Long usuarioId) {
+    public ItemCarritoResponse guardar(ItemCarritoRequest request, Long usuarioId) {
 
         Carrito carrito = carritoRepository.findById(request.getCarritoId())
                 .orElseThrow(() -> new ResourceNotFoundException("Carrito no encontrado"));
@@ -58,12 +57,12 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
 
         Diseno diseno = null;
         if (request.getDisenoId() != null) {
-                diseno = disenoRepository.findById(request.getDisenoId())
-                        .orElseThrow(() -> new ResourceNotFoundException("Diseño no encontrado"));
+            diseno = disenoRepository.findById(request.getDisenoId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Diseño no encontrado"));
 
-                if (!diseno.getUsuario().getId().equals(usuarioId)) {
+            if (!diseno.getUsuario().getId().equals(usuarioId)) {
                 throw new BadRequestException("Ese diseño no te pertenece.");
-                }
+            }
         }
 
         ItemCarrito detalle = ItemCarrito.builder()
@@ -77,7 +76,7 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
         detalle = detalleCarritoRepository.save(detalle);
 
         return convertir(detalle);
-}       
+    }
 
     @Override
     public void eliminar(Long id) {
@@ -110,6 +109,8 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
                 .cantidad(detalle.getCantidad())
                 .precioUnitario(detalle.getPrecioUnitario())
                 .subtotal(subtotal)
+                .disenoId(detalle.getDiseno() != null ? detalle.getDiseno().getId() : null)
+                .imagenDisenoUrl(detalle.getDiseno() != null ? detalle.getDiseno().getImagenUrl() : null)
                 .build();
     }
 }
