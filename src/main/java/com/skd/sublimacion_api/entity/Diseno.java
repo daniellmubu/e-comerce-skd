@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "diseno")
 @Data
@@ -42,4 +44,17 @@ public class Diseno {
 
     @Column(columnDefinition = "TEXT")
     private String prompt;
+
+    @Builder.Default @Column(nullable = false)
+    private Boolean usado = false;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    protected void alCrear() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
 }

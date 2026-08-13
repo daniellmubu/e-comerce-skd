@@ -19,11 +19,13 @@ import com.skd.sublimacion_api.entity.Pago;
 import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.entity.ItemPedido;
-import com.skd.sublimacion_api.entity.item_carrito;
+import com.skd.sublimacion_api.entity.ItemCarrito;
+import com.skd.sublimacion_api.entity.Diseno;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CarritoRepository;
 import com.skd.sublimacion_api.repository.CuponRepository;
 import com.skd.sublimacion_api.repository.DireccionRepository;
+import com.skd.sublimacion_api.repository.DisenoRepository;
 import com.skd.sublimacion_api.repository.EmpaqueRepository;
 import com.skd.sublimacion_api.repository.FacturaRepository;
 import com.skd.sublimacion_api.repository.ItemCarritoRepository;
@@ -50,6 +52,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final EmpaqueRepository empaqueRepository;
     private final CuponRepository cuponRepository;
     private final ProductoRepository productoRepository;
+    private final DisenoRepository disenoRepository;
 
     @Override
     @Transactional
@@ -69,7 +72,7 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         Carrito carrito = obtenerCarrito(usuario);
 
-        List<item_carrito> items = obtenerItems(carrito);
+        List<ItemCarrito> items = obtenerItems(carrito);
         validarStock(items);
 
         BigDecimal subtotal = calcularSubtotal(items);
@@ -155,9 +158,9 @@ public class CheckoutServiceImpl implements CheckoutService {
                         new ResourceNotFoundException("El usuario no tiene un carrito"));
     }
 
-    private List<item_carrito> obtenerItems(Carrito carrito) {
+    private List<ItemCarrito> obtenerItems(Carrito carrito) {
 
-        List<item_carrito> items = itemCarritoRepository.findByCarritoId(carrito.getId());
+        List<ItemCarrito> items = itemCarritoRepository.findByCarritoId(carrito.getId());
 
         if (items.isEmpty()) {
             throw new ResourceNotFoundException("El carrito está vacío");
@@ -165,11 +168,11 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         return items;
     }
-    private BigDecimal calcularSubtotal(List<item_carrito> items) {
+    private BigDecimal calcularSubtotal(List<ItemCarrito> items) {
 
     BigDecimal subtotal = BigDecimal.ZERO;
 
-    for (item_carrito item : items) {
+    for (ItemCarrito item : items) {
 
         BigDecimal totalItem = item.getPrecioUnitario()
                 .multiply(BigDecimal.valueOf(item.getCantidad()));
@@ -179,8 +182,8 @@ public class CheckoutServiceImpl implements CheckoutService {
 
     return subtotal;
     }
-    private void validarStock(List<item_carrito> items) {
-        for (item_carrito item : items) {
+    private void validarStock(List<ItemCarrito> items) {
+        for (ItemCarrito item : items) {
             if (item.getCantidad() > item.getProducto().getStock()) {
                 throw new IllegalArgumentException(
                     "No hay suficiente stock para "
@@ -271,7 +274,7 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         return facturaRepository.save(factura);     
     }
-    private void crearItemsPedido(Pedido pedido, List<item_carrito> items) {
+    private void crearItemsPedido(Pedido pedido, List<ItemCarrito> items) {
 
         List<ItemPedido> itemsPedido = items.stream()
                 .map(item -> ItemPedido.builder()
@@ -279,14 +282,27 @@ public class CheckoutServiceImpl implements CheckoutService {
                         .producto(item.getProducto())
                         .cantidad(item.getCantidad())
                         .precioUnitario(item.getPrecioUnitario())
+                        .diseno(item.getDiseno())
                         .build())
                 .toList();
 
         itemPedidoRepository.saveAll(itemsPedido);
-    }
-    private void actualizarStock(List<item_carrito> items) {
 
-        for (item_carrito item : items) {
+        marcarDisenosComoUsados(items);
+    }
+    private void marcarDisenosComoUsados(List<ItemCarrito> items) {
+
+        items.stream()
+                .map(ItemCarrito::getDiseno)
+                .filter(diseno -> diseno != null)
+                .forEach(diseno -> {
+                    diseno.setUsado(true);
+                    disenoRepository.save(diseno);
+                });
+    }
+    private void actualizarStock(List<ItemCarrito> items) {
+
+        for (ItemCarrito item : items) {
 
             item.getProducto().setStock(
                 item.getProducto().getStock() - item.getCantidad()
@@ -297,7 +313,7 @@ public class CheckoutServiceImpl implements CheckoutService {
         }
 
     }
-    private void vaciarCarrito(List<item_carrito> items) {
+    private void vaciarCarrito(List<ItemCarrito> items) {
 
         itemCarritoRepository.deleteAll(items);
 

@@ -16,8 +16,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 @Service
 @RequiredArgsConstructor
@@ -34,12 +39,38 @@ public class DisenoServiceImpl implements DisenoService {
     @Value("${cloudflare.api.token}")
     private String cloudflareApiToken;
 
-    // FLUX.1 [schnell] via Cloudflare Workers AI: nivel gratuito real
-    // (10,000 Neurons/dia, sin tarjeta).
+    @Value("${supabase.url}")
+    private String supabaseUrl;
+
+    @Value("${supabase.service.key}")
+    private String supabaseServiceKey;
+
+    @Value("${supabase.storage.bucket}")
+    private String supabaseBucket;
+
     private static final String MODELO = "@cf/black-forest-labs/flux-1-schnell";
+
+    // Si Cloudflare no responde en este tiempo, cortamos la espera en vez de
+    // dejar la petición colgada indefinidamente.
+    private static final Duration TIMEOUT_CLOUDFLARE = Duration.ofSeconds(30);
+
+    private static final int PROMPT_MAX_CARACTERES = 300;
+
+    // Cuota de Cloudflare (10,000 Neurons/día) es compartida entre todos los
+    // usuarios de la app; este límite evita que uno solo la agote.
+    private static final int LIMITE_GENERACIONES_DIARIAS = 10;
+
+    // Filtro básico de contenido inapropiado. No es exhaustivo: es una primera
+    // barrera para bloquear los casos más obvios antes de gastar cuota de la IA.
+    private static final List<String> PALABRAS_PROHIBIDAS = List.of(
+            "desnudo", "desnuda", "porno", "sexual", "nazi", "violencia explicita"
+    );
 
     @Override
     public DisenoResponse generar(DisenoRequest request, Long usuarioId) {
+
+        validarPrompt(request.getPrompt());
+        validarLimiteDiario(usuarioId);
 
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
@@ -72,6 +103,39 @@ public class DisenoServiceImpl implements DisenoService {
                 .toList();
     }
 
+    private void validarLimiteDiario(Long usuarioId) {
+        LocalDateTime inicioDelDia = LocalDateTime.now().toLocalDate().atStartOfDay();
+        long generadosHoy = disenoRepository.countByUsuarioIdAndCreatedAtAfter(usuarioId, inicioDelDia);
+
+        if (generadosHoy >= LIMITE_GENERACIONES_DIARIAS) {
+            throw new BadRequestException(
+                    "Alcanzaste el límite de " + LIMITE_GENERACIONES_DIARIAS
+                            + " diseños generados hoy. Intenta de nuevo mañana.");
+        }
+    }
+
+    private void validarPrompt(String prompt) {
+        if (prompt == null || prompt.isBlank()) {
+            throw new BadRequestException("Debes escribir una descripción para generar el diseño.");
+        }
+
+        String limpio = prompt.trim();
+
+        if (limpio.length() > PROMPT_MAX_CARACTERES) {
+            throw new BadRequestException(
+                    "La descripción es muy larga (máximo " + PROMPT_MAX_CARACTERES + " caracteres).");
+        }
+
+        String enMinusculas = limpio.toLowerCase();
+        boolean contienePalabraProhibida = PALABRAS_PROHIBIDAS.stream()
+                .anyMatch(enMinusculas::contains);
+
+        if (contienePalabraProhibida) {
+            throw new BadRequestException(
+                    "Esa descripción incluye contenido no permitido. Intenta con otra.");
+        }
+    }
+
     private String construirPrompt(DisenoRequest r, Producto producto) {
         String tipo = producto != null ? producto.getNombre() : "producto";
         return String.format(
@@ -89,13 +153,23 @@ public class DisenoServiceImpl implements DisenoService {
 
         WebClient client = webClientBuilder.build();
 
-        Map<String, Object> respuesta = client.post()
-                .uri(url)
-                .header("Authorization", "Bearer " + cloudflareApiToken)
-                .bodyValue(Map.of("prompt", promptFinal))
-                .retrieve()
-                .bodyToMono(Map.class)
-                .block();
+        Map<String, Object> respuesta;
+        try {
+            respuesta = client.post()
+                    .uri(url)
+                    .header("Authorization", "Bearer " + cloudflareApiToken)
+                    .bodyValue(Map.of("prompt", promptFinal))
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(TIMEOUT_CLOUDFLARE)
+                    .block();
+        } catch (RuntimeException ex) {
+            if (ex.getCause() instanceof TimeoutException) {
+                throw new BadRequestException(
+                        "Cloudflare tardó demasiado en responder. Intenta de nuevo en unos segundos.");
+            }
+            throw new BadRequestException("Cloudflare no pudo generar la imagen. Intenta de nuevo.");
+        }
 
         if (respuesta == null || Boolean.FALSE.equals(respuesta.get("success"))) {
             throw new BadRequestException("Cloudflare no pudo generar la imagen. Intenta de nuevo.");
@@ -107,9 +181,34 @@ public class DisenoServiceImpl implements DisenoService {
         }
 
         String base64 = (String) result.get("image");
+        byte[] imagenBytes = Base64.getDecoder().decode(base64);
 
-        // Guardamos la imagen como data URI directamente en la columna TEXT.
-        return "data:image/jpeg;base64," + base64;
+        return subirImagenASupabase(imagenBytes);
+    }
+
+    private String subirImagenASupabase(byte[] imagenBytes) {
+        String nombreArchivo = UUID.randomUUID() + ".jpg";
+        String uploadUrl = supabaseUrl + "/storage/v1/object/" + supabaseBucket + "/" + nombreArchivo;
+
+        WebClient client = webClientBuilder.build();
+
+        try {
+            client.post()
+                    .uri(uploadUrl)
+                    .header("Authorization", "Bearer " + supabaseServiceKey)
+                    .header("apikey", supabaseServiceKey)
+                    .header("Content-Type", "image/jpeg")
+                    .bodyValue(imagenBytes)
+                    .retrieve()
+                    .toBodilessEntity()
+                    .timeout(TIMEOUT_CLOUDFLARE)
+                    .block();
+        } catch (RuntimeException ex) {
+            throw new BadRequestException(
+                    "No se pudo guardar la imagen del diseño. Intenta de nuevo.");
+        }
+
+        return supabaseUrl + "/storage/v1/object/public/" + supabaseBucket + "/" + nombreArchivo;
     }
 
     private DisenoResponse convertir(Diseno diseno) {

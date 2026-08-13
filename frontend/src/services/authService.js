@@ -11,6 +11,32 @@ function guardarSesion(authResponse) {
   localStorage.setItem(USER_KEY, JSON.stringify(usuario));
 }
 
+// Lee la fecha de expiración ("exp") que viene codificada dentro del
+// propio JWT, sin necesidad de llamar al backend. Un JWT tiene 3 partes
+// separadas por puntos (header.payload.signature); la del medio es la
+// que trae los datos, codificados en base64.
+function decodificarPayload(token) {
+  try {
+    const payloadBase64 = token.split(".")[1];
+    const payloadJson = atob(
+      payloadBase64.replace(/-/g, "+").replace(/_/g, "/")
+    );
+    return JSON.parse(payloadJson);
+  } catch {
+    // Si el token está corrupto o mal formado, lo tratamos como inválido.
+    return null;
+  }
+}
+
+function tokenExpirado(token) {
+  const payload = decodificarPayload(token);
+  if (!payload?.exp) return true;
+
+  // "exp" en un JWT viene en segundos; Date.now() da milisegundos.
+  const expiraEnMs = payload.exp * 1000;
+  return Date.now() >= expiraEnMs;
+}
+
 export async function login(username, password) {
   const { data } = await api.post("/auth/login", { username, password });
   guardarSesion(data);
@@ -36,8 +62,20 @@ export function logout() {
 }
 
 export function obtenerUsuarioActual() {
+  const token = localStorage.getItem(TOKEN_KEY);
   const usuario = localStorage.getItem(USER_KEY);
-  return usuario ? JSON.parse(usuario) : null;
+
+  if (!token || !usuario) return null;
+
+  // Si el token ya venció, la sesión guardada ya no sirve: la limpiamos
+  // para que la próxima carga de la página no muestre a un usuario
+  // "fantasma" que en realidad ya no puede hacer ninguna petición.
+  if (tokenExpirado(token)) {
+    logout();
+    return null;
+  }
+
+  return JSON.parse(usuario);
 }
 
 export function obtenerUsuarioId() {
@@ -46,5 +84,13 @@ export function obtenerUsuarioId() {
 }
 
 export function estaAutenticado() {
-  return Boolean(localStorage.getItem(TOKEN_KEY));
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (!token) return false;
+
+  if (tokenExpirado(token)) {
+    logout();
+    return false;
+  }
+
+  return true;
 }

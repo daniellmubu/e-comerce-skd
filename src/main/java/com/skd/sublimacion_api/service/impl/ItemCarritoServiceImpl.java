@@ -3,10 +3,13 @@ package com.skd.sublimacion_api.service.impl;
 import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoRequest;
 import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoResponse;
 import com.skd.sublimacion_api.entity.Carrito;
-import com.skd.sublimacion_api.entity.item_carrito;
+import com.skd.sublimacion_api.entity.Diseno;
+import com.skd.sublimacion_api.entity.ItemCarrito;
 import com.skd.sublimacion_api.entity.Producto;
+import com.skd.sublimacion_api.exeption.BadRequestException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CarritoRepository;
+import com.skd.sublimacion_api.repository.DisenoRepository;
 import com.skd.sublimacion_api.repository.ItemCarritoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.service.ItemCarritoService;
@@ -23,6 +26,7 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
     private final ItemCarritoRepository detalleCarritoRepository;
     private final CarritoRepository carritoRepository;
     private final ProductoRepository productoRepository;
+    private final DisenoRepository disenoRepository;
 
     @Override
     public List<ItemCarritoResponse> listar() {
@@ -36,14 +40,14 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
     @Override
     public ItemCarritoResponse obtenerPorId(Long id) {
 
-        item_carrito detalle = detalleCarritoRepository.findById(id)
+        ItemCarrito detalle = detalleCarritoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Detalle del carrito no encontrado"));
 
         return convertir(detalle);
     }
 
     @Override
-    public ItemCarritoResponse guardar(ItemCarritoRequest request) {
+    public ItemCarritoResponse guardar(ItemCarritoRequest request, Long usuarioId) {
 
         Carrito carrito = carritoRepository.findById(request.getCarritoId())
                 .orElseThrow(() -> new ResourceNotFoundException("Carrito no encontrado"));
@@ -51,9 +55,20 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
         Producto producto = productoRepository.findById(request.getProductoId())
                 .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado"));
 
-        item_carrito detalle = item_carrito.builder()
+        Diseno diseno = null;
+        if (request.getDisenoId() != null) {
+            diseno = disenoRepository.findById(request.getDisenoId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Diseño no encontrado"));
+
+            if (!diseno.getUsuario().getId().equals(usuarioId)) {
+                throw new BadRequestException("Ese diseño no te pertenece.");
+            }
+        }
+
+        ItemCarrito detalle = ItemCarrito.builder()
                 .carrito(carrito)
                 .producto(producto)
+                .diseno(diseno)
                 .cantidad(request.getCantidad())
                 .precioUnitario(producto.getPrecio())
                 .build();
@@ -66,7 +81,7 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
     @Override
     public void eliminar(Long id) {
 
-        item_carrito detalle = detalleCarritoRepository.findById(id)
+        ItemCarrito detalle = detalleCarritoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Detalle del carrito no encontrado"));
 
         detalleCarritoRepository.delete(detalle);
@@ -81,7 +96,7 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
                 .toList();
     }
 
-    private ItemCarritoResponse convertir(item_carrito detalle) {
+    private ItemCarritoResponse convertir(ItemCarrito detalle) {
 
         BigDecimal subtotal = detalle.getPrecioUnitario()
                 .multiply(BigDecimal.valueOf(detalle.getCantidad()));
@@ -94,6 +109,8 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
                 .cantidad(detalle.getCantidad())
                 .precioUnitario(detalle.getPrecioUnitario())
                 .subtotal(subtotal)
+                .disenoId(detalle.getDiseno() != null ? detalle.getDiseno().getId() : null)
+                .imagenDisenoUrl(detalle.getDiseno() != null ? detalle.getDiseno().getImagenUrl() : null)
                 .build();
     }
 }
