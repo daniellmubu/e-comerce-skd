@@ -20,10 +20,12 @@ import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.entity.ItemPedido;
 import com.skd.sublimacion_api.entity.ItemCarrito;
+import com.skd.sublimacion_api.entity.Diseno;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CarritoRepository;
 import com.skd.sublimacion_api.repository.CuponRepository;
 import com.skd.sublimacion_api.repository.DireccionRepository;
+import com.skd.sublimacion_api.repository.DisenoRepository;
 import com.skd.sublimacion_api.repository.EmpaqueRepository;
 import com.skd.sublimacion_api.repository.FacturaRepository;
 import com.skd.sublimacion_api.repository.ItemCarritoRepository;
@@ -50,6 +52,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final EmpaqueRepository empaqueRepository;
     private final CuponRepository cuponRepository;
     private final ProductoRepository productoRepository;
+    private final DisenoRepository disenoRepository;
 
     @Override
     @Transactional
@@ -279,10 +282,23 @@ public class CheckoutServiceImpl implements CheckoutService {
                         .producto(item.getProducto())
                         .cantidad(item.getCantidad())
                         .precioUnitario(item.getPrecioUnitario())
+                        .diseno(item.getDiseno())
                         .build())
                 .toList();
 
         itemPedidoRepository.saveAll(itemsPedido);
+
+        marcarDisenosComoUsados(items);
+    }
+    private void marcarDisenosComoUsados(List<ItemCarrito> items) {
+
+        items.stream()
+                .map(ItemCarrito::getDiseno)
+                .filter(diseno -> diseno != null)
+                .forEach(diseno -> {
+                    diseno.setUsado(true);
+                    disenoRepository.save(diseno);
+                });
     }
     private void actualizarStock(List<ItemCarrito> items) {
 

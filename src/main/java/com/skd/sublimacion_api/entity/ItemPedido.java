@@ -30,4 +30,7 @@ public class ItemPedido {
 
     @Column(name = "precio_unitario", nullable = false, precision = 10, scale = 2)
     private BigDecimal precioUnitario;
+
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "diseno_id")
+    private Diseno diseno;
 }

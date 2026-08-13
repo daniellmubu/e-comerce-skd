@@ -45,6 +45,9 @@ public class Diseno {
     @Column(columnDefinition = "TEXT")
     private String prompt;
 
+    @Builder.Default @Column(nullable = false)
+    private Boolean usado = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
