@@ -10,6 +10,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import java.util.Arrays;
+import com.skd.sublimacion_api.entity.Rol;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -17,37 +21,98 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<?> handleResourceNotFound(ResourceNotFoundException ex) {
 
-        Map<String, Object> error = new HashMap<>();
-        error.put("timestamp", LocalDateTime.now());
-        error.put("status", 404);
-        error.put("error", "Not Found");
-        error.put("message", ex.getMessage());
+         return buildError(
+            HttpStatus.NOT_FOUND,
+            "Not Found",
+            ex.getMessage());
+    }
 
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<?> handleIllegalArgument(IllegalArgumentException ex) {
+
+         return buildError(
+            HttpStatus.BAD_REQUEST,
+            "Bad Request",
+            ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<?> handleIllegalState(
+            IllegalStateException ex) {
+
+        return buildError(
+                HttpStatus.BAD_REQUEST,
+                "Bad Request",
+                ex.getMessage());
     }
 
     // Errores de validación
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<?> handleValidation(MethodArgumentNotValidException ex) {
+    public ResponseEntity<?> handleValidation(
+            MethodArgumentNotValidException ex) {
+
+        Map<String, Object> error = new HashMap<>();
 
         Map<String, String> errores = new HashMap<>();
 
-        ex.getBindingResult().getFieldErrors().forEach(error ->
-                errores.put(error.getField(), error.getDefaultMessage()));
+        ex.getBindingResult()
+                .getFieldErrors()
+                .forEach(fieldError ->
+                        errores.put(
+                                fieldError.getField(),
+                                fieldError.getDefaultMessage()));
 
-        return ResponseEntity.badRequest().body(errores);
+        error.put("timestamp", LocalDateTime.now());
+        error.put("status", 400);
+        error.put("error", "Bad Request");
+        error.put("message", "Error de validación");
+        error.put("fields", errores);
+
+        return ResponseEntity.badRequest().body(error);
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<?> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex) {
+
+        if (ex.getMessage() != null &&
+                ex.getMessage().contains("Rol")) {
+
+            return buildError(
+                    HttpStatus.BAD_REQUEST,
+                    "Bad Request",
+                    "Rol inválido. Valores permitidos: "
+                            + Arrays.toString(Rol.values()));
+        }
+
+        return buildError(
+                HttpStatus.BAD_REQUEST,
+                "Bad Request",
+                "El cuerpo de la petición contiene datos inválidos.");
+    }
+    
     // Cualquier otro error
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleGeneral(Exception ex) {
 
-        Map<String, Object> error = new HashMap<>();
-        error.put("timestamp", LocalDateTime.now());
-        error.put("status", 500);
-        error.put("error", "Internal Server Error");
-        error.put("message", ex.getMessage());
+        return buildError(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Internal Server Error",
+                ex.getMessage());
+    }
 
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    private ResponseEntity<Map<String, Object>> buildError(
+            HttpStatus status,
+            String error,
+            String message) {
+
+        Map<String, Object> body = new HashMap<>();
+
+        body.put("timestamp", LocalDateTime.now());
+        body.put("status", status.value());
+        body.put("error", error);
+        body.put("message", message);
+
+        return ResponseEntity.status(status).body(body);
     }
 }
