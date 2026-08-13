@@ -8,7 +8,7 @@ import com.skd.sublimacion_api.entity.Empaque;
 import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.entity.Rol;
 import com.skd.sublimacion_api.entity.Usuario;
-import com.skd.sublimacion_api.entity.item_carrito;
+import com.skd.sublimacion_api.entity.ItemCarrito;
 import com.skd.sublimacion_api.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
@@ -234,14 +234,14 @@ public class DataInitializer implements CommandLineRunner {
             Producto mug = productoRepository.findByNombre("Mug Cerámico Blanco 11oz")
                     .orElseThrow(() -> new IllegalStateException("Producto Mug Cerámico Blanco 11oz no existe"));
 
-            item_carrito itemUno = item_carrito.builder()
+            ItemCarrito itemUno = ItemCarrito.builder()
                     .carrito(carrito)
                     .producto(camiseta)
                     .cantidad(2)
                     .precioUnitario(camiseta.getPrecio())
                     .build();
 
-            item_carrito itemDos = item_carrito.builder()
+            ItemCarrito itemDos = ItemCarrito.builder()
                     .carrito(carrito)
                     .producto(mug)
                     .cantidad(1)
