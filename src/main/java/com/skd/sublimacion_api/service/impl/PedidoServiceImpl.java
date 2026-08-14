@@ -69,9 +69,9 @@ public class PedidoServiceImpl implements PedidoService {
     }
 
     @Override
-    public PedidoResponse guardar(PedidoRequest request) {
+    public PedidoResponse guardar(PedidoRequest request, Long usuarioId) {
 
-        Usuario usuario = usuarioRepository.findById(request.getUsuarioId())
+        Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
 
         Direccion direccion = direccionRepository.findById(request.getDireccionId())
@@ -197,6 +197,8 @@ public class PedidoServiceImpl implements PedidoService {
                 .cantidad(item.getCantidad())
                 .precioUnitario(item.getPrecioUnitario())
                 .subtotal(item.getPrecioUnitario().multiply(BigDecimal.valueOf(item.getCantidad())))
+                .disenoId(item.getDiseno() != null ? item.getDiseno().getId() : null)
+                .imagenDisenoUrl(item.getDiseno() != null ? item.getDiseno().getImagenUrl() : null)
                 .build();
     }
 

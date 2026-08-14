@@ -9,8 +9,6 @@ import lombok.Data;
 @Data
 public class PedidoRequest {
 
-    private Long usuarioId;
-
     private Long direccionId;
 
     private Long empaqueId;

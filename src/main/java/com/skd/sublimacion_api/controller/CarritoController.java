@@ -1,10 +1,11 @@
 package com.skd.sublimacion_api.controller;
 
-import com.skd.sublimacion_api.dto.carrito.CarritoRequest;
 import com.skd.sublimacion_api.dto.carrito.CarritoResponse;
+import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.service.CarritoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,15 +27,15 @@ public class CarritoController {
         return carritoService.obtenerPorId(id);
     }
 
-    @GetMapping("/usuario/{usuarioId}")
-    public CarritoResponse obtenerPorUsuario(@PathVariable Long usuarioId){
-        return carritoService.obtenerPorUsuario(usuarioId);
+    @GetMapping("/usuario")
+    public CarritoResponse obtenerPorUsuario(@AuthenticationPrincipal Usuario usuario){
+        return carritoService.obtenerPorUsuario(usuario.getId());
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CarritoResponse guardar(@RequestBody CarritoRequest request){
-        return carritoService.guardar(request);
+    public CarritoResponse guardar(@AuthenticationPrincipal Usuario usuario){
+        return carritoService.guardar(usuario.getId());
     }
 
     @DeleteMapping("/{id}")

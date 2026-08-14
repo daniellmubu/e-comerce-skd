@@ -20,4 +20,8 @@ public class ItemPedidoResponse {
     private BigDecimal precioUnitario;
 
     private BigDecimal subtotal;
+
+    private Long disenoId;
+
+    private String imagenDisenoUrl;
 }

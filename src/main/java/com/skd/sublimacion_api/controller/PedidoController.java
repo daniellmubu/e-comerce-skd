@@ -14,9 +14,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.skd.sublimacion_api.dto.pedido.PedidoRequest;
 import com.skd.sublimacion_api.dto.pedido.PedidoResponse;
+import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.service.PedidoService;
 
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 @RestController
 @RequestMapping("/api/pedidos")
@@ -35,15 +38,16 @@ public class PedidoController {
         return pedidoService.obtenerPorId(id);
     }
 
-    @GetMapping("/usuario/{usuarioId}")
-    public List<PedidoResponse> listarPorUsuario(@PathVariable Long usuarioId) {
-        return pedidoService.listarPorUsuario(usuarioId);
+    @GetMapping("/usuario")
+    public List<PedidoResponse> listarPorUsuario(@AuthenticationPrincipal Usuario usuario) {
+        return pedidoService.listarPorUsuario(usuario.getId());
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public PedidoResponse guardar(@RequestBody PedidoRequest request) {
-        return pedidoService.guardar(request);
+    public PedidoResponse guardar(@RequestBody PedidoRequest request,
+                                  @AuthenticationPrincipal Usuario usuario) {
+        return pedidoService.guardar(request, usuario.getId());
     }
 
     @DeleteMapping("/{id}")

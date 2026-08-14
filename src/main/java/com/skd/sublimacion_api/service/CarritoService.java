@@ -1,6 +1,5 @@
 package com.skd.sublimacion_api.service;
 
-import com.skd.sublimacion_api.dto.carrito.CarritoRequest;
 import com.skd.sublimacion_api.dto.carrito.CarritoResponse;
 
 import java.util.List;
@@ -13,7 +12,7 @@ public interface CarritoService {
 
     CarritoResponse obtenerPorUsuario(Long usuarioId);
 
-    CarritoResponse guardar(CarritoRequest request);
+    CarritoResponse guardar(Long usuarioId);
 
     void eliminar(Long id);
 

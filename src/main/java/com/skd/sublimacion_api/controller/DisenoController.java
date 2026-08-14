@@ -25,8 +25,8 @@ public class DisenoController {
         return disenoService.generar(request, usuario.getId());
     }
 
-    @GetMapping("/usuario/{usuarioId}")
-    public List<DisenoResponse> listarPorUsuario(@PathVariable Long usuarioId) {
-        return disenoService.listarPorUsuario(usuarioId);
+    @GetMapping("/usuario")
+    public List<DisenoResponse> listarPorUsuario(@AuthenticationPrincipal Usuario usuario) {
+        return disenoService.listarPorUsuario(usuario.getId());
     }
 }
