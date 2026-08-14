@@ -1,6 +1,5 @@
 package com.skd.sublimacion_api.service.impl;
 
-import com.skd.sublimacion_api.dto.carrito.CarritoRequest;
 import com.skd.sublimacion_api.dto.carrito.CarritoResponse;
 import com.skd.sublimacion_api.entity.Carrito;
 import com.skd.sublimacion_api.entity.Usuario;
@@ -48,9 +47,9 @@ public class CarritoServiceImpl implements CarritoService {
     }
 
     @Override
-    public CarritoResponse guardar(CarritoRequest request) {
+    public CarritoResponse guardar(Long usuarioId) {
 
-        Usuario usuario = usuarioRepository.findById(request.getUsuarioId())
+        Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
 
         Carrito carrito = Carrito.builder()

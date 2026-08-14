@@ -7,8 +7,6 @@ import java.time.LocalDate;
 @Data
 public class CheckoutRequest {
 
-    private Long usuarioId;
-
     private Long direccionId;
 
     private Long empaqueId;

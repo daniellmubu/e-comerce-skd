@@ -13,7 +13,7 @@ public interface PedidoService {
 
     List<PedidoResponse> listarPorUsuario(Long usuarioId);
 
-    PedidoResponse guardar(PedidoRequest request);
+    PedidoResponse guardar(PedidoRequest request, Long usuarioId);
 
     void eliminar(Long id);
 

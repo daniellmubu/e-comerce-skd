@@ -56,9 +56,9 @@ public class CheckoutServiceImpl implements CheckoutService {
 
     @Override
     @Transactional
-    public CheckoutResponse procesarCheckout(CheckoutRequest request) {
+    public CheckoutResponse procesarCheckout(CheckoutRequest request, Long usuarioId) {
 
-        Usuario usuario = obtenerUsuario(request.getUsuarioId());
+        Usuario usuario = obtenerUsuario(usuarioId);
 
         Direccion direccion = obtenerDireccion(request.getDireccionId());
 
