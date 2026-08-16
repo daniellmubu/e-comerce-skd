@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { FaMagic, FaSpinner, FaArrowRight, FaTimes, FaLock } from "react-icons/fa";
+import { FaMagic, FaSpinner, FaArrowRight, FaTimes, FaLock, FaPlus } from "react-icons/fa";
+import { Shirt, Coffee, GlassWater, Share2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import camiseta from "../assets/images/products/camiseta.png";
@@ -8,11 +9,12 @@ import termo from "../assets/images/products/termo.png";
 import { useAuth } from "../context/AuthContext";
 import { generarDiseno } from "../services/disenoService";
 import { getErrorMessage } from "../services/api";
+import Prenda3D from "../components/ui/Prenda3D";
 
 const PRODUCT_TYPES = [
-  { id: "camiseta", name: "Camiseta", image: camiseta },
-  { id: "mug", name: "Mug", image: mug },
-  { id: "termo", name: "Termo", image: termo },
+  { id: "camiseta", name: "Camiseta", image: camiseta, icon: Shirt },
+  { id: "mug", name: "Mug", image: mug, icon: Coffee },
+  { id: "termo", name: "Termo", image: termo, icon: GlassWater },
 ];
 
 // El Catálogo manda la categoría tal como la devuelve el backend
@@ -24,14 +26,12 @@ const CATEGORIA_TO_TIPO = {
   Termos: "termo",
 };
 
-const STYLES = ["Minimalista", "Cyberpunk", "Acuarela", "Line Art", "Retro"];
-
 const COLORS = [
-  { id: "cyan", label: "Cyan", classes: "from-cyan-500 to-blue-700" },
-  { id: "violet", label: "Violeta", classes: "from-violet-500 to-purple-700" },
-  { id: "pink", label: "Rosa", classes: "from-pink-500 to-rose-700" },
-  { id: "emerald", label: "Verde", classes: "from-emerald-500 to-green-700" },
-  { id: "amber", label: "Ámbar", classes: "from-amber-500 to-orange-700" },
+  { id: "cyan", label: "Cyan", classes: "from-cyan-500 to-blue-700", hex: "#06b6d4" },
+  { id: "violet", label: "Violeta", classes: "from-violet-500 to-purple-700", hex: "#8b5cf6" },
+  { id: "pink", label: "Rosa", classes: "from-pink-500 to-rose-700", hex: "#ec4899" },
+  { id: "emerald", label: "Verde", classes: "from-emerald-500 to-green-700", hex: "#10b981" },
+  { id: "amber", label: "Ámbar", classes: "from-amber-500 to-orange-700", hex: "#f59e0b" },
 ];
 
 function Generador() {
@@ -48,28 +48,84 @@ function Generador() {
   const [productType, setProductType] = useState(
     () => CATEGORIA_TO_TIPO[location.state?.categoria] ?? PRODUCT_TYPES[0].id
   );
-  const [style, setStyle] = useState(STYLES[0]);
   const [color, setColor] = useState(COLORS[0].id);
+  const [colorPersonalizado, setColorPersonalizado] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasResult, setHasResult] = useState(false);
   const [showAuthGate, setShowAuthGate] = useState(false);
   const [imagenGenerada, setImagenGenerada] = useState(null);
+  const [imagenSinFondo, setImagenSinFondo] = useState(null);
   const [errorGeneracion, setErrorGeneracion] = useState(null);
+  const [disenoInvalido, setDisenoInvalido] = useState(false);
 
   const selectedProduct = useMemo(
     () => PRODUCT_TYPES.find((p) => p.id === productType),
     [productType]
   );
 
-  const selectedColor = useMemo(
-    () => COLORS.find((c) => c.id === color),
-    [color]
-  );
+  const selectedColor = useMemo(() => {
+    if (colorPersonalizado) {
+      return { hex: colorPersonalizado, label: "Personalizado" };
+    }
+    return COLORS.find((c) => c.id === color) ?? COLORS[0];
+  }, [color, colorPersonalizado]);
 
   const handleQuitarProductoOrigen = () => {
     setProductoOrigen(null);
     // Limpia el state de la navegación para que un refresh no lo vuelva a traer
     navigate(".", { replace: true, state: null });
+  };
+
+  const handleColorPersonalizado = (e) => {
+    setColorPersonalizado(e.target.value);
+    // Deselecciona la paleta fija para que ningún círculo quede activo.
+    setColor(null);
+  };
+
+  // Descarga la imagen directamente al explorador de archivos. Como la imagen
+  // está en Supabase (otro dominio), el atributo `download` de un <a> normal
+  // no funciona; hay que traerla como blob y forzar la descarga.
+  const handleDescargar = async () => {
+    if (!imagenGenerada) return;
+    try {
+      const respuesta = await fetch(imagenGenerada);
+      const blob = await respuesta.blob();
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = `diseno-skd-${Date.now()}.png`;
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.open(imagenGenerada, "_blank");
+    }
+  };
+
+  // Comparte el diseño: usa la Web Share API si está disponible (celulares) y,
+  // si no, abre WhatsApp Web con el mensaje listo.
+  const handleCompartir = async () => {
+    if (!imagenGenerada) return;
+
+    const textoInvitacion =
+      "🎨 ¡Mira el diseño que creé con IA en SKD! Personaliza el tuyo aquí:";
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Mi diseño en SKD",
+          text: textoInvitacion,
+          url: imagenGenerada,
+        });
+      } catch {
+        // El usuario canceló el selector de compartir; no es un error.
+      }
+      return;
+    }
+
+    const mensaje = `${textoInvitacion} ${imagenGenerada}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, "_blank");
   };
 
   const handleGenerate = async () => {
@@ -86,11 +142,7 @@ function Generador() {
     setErrorGeneracion(null);
 
     try {
-      const promptCompleto = `Producto: ${selectedProduct.name}
-Estilo: ${style}
-Color: ${selectedColor.label}
-
-${prompt}`;
+      const promptCompleto = `${prompt}, paleta ${selectedColor.label.toLowerCase()}`;
 
       const resultado = await generarDiseno({
         prompt: promptCompleto,
@@ -99,7 +151,19 @@ ${prompt}`;
 
       console.log("Respuesta:", resultado);
 
-      setImagenGenerada(resultado.imagenUrl ?? resultado.url ?? resultado.imagen ?? null);
+      const imagenUrl =
+        resultado.imagenUrl ?? resultado.url ?? resultado.imagen ?? null;
+
+      setImagenGenerada(imagenUrl);
+
+      if (imagenUrl && resultado.valido !== false) {
+        setImagenSinFondo(imagenUrl);
+        setDisenoInvalido(false);
+      } else {
+        setImagenSinFondo(null);
+        setDisenoInvalido(true);
+      }
+
       setHasResult(true);
     } catch (error) {
       console.error(error);
@@ -123,8 +187,7 @@ ${prompt}`;
           </h1>
 
           <p className="mx-auto mt-5 max-w-xl text-slate-400">
-            Describe tu idea, elige el producto y el estilo, y deja que la IA
-            haga el resto.
+            Describe tu idea, elige el producto y deja que la IA haga el resto.
           </p>
 
           {productoOrigen && (
@@ -175,58 +238,31 @@ ${prompt}`;
                 Producto
               </label>
               <div className="grid grid-cols-3 gap-4">
-                {PRODUCT_TYPES.map((product) => (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() => setProductType(product.id)}
-                    className={`
-                      flex flex-col items-center gap-3 rounded-2xl border p-4
-                      transition
-                      ${
-                        productType === product.id
-                          ? "border-cyan-500 bg-cyan-500/10"
-                          : "border-slate-800 bg-slate-900 hover:border-slate-600"
-                      }
-                    `}
-                  >
-                    <img
-                      src={product.image}
-                      alt={product.name}
-                      className="h-16 w-16 object-contain"
-                    />
-                    <span className="text-sm font-medium">
-                      {product.name}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Estilo */}
-            <div>
-              <label className="mb-3 block text-sm font-semibold text-slate-300">
-                Estilo
-              </label>
-              <div className="flex flex-wrap gap-3">
-                {STYLES.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setStyle(s)}
-                    className={`
-                      rounded-full border px-4 py-2 text-sm font-medium
-                      transition
-                      ${
-                        style === s
-                          ? "border-cyan-500 bg-cyan-500/20 text-cyan-300"
-                          : "border-slate-700 text-slate-300 hover:border-cyan-400 hover:text-cyan-300"
-                      }
-                    `}
-                  >
-                    {s}
-                  </button>
-                ))}
+                {PRODUCT_TYPES.map((product) => {
+                  const Icono = product.icon;
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => setProductType(product.id)}
+                      className={`
+                        flex flex-col items-center gap-3 rounded-3xl border p-5
+                        bg-gradient-to-br from-cyan-500/20 to-blue-700/20
+                        transition-transform duration-200 hover:scale-105
+                        ${
+                          productType === product.id
+                            ? "border-cyan-400 ring-2 ring-cyan-400 shadow-lg shadow-cyan-500/30"
+                            : "border-slate-800 hover:border-slate-600"
+                        }
+                      `}
+                    >
+                      <Icono className="h-10 w-10 text-cyan-300" />
+                      <span className="text-sm font-semibold">
+                        {product.name}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -240,7 +276,10 @@ ${prompt}`;
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => setColor(c.id)}
+                    onClick={() => {
+                      setColor(c.id);
+                      setColorPersonalizado(null);
+                    }}
                     aria-label={c.label}
                     className={`
                       h-10 w-10 rounded-full bg-gradient-to-br ${c.classes}
@@ -253,6 +292,38 @@ ${prompt}`;
                     `}
                   />
                 ))}
+
+                <label
+                  title="Color personalizado"
+                  className={`
+                    relative h-10 w-10 cursor-pointer rounded-full transition
+                    ${
+                      colorPersonalizado
+                        ? "ring-2 ring-white ring-offset-2 ring-offset-slate-950"
+                        : "hover:scale-110"
+                    }
+                  `}
+                >
+                  <div
+                    className="flex h-full w-full items-center justify-center rounded-full"
+                    style={{
+                      background: colorPersonalizado
+                        ? colorPersonalizado
+                        : "conic-gradient(from 0deg, #ef4444, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)",
+                    }}
+                  >
+                    {!colorPersonalizado && (
+                      <FaPlus className="text-white drop-shadow" />
+                    )}
+                  </div>
+                  <input
+                    type="color"
+                    value={colorPersonalizado ?? "#ffffff"}
+                    onChange={handleColorPersonalizado}
+                    aria-label="Color personalizado"
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  />
+                </label>
               </div>
             </div>
 
@@ -320,47 +391,38 @@ ${prompt}`;
               <div className="mb-6 flex items-center justify-between">
                 <span className="text-sm text-slate-400">Vista previa</span>
                 <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-cyan-300">
-                  {selectedProduct.name} · {style}
+                  {selectedProduct.name}
                 </span>
               </div>
 
               <div className="relative flex h-80 items-center justify-center overflow-hidden rounded-2xl bg-slate-950">
-                {hasResult && imagenGenerada ? (
-                  <img
-                    src={imagenGenerada}
-                    alt="Diseño generado por IA"
-                    className="h-full w-full object-cover"
+                <div
+                  className="relative h-full"
+                  style={{ aspectRatio: "220 / 260" }}
+                >
+                  <Prenda3D
+                    key={productType}
+                    tipo={productType}
+                    color={selectedColor.hex}
+                    disenoUrl={imagenSinFondo}
                   />
-                ) : (
-                  <>
-                    <img
-                      src={selectedProduct.image}
-                      alt={selectedProduct.name}
-                      className="h-64 object-contain opacity-90"
-                    />
 
-                    {/* Overlay mientras se genera o antes de generar */}
-                    <div
-                      className={`
-                        absolute h-28 w-28 rounded-2xl
-                        bg-gradient-to-br ${selectedColor.classes}
-                        shadow-lg
-                        transition-all duration-700
-                        ${
-                          isGenerating
-                            ? "scale-90 opacity-50"
-                            : "scale-75 opacity-20"
-                        }
-                      `}
-                    >
-                      {isGenerating && (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <FaSpinner className="animate-spin text-xl text-white" />
-                        </div>
-                      )}
+                  {isGenerating && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-950/60 backdrop-blur-sm">
+                        <FaSpinner className="animate-spin text-2xl text-cyan-400" />
+                      </div>
                     </div>
-                  </>
-                )}
+                  )}
+
+                  {disenoInvalido && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 p-4 text-center">
+                      <p className="text-sm text-amber-300">
+                        La IA generó algo inesperado esta vez. Dale a "Generar diseño" de nuevo.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {hasResult && (
@@ -372,21 +434,36 @@ ${prompt}`;
 
                   <div className="mt-4 flex flex-col justify-center gap-3 sm:flex-row">
                     {imagenGenerada && (
-                      <a
-                        href={imagenGenerada}
-                        download={`diseno-skd-${Date.now()}.png`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="
-                          inline-flex items-center justify-center gap-3
-                          rounded-xl border border-slate-700
-                          px-6 py-3 font-semibold text-slate-200
-                          transition duration-300
-                          hover:border-cyan-400 hover:text-cyan-400
-                        "
-                      >
-                        Descargar diseño
-                      </a>
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleDescargar}
+                          className="
+                            inline-flex items-center justify-center gap-3
+                            rounded-xl border border-slate-700
+                            px-6 py-3 font-semibold text-slate-200
+                            transition duration-300
+                            hover:border-cyan-400 hover:text-cyan-400
+                          "
+                        >
+                          Descargar diseño
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleCompartir}
+                          className="
+                            inline-flex items-center justify-center gap-3
+                            rounded-xl border border-slate-700
+                            px-6 py-3 font-semibold text-slate-200
+                            transition duration-300
+                            hover:border-cyan-400 hover:text-cyan-400
+                          "
+                        >
+                          <Share2 className="text-lg" />
+                          Compartir
+                        </button>
+                      </>
                     )}
 
                     <Link
