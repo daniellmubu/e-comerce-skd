@@ -15,4 +15,5 @@ public class DisenoResponse {
     private Long productoId;
     private String producto; 
     private String imagenUrl;
+    private Boolean valido;
 }
