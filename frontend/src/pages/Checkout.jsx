@@ -11,6 +11,7 @@ import {
 import { listarEmpaques } from "../services/empaqueService";
 import { listarCupones } from "../services/cuponService";
 import { procesarCheckout } from "../services/checkoutService";
+import { iniciarPagoWompi } from "../services/pagoService";
 import { getErrorMessage } from "../services/api";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
@@ -147,15 +148,19 @@ function Checkout() {
     setProcesando(true);
     setErrorCheckout(null);
     try {
-      const usuarioId = obtenerUsuarioId();
       const respuesta = await procesarCheckout({
-        usuarioId,
         direccionId: Number(direccionId),
         empaqueId: Number(empaqueId),
         cuponId: cuponId ? Number(cuponId) : null,
         fechaEntregaDeseada: fechaEntregaDeseada || null,
         metodoPago,
       });
+      if (metodoPago === "tarjeta") {
+        const wompi = await iniciarPagoWompi(respuesta.pagoId);
+        window.location.href = wompi.url;
+        return;
+      }
+
       setResultado(respuesta);
       await recargarCarrito();
     } catch (err) {

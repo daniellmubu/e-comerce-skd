@@ -52,11 +52,11 @@ public class CarritoServiceImpl implements CarritoService {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
 
-        Carrito carrito = Carrito.builder()
-                .usuario(usuario)
-                .build();
-
-        carritoRepository.save(carrito);
+        Carrito carrito = carritoRepository.findByUsuarioId(usuarioId)
+                .orElseGet(() -> carritoRepository.save(
+                        Carrito.builder()
+                                .usuario(usuario)
+                                .build()));
 
         return mapToResponse(carrito);
     }

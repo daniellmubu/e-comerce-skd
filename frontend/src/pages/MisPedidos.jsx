@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaShoppingBag } from "react-icons/fa";
 
-import { obtenerUsuarioId } from "../services/authService";
 import { listarPedidosPorUsuario } from "../services/pedidoService";
 import { getErrorMessage } from "../services/api";
 import Loading from "../components/ui/Loading";
@@ -45,8 +44,7 @@ function MisPedidos() {
   async function cargarPedidos() {
     setLoading(true);
     try {
-      const usuarioId = obtenerUsuarioId();
-      const data = await listarPedidosPorUsuario(usuarioId);
+      const data = await listarPedidosPorUsuario();
       data.sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn));
       setPedidos(data);
       setError(null);

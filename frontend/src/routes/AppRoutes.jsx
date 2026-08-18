@@ -8,6 +8,7 @@ import Dashboard from "../pages/Dashboard";
 import Generador from "../pages/Generador";
 import Carrito from "../pages/Carrito";
 import Checkout from "../pages/Checkout";
+import CheckoutResultado from "../pages/CheckoutResultado";
 import MisPedidos from "../pages/MisPedidos";
 import RutaProtegida from "./RutaProtegida";
 
@@ -40,6 +41,14 @@ function AppRoutes() {
         element={
           <RutaProtegida>
             <Checkout />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/checkout/resultado"
+        element={
+          <RutaProtegida>
+            <CheckoutResultado />
           </RutaProtegida>
         }
       />
