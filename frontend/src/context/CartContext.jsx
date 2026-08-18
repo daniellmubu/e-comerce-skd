@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 
-import { estaAutenticado, obtenerUsuarioId } from "../services/authService";
+import { estaAutenticado } from "../services/authService";
 import { useAuth } from "./AuthContext";
 import {
   obtenerOCrearCarrito,
@@ -40,8 +40,7 @@ export function CartProvider({ children }) {
     try {
       setLoading(true);
 
-      const usuarioId = obtenerUsuarioId();
-      const carrito = await obtenerOCrearCarrito(usuarioId);
+      const carrito = await obtenerOCrearCarrito();
 
       setCarritoId(carrito.id);
 
@@ -83,8 +82,7 @@ export function CartProvider({ children }) {
       let idCarrito = carritoId;
 
       if (!idCarrito) {
-        const usuarioId = obtenerUsuarioId();
-        const carrito = await obtenerOCrearCarrito(usuarioId);
+        const carrito = await obtenerOCrearCarrito();
         idCarrito = carrito.id;
         setCarritoId(idCarrito);
       }

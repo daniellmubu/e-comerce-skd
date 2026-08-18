@@ -5,7 +5,7 @@ export async function generarDiseno({ prompt, productoId }) {
   return data;
 }
 
-export async function listarDisenosPorUsuario(usuarioId) {
-  const { data } = await api.get(`/disenos/usuario/${usuarioId}`);
+export async function listarDisenosPorUsuario() {
+  const { data } = await api.get("/disenos/usuario");
   return data;
 }

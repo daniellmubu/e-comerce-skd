@@ -1,21 +1,21 @@
   import api from "./api";
 
-  export async function obtenerCarritoPorUsuario(usuarioId) {
-    const { data } = await api.get(`/carritos/usuario/${usuarioId}`);
+  export async function obtenerCarritoPorUsuario() {
+    const { data } = await api.get("/carritos/usuario");
     return data;
   }
 
-  export async function crearCarrito(usuarioId) {
-    const { data } = await api.post("/carritos", { usuarioId });
+  export async function crearCarrito() {
+    const { data } = await api.post("/carritos");
     return data;
   }
 
-  export async function obtenerOCrearCarrito(usuarioId) {
+  export async function obtenerOCrearCarrito() {
     try {
-      return await obtenerCarritoPorUsuario(usuarioId);
+      return await obtenerCarritoPorUsuario();
     } catch (err) {
       if (err.response?.status === 404) {
-        return await crearCarrito(usuarioId);
+        return await crearCarrito();
       }
       throw err;
     }

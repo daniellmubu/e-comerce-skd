@@ -10,8 +10,8 @@ export async function obtenerPedidoPorId(id) {
   return data;
 }
 
-export async function listarPedidosPorUsuario(usuarioId) {
-  const { data } = await api.get(`/pedidos/usuario/${usuarioId}`);
+export async function listarPedidosPorUsuario() {
+  const { data } = await api.get("/pedidos/usuario");
   return data;
 }
 
