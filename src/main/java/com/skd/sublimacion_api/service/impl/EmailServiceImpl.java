@@ -74,4 +74,29 @@ public class EmailServiceImpl implements EmailService {
                     correo, e.getMessage(), e);
         }
     }
+
+    @Async
+    @Override
+    public void enviarRestablecerPassword(String correo, String nombre, String token) {
+
+        try {
+            MimeMessage mensaje = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mensaje, false, "UTF-8");
+
+            helper.setTo(correo);
+            helper.setSubject("Restablece tu contraseña - SKD");
+            helper.setText("Hola " + nombre + ",\n\n"
+                    + "Recibimos una solicitud para restablecer tu contraseña. "
+                    + "Usa el siguiente enlace (válido por 30 minutos):\n\n"
+                    + "http://localhost:5173/restablecer-password?token=" + token + "\n\n"
+                    + "Si no solicitaste este cambio, ignora este correo.");
+
+            mailSender.send(mensaje);
+            log.info("Correo de restablecimiento de contraseña enviado a {}", correo);
+
+        } catch (MessagingException | RuntimeException e) {
+            log.error("No se pudo enviar el correo de restablecimiento a {}: {}",
+                    correo, e.getMessage(), e);
+        }
+    }
 }
