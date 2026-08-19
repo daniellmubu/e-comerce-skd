@@ -12,6 +12,7 @@ import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.PagoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
 import com.skd.sublimacion_api.service.PagoService;
+import com.skd.sublimacion_api.service.WebSocketService;
 import com.skd.sublimacion_api.service.WompiService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class PagoServiceImpl implements PagoService {
     private final PagoRepository pagoRepository;
     private final PedidoRepository pedidoRepository;
     private final WompiService wompiService;
+    private final WebSocketService webSocketService;
 
     @Override
     public PagoResponse obtenerPorId(Long id) {
@@ -75,6 +77,7 @@ public class PagoServiceImpl implements PagoService {
 
         boolean aprobado = !"000".equals(request.getCvv());
 
+        String estadoPedidoAntes = pedido.getEstado();
         String mensaje;
         if (aprobado) {
             pago.setEstado("aprobado");
@@ -90,6 +93,10 @@ public class PagoServiceImpl implements PagoService {
         pago.setProcesadoEn(LocalDateTime.now());
         pagoRepository.save(pago);
         pedidoRepository.save(pedido);
+
+        if (!estadoPedidoAntes.equals(pedido.getEstado())) {
+            webSocketService.publicarEstadoPedido(pedido.getId(), pedido.getEstado());
+        }
 
         return SimulacionPagoResponse.builder()
                 .pagoId(pago.getId())
@@ -142,6 +149,7 @@ public class PagoServiceImpl implements PagoService {
                 || "ERROR".equalsIgnoreCase(estadoWompi);
 
         Pedido pedido = pago.getPedido();
+        String estadoPedidoAntes = pedido.getEstado();
 
         if (aprobado && !"aprobado".equalsIgnoreCase(pago.getEstado())) {
             pago.setEstado("aprobado");
@@ -155,6 +163,10 @@ public class PagoServiceImpl implements PagoService {
             pago.setEstado("rechazado");
             pago.setProcesadoEn(LocalDateTime.now());
             pagoRepository.save(pago);
+        }
+
+        if (!estadoPedidoAntes.equals(pedido.getEstado())) {
+            webSocketService.publicarEstadoPedido(pedido.getId(), pedido.getEstado());
         }
 
         String mensaje = aprobado

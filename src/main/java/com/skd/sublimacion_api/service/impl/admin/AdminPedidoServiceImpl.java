@@ -7,6 +7,7 @@ import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.ItemPedidoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
+import com.skd.sublimacion_api.service.WebSocketService;
 import com.skd.sublimacion_api.service.admin.AdminPedidoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -28,6 +29,7 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
 
     private final PedidoRepository pedidoRepository;
     private final ItemPedidoRepository itemPedidoRepository;
+    private final WebSocketService webSocketService;
 
     @Override
     public Page<PedidoResponse> listar(String estado, Long usuarioId, Pageable pageable) {
@@ -68,9 +70,16 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
         }
 
         Pedido pedido = obtenerPedido(id);
+        String estadoAnterior = pedido.getEstado();
         pedido.setEstado(estadoNormalizado);
 
-        return convertir(pedidoRepository.save(pedido));
+        PedidoResponse response = convertir(pedidoRepository.save(pedido));
+
+        if (!estadoAnterior.equals(pedido.getEstado())) {
+            webSocketService.publicarEstadoPedido(pedido.getId(), pedido.getEstado());
+        }
+
+        return response;
     }
 
     private Pedido obtenerPedido(Long id) {
