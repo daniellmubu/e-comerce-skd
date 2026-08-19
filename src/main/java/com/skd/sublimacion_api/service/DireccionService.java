@@ -7,8 +7,6 @@ import com.skd.sublimacion_api.dto.direccion.DireccionResponse;
 
 public interface DireccionService {
 
-    List<DireccionResponse> listar();
-
     DireccionResponse obtenerPorId(Long id);
 
     List<DireccionResponse> listarPorUsuario(Long usuarioId);

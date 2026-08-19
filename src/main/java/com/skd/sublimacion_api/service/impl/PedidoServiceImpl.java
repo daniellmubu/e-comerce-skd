@@ -17,6 +17,7 @@ import com.skd.sublimacion_api.entity.ItemPedido;
 import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.entity.Usuario;
+import com.skd.sublimacion_api.exeption.ForbiddenException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CuponRepository;
 import com.skd.sublimacion_api.repository.DireccionRepository;
@@ -42,19 +43,12 @@ public class PedidoServiceImpl implements PedidoService {
     private final ProductoRepository productoRepository;
 
     @Override
-    public List<PedidoResponse> listar() {
-
-        return pedidoRepository.findAll()
-                .stream()
-                .map(this::convertir)
-                .toList();
-    }
-
-    @Override
-    public PedidoResponse obtenerPorId(Long id) {
+    public PedidoResponse obtenerPorId(Long id, Long usuarioId) {
 
         Pedido pedido = pedidoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido no encontrado"));
+
+        validarPropietario(pedido.getUsuario().getId(), usuarioId);
 
         return convertir(pedido);
     }
@@ -159,12 +153,21 @@ public class PedidoServiceImpl implements PedidoService {
     }
 
     @Override
-    public void eliminar(Long id) {
+    public void eliminar(Long id, Long usuarioId) {
 
         Pedido pedido = pedidoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido no encontrado"));
 
+        validarPropietario(pedido.getUsuario().getId(), usuarioId);
+
         pedidoRepository.delete(pedido);
+    }
+
+    private void validarPropietario(Long duenoId, Long usuarioId) {
+
+        if (!duenoId.equals(usuarioId)) {
+            throw new ForbiddenException("No tienes permiso para acceder a este pedido.");
+        }
     }
 
     private PedidoResponse convertir(Pedido pedido){

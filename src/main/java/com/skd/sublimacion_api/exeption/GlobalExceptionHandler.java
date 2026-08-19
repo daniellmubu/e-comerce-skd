@@ -28,6 +28,16 @@ public class GlobalExceptionHandler {
             ex.getMessage());
     }
 
+    // Acceso no autorizado al recurso (403)
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<?> handleForbidden(ForbiddenException ex) {
+
+        return buildError(
+                HttpStatus.FORBIDDEN,
+                "Forbidden",
+                ex.getMessage());
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<?> handleIllegalArgument(IllegalArgumentException ex) {
 

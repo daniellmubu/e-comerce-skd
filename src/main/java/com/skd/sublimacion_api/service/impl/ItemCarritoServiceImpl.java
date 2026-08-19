@@ -29,15 +29,6 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
     private final DisenoRepository disenoRepository;
 
     @Override
-    public List<ItemCarritoResponse> listar() {
-
-        return detalleCarritoRepository.findAll()
-                .stream()
-                .map(this::convertir)
-                .toList();
-    }
-
-    @Override
     public ItemCarritoResponse obtenerPorId(Long id) {
 
         ItemCarrito detalle = detalleCarritoRepository.findById(id)

@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -27,14 +26,6 @@ public class PagoServiceImpl implements PagoService {
     private final PagoRepository pagoRepository;
     private final PedidoRepository pedidoRepository;
     private final WompiService wompiService;
-
-    @Override
-    public List<PagoResponse> listar() {
-        return pagoRepository.findAll()
-                .stream()
-                .map(this::convertir)
-                .toList();
-    }
 
     @Override
     public PagoResponse obtenerPorId(Long id) {

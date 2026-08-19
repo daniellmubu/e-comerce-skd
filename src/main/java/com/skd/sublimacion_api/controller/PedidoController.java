@@ -28,14 +28,10 @@ public class PedidoController {
 
     private final PedidoService pedidoService;
 
-    @GetMapping
-    public List<PedidoResponse> listar() {
-        return pedidoService.listar();
-    }
-
     @GetMapping("/{id}")
-    public PedidoResponse obtener(@PathVariable Long id) {
-        return pedidoService.obtenerPorId(id);
+    public PedidoResponse obtener(@PathVariable Long id,
+                                  @AuthenticationPrincipal Usuario usuario) {
+        return pedidoService.obtenerPorId(id, usuario.getId());
     }
 
     @GetMapping("/usuario")
@@ -52,8 +48,9 @@ public class PedidoController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void eliminar(@PathVariable Long id) {
-        pedidoService.eliminar(id);
+    public void eliminar(@PathVariable Long id,
+                         @AuthenticationPrincipal Usuario usuario) {
+        pedidoService.eliminar(id, usuario.getId());
     }
 
 }

@@ -36,7 +36,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/productos/**").permitAll()
                         .requestMatchers("/api/imagenes/**").permitAll()
                         .requestMatchers("/api/categorias/**").permitAll()
-                        .requestMatchers("/api/carritos/**").permitAll()
                         // El enum Rol solo define admin y cliente (en minúsculas). getAuthorities()
                         // genera "ROLE_admin" / "ROLE_cliente", por eso se usa hasRole("admin")
                         // (en minúsculas) para proteger el panel administrativo.

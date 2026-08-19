@@ -19,11 +19,6 @@ public class DetalleCarritoController {
 
     private final ItemCarritoService detalleService;
 
-    @GetMapping
-    public List<ItemCarritoResponse> listar() {
-        return detalleService.listar();
-    }
-
     @GetMapping("/{id}")
     public ItemCarritoResponse obtener(@PathVariable Long id) {
         return detalleService.obtenerPorId(id);

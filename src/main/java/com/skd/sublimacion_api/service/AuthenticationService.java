@@ -21,6 +21,7 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final EmailService emailService;
 
     public AuthResponse registrar(RegistroRequest request) {
 
@@ -40,6 +41,8 @@ public class AuthenticationService {
                 .build();
 
         usuarioRepository.save(usuario);
+
+        emailService.enviarBienvenida(usuario.getCorreo(), usuario.getNombre());
 
         String token = jwtService.generateToken(usuario);
         String refreshToken = jwtService.generateRefreshToken(usuario);

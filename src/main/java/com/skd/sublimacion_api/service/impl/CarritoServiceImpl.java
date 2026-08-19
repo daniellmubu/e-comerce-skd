@@ -3,14 +3,13 @@ package com.skd.sublimacion_api.service.impl;
 import com.skd.sublimacion_api.dto.carrito.CarritoResponse;
 import com.skd.sublimacion_api.entity.Carrito;
 import com.skd.sublimacion_api.entity.Usuario;
+import com.skd.sublimacion_api.exeption.ForbiddenException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CarritoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.service.CarritoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -20,19 +19,12 @@ public class CarritoServiceImpl implements CarritoService {
     private final UsuarioRepository usuarioRepository;
 
     @Override
-    public List<CarritoResponse> listar() {
-
-        return carritoRepository.findAll()
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
-    }
-
-    @Override
-    public CarritoResponse obtenerPorId(Long id) {
+    public CarritoResponse obtenerPorId(Long id, Long usuarioId) {
 
         Carrito carrito = carritoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Carrito no encontrado"));
+
+        validarPropietario(carrito.getUsuario().getId(), usuarioId);
 
         return mapToResponse(carrito);
     }
@@ -62,12 +54,21 @@ public class CarritoServiceImpl implements CarritoService {
     }
 
     @Override
-    public void eliminar(Long id) {
+    public void eliminar(Long id, Long usuarioId) {
 
         Carrito carrito = carritoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Carrito no encontrado"));
 
+        validarPropietario(carrito.getUsuario().getId(), usuarioId);
+
         carritoRepository.delete(carrito);
+    }
+
+    private void validarPropietario(Long duenoId, Long usuarioId) {
+
+        if (!duenoId.equals(usuarioId)) {
+            throw new ForbiddenException("No tienes permiso para acceder a este carrito.");
+        }
     }
 
     private CarritoResponse mapToResponse(Carrito carrito) {

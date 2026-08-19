@@ -12,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -20,15 +19,6 @@ public class FacturaServiceImpl implements FacturaService {
 
     private final FacturaRepository facturaRepository;
     private final PedidoRepository pedidoRepository;
-
-    @Override
-    public List<FacturaResponse> listar() {
-
-        return facturaRepository.findAll()
-                .stream()
-                .map(this::convertir)
-                .toList();
-    }
 
     @Override
     public FacturaResponse obtenerPorId(Long id) {

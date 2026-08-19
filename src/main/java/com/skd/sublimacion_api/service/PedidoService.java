@@ -7,14 +7,12 @@ import java.util.List;
 
 public interface PedidoService {
 
-    List<PedidoResponse> listar();
-
-    PedidoResponse obtenerPorId(Long id);
+    PedidoResponse obtenerPorId(Long id, Long usuarioId);
 
     List<PedidoResponse> listarPorUsuario(Long usuarioId);
 
     PedidoResponse guardar(PedidoRequest request, Long usuarioId);
 
-    void eliminar(Long id);
+    void eliminar(Long id, Long usuarioId);
 
 }

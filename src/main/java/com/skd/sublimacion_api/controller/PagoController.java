@@ -13,19 +13,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/pagos")
 @RequiredArgsConstructor
 public class PagoController {
 
     private final PagoService pagoService;
-
-    @GetMapping
-    public List<PagoResponse> listar() {
-        return pagoService.listar();
-    }
 
     @GetMapping("/{id}")
     public PagoResponse obtener(@PathVariable Long id) {

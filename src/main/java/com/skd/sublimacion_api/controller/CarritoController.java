@@ -8,8 +8,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/carritos")
 @RequiredArgsConstructor
@@ -17,14 +15,10 @@ public class CarritoController {
 
     private final CarritoService carritoService;
 
-    @GetMapping
-    public List<CarritoResponse> listar(){
-        return carritoService.listar();
-    }
-
     @GetMapping("/{id}")
-    public CarritoResponse obtener(@PathVariable Long id){
-        return carritoService.obtenerPorId(id);
+    public CarritoResponse obtener(@PathVariable Long id,
+                                   @AuthenticationPrincipal Usuario usuario){
+        return carritoService.obtenerPorId(id, usuario.getId());
     }
 
     @GetMapping("/usuario")
@@ -40,8 +34,9 @@ public class CarritoController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void eliminar(@PathVariable Long id){
-        carritoService.eliminar(id);
+    public void eliminar(@PathVariable Long id,
+                         @AuthenticationPrincipal Usuario usuario){
+        carritoService.eliminar(id, usuario.getId());
     }
 
 }

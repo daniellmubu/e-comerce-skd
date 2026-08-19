@@ -5,11 +5,13 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.skd.sublimacion_api.dto.checkout.CheckoutRequest;
 import com.skd.sublimacion_api.dto.checkout.CheckoutResponse;
+import com.skd.sublimacion_api.event.CheckoutCompletadoEvent;
 import com.skd.sublimacion_api.entity.Factura;
 import com.skd.sublimacion_api.entity.Carrito;
 import com.skd.sublimacion_api.entity.Cupon;
@@ -53,6 +55,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final CuponRepository cuponRepository;
     private final ProductoRepository productoRepository;
     private final DisenoRepository disenoRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Override
     @Transactional
@@ -108,6 +111,13 @@ public class CheckoutServiceImpl implements CheckoutService {
         actualizarStock(items);
 
         vaciarCarrito(items);
+
+        applicationEventPublisher.publishEvent(new CheckoutCompletadoEvent(
+                factura.getId(),
+                usuario.getCorreo(),
+                usuario.getNombre(),
+                factura.getNumeroFactura()
+        ));
 
         return CheckoutResponse.builder()
             .pedidoId(pedido.getId())

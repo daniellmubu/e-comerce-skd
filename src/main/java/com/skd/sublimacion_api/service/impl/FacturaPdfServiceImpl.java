@@ -22,6 +22,7 @@ import com.skd.sublimacion_api.repository.PagoRepository;
 import com.skd.sublimacion_api.service.FacturaPdfService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
@@ -40,6 +41,7 @@ public class FacturaPdfServiceImpl implements FacturaPdfService {
     private static final DateTimeFormatter FORMATO_FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     @Override
+    @Transactional(readOnly = true)
     public byte[] generarPdf(Long facturaId) {
 
         Factura factura = facturaRepository.findById(facturaId)
