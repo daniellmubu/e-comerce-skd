@@ -20,6 +20,8 @@ public interface ProductoRepository extends JpaRepository<Producto, Long>,
     boolean existsByCategoria(Categoria categoria);
     Optional<Producto> findByNombre(String nombre);
 
+    long countByActivoTrue();
+
     List<Producto> findByActivoTrue();
 
     List<Producto> findByNombreContainingIgnoreCase(String nombre);
