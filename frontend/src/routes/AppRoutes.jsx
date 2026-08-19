@@ -6,10 +6,13 @@ import Registro from "../pages/Registro";
 import Catalogo from "../pages/Catalogo";
 import Dashboard from "../pages/Dashboard";
 import Generador from "../pages/Generador";
+import Personalizador from "../pages/Personalizador";
 import Carrito from "../pages/Carrito";
 import Checkout from "../pages/Checkout";
 import CheckoutResultado from "../pages/CheckoutResultado";
 import MisPedidos from "../pages/MisPedidos";
+import DetalleProducto from "../pages/DetalleProducto";
+import SeguimientoPedido from "../pages/SeguimientoPedido";
 import RutaProtegida from "./RutaProtegida";
 
 function AppRoutes() {
@@ -17,6 +20,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/catalogo" element={<Catalogo />} />
+      <Route path="/productos/:id" element={<DetalleProducto />} />
       <Route path="/login" element={<Login />} />
       <Route path="/registro" element={<Registro />} />
       <Route
@@ -28,6 +32,7 @@ function AppRoutes() {
         }
       />
       <Route path="/generador" element={<Generador />} />
+      <Route path="/personalizador" element={<Personalizador />} />
       <Route
         path="/carrito"
         element={
@@ -57,6 +62,14 @@ function AppRoutes() {
         element={
           <RutaProtegida>
             <MisPedidos />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/pedidos/:id/seguimiento"
+        element={
+          <RutaProtegida>
+            <SeguimientoPedido />
           </RutaProtegida>
         }
       />

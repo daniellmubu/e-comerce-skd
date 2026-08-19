@@ -36,14 +36,14 @@ function CartDrawer() {
         aria-hidden="true"
       />
 
-      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-slate-800 bg-slate-950 p-6 shadow-2xl">
+      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-gray-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white">Tu carrito</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Tu carrito</h2>
           <button
             type="button"
             onClick={cerrarCarrito}
             aria-label="Cerrar carrito"
-            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+            className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
           >
             <FaTimes />
           </button>
@@ -56,13 +56,13 @@ function CartDrawer() {
         )}
 
         {error && (
-          <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          <p className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
             {error}
           </p>
         )}
 
         {!loading && items.length === 0 && !error && (
-          <div className="flex flex-1 flex-col items-center justify-center text-center text-slate-400">
+          <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-500 dark:text-slate-400">
             <p>Tu carrito está vacío.</p>
             <button
               type="button"
@@ -70,7 +70,7 @@ function CartDrawer() {
                 cerrarCarrito();
                 navigate("/catalogo");
               }}
-              className="mt-4 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:scale-[1.02]"
+              className="mt-4 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:scale-[1.02] hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
             >
               Ver catálogo
             </button>

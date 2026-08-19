@@ -13,16 +13,16 @@ function Loading({ size = "md", fullScreen = false, label }) {
         className={`
           ${SIZES[size]}
           animate-spin rounded-full
-          border-cyan-500/30 border-t-cyan-400
+          border-indigo-200 border-t-indigo-600 dark:border-cyan-500/30 dark:border-t-cyan-400
         `}
       />
-      {label && <p className="text-sm text-slate-400">{label}</p>}
+      {label && <p className="text-sm text-gray-500 dark:text-slate-400">{label}</p>}
     </div>
   );
 
   if (fullScreen) {
     return (
-      <div className="flex min-h-[60vh] w-full items-center justify-center bg-slate-950">
+      <div className="flex min-h-[60vh] w-full items-center justify-center bg-gray-50 dark:bg-slate-950">
         {spinner}
       </div>
     );

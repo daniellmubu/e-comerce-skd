@@ -2,17 +2,17 @@ import React from "react";
 
 const VARIANTS = {
   primary:
-    "bg-gradient-to-r from-cyan-500 to-violet-600 text-white hover:shadow-[0_0_25px_rgba(34,211,238,0.35)]",
+    "bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600 dark:hover:shadow-[0_0_25px_rgba(34,211,238,0.35)]",
   secondary:
-    "bg-slate-800 text-white hover:bg-slate-700",
+    "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700",
   outline:
-    "border border-slate-700 bg-transparent text-slate-300 hover:border-cyan-400 hover:text-cyan-400",
+    "border border-gray-200 bg-transparent text-gray-600 hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-400",
   danger:
     "bg-red-600 text-white hover:bg-red-700",
   success:
     "bg-emerald-600 text-white hover:bg-emerald-700",
   ghost:
-    "bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white",
+    "bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white",
 };
 
 const SIZES = {

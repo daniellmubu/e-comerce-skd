@@ -1,10 +1,11 @@
 import Navbar from './Navbar';
 import Footer from './Footer';
 import CartDrawer from '../cart/CartDrawer';
+import ChatWidget from '../chat/ChatWidget';
 
 function Layout({ children }) {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900 dark:bg-slate-950 dark:text-white">
       <Navbar />
 
       <main className="flex-1">
@@ -13,6 +14,7 @@ function Layout({ children }) {
 
       <Footer />
       <CartDrawer />
+      <ChatWidget />
     </div>
   );
 }
