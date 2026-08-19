@@ -3,8 +3,10 @@ package com.skd.sublimacion_api.service;
 import com.skd.sublimacion_api.dto.AuthResponse;
 import com.skd.sublimacion_api.dto.LoginRequest;
 import com.skd.sublimacion_api.dto.RegistroRequest;
+import com.skd.sublimacion_api.entity.PasswordResetToken;
 import com.skd.sublimacion_api.entity.Rol;
 import com.skd.sublimacion_api.entity.Usuario;
+import com.skd.sublimacion_api.repository.PasswordResetTokenRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.security.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +14,9 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +27,7 @@ public class AuthenticationService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
 
     public AuthResponse registrar(RegistroRequest request) {
 
@@ -82,5 +88,48 @@ public class AuthenticationService {
                 .correo(usuario.getCorreo())
                 .rol(usuario.getRol().name())
                 .build();
+    }
+
+    public void olvidarPassword(String correo) {
+
+        // Respuesta genérica siempre: no se filtra si el correo está registrado.
+        usuarioRepository.findByCorreo(correo).ifPresent(usuario -> {
+            passwordResetTokenRepository.deleteByUsuario_Id(usuario.getId());
+
+            String token = UUID.randomUUID().toString();
+
+            PasswordResetToken resetToken = PasswordResetToken.builder()
+                    .token(token)
+                    .usuario(usuario)
+                    .fechaExpiracion(LocalDateTime.now().plusMinutes(30))
+                    .build();
+
+            passwordResetTokenRepository.save(resetToken);
+
+            emailService.enviarRestablecerPassword(
+                    usuario.getCorreo(), usuario.getNombre(), token);
+        });
+    }
+
+    public void restablecerPassword(String token, String nuevaPassword) {
+
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "El enlace para restablecer la contraseña es inválido"));
+
+        if (Boolean.TRUE.equals(resetToken.getUsado())) {
+            throw new IllegalArgumentException("El enlace ya fue utilizado");
+        }
+        if (resetToken.getFechaExpiracion().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("El enlace ha expirado");
+        }
+
+        Usuario usuario = resetToken.getUsuario();
+        usuario.setContrasenaHash(passwordEncoder.encode(nuevaPassword));
+        usuarioRepository.save(usuario);
+
+        resetToken.setUsado(true);
+        resetToken.setFechaUso(LocalDateTime.now());
+        passwordResetTokenRepository.save(resetToken);
     }
 }

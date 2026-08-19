@@ -8,4 +8,6 @@ public interface EmailService {
 
     void enviarBienvenida(String correo, String nombre);
 
+    void enviarRestablecerPassword(String correo, String nombre, String token);
+
 }
