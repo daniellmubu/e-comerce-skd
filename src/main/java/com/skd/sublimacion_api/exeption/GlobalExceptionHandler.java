@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import java.util.Arrays;
 import com.skd.sublimacion_api.entity.Rol;
+import org.springframework.security.core.AuthenticationException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -89,6 +90,15 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST,
                 "Bad Request",
                 "El cuerpo de la petición contiene datos inválidos.");
+    }
+    
+    // Errores de autenticacion: credenciales invalidas deben responder 401, no 500.
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<?> handleAuthenticationException(AuthenticationException ex) {
+        return buildError(
+                HttpStatus.UNAUTHORIZED,
+                "Unauthorized",
+                "Credenciales inválidas");
     }
     
     // Cualquier otro error
