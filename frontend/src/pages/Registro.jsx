@@ -93,22 +93,22 @@ function Registro() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-6 py-16">
-      <div className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 animate-pulse rounded-full bg-cyan-500/20 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -right-32 h-96 w-96 animate-pulse rounded-full bg-violet-600/20 blur-3xl" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50 px-6 py-16 dark:bg-slate-950">
+      <div className="pointer-events-none absolute -left-32 -top-32 hidden h-96 w-96 animate-pulse rounded-full bg-cyan-500/20 blur-3xl dark:block" />
+      <div className="pointer-events-none absolute -bottom-32 -right-32 hidden h-96 w-96 animate-pulse rounded-full bg-violet-600/20 blur-3xl dark:block" />
 
-      <div className="relative w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-[0_0_45px_rgba(34,211,238,0.08)] backdrop-blur">
+      <div className="relative w-full max-w-md rounded-3xl border border-gray-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-[0_0_45px_rgba(34,211,238,0.08)] dark:backdrop-blur">
         <Link
           to="/"
-          className="mb-8 block text-center text-2xl font-bold bg-gradient-to-r from-cyan-400 to-violet-500 bg-clip-text text-transparent"
+          className="mb-8 block text-center text-2xl font-bold text-indigo-600 dark:bg-gradient-to-r dark:from-cyan-400 dark:to-violet-500 dark:bg-clip-text dark:text-transparent"
         >
           SKD
         </Link>
 
-        <h1 className="text-center text-3xl font-bold text-white">
+        <h1 className="text-center text-3xl font-bold text-gray-900 dark:text-white">
           Crea tu cuenta
         </h1>
-        <p className="mt-2 text-center text-slate-400">
+        <p className="mt-2 text-center text-gray-500 dark:text-slate-400">
           Empieza a diseñar productos únicos con IA.
         </p>
 
@@ -172,7 +172,7 @@ function Registro() {
           />
 
           {errors.general && (
-            <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            <p className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
               {errors.general}
             </p>
           )}
@@ -182,11 +182,11 @@ function Registro() {
           </Button>
         </form>
 
-        <p className="mt-8 text-center text-slate-400">
+        <p className="mt-8 text-center text-gray-500 dark:text-slate-400">
           ¿Ya tienes cuenta?{" "}
           <Link
             to="/login"
-            className="font-semibold text-cyan-400 hover:text-cyan-300"
+            className="font-semibold text-indigo-600 hover:text-indigo-700 dark:text-cyan-400 dark:hover:text-cyan-300"
           >
             Inicia sesión
           </Link>

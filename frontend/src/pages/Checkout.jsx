@@ -153,16 +153,16 @@ function Checkout() {
 
   if (resultado) {
     return (
-      <section className="flex min-h-screen items-center justify-center bg-slate-950 px-6 py-16 text-white">
-        <div className="w-full max-w-lg rounded-3xl border border-slate-800 bg-slate-900/80 p-10 text-center">
+      <section className="flex min-h-screen items-center justify-center bg-gray-50 px-6 py-16 text-gray-900 dark:bg-slate-950 dark:text-white">
+        <div className="w-full max-w-lg rounded-3xl border border-gray-200 bg-white p-10 text-center dark:border-slate-800 dark:bg-slate-900/80">
           <FaCheckCircle className="mx-auto mb-6 text-5xl text-emerald-400" />
           <h1 className="text-3xl font-bold">¡Pedido confirmado!</h1>
-          <p className="mt-2 text-slate-400">{resultado.mensaje}</p>
+          <p className="mt-2 text-gray-500 dark:text-slate-400">{resultado.mensaje}</p>
 
-          <div className="mt-8 space-y-2 rounded-2xl border border-slate-800 bg-slate-950/60 p-6 text-left text-sm text-slate-300">
+          <div className="mt-8 space-y-2 rounded-2xl border border-gray-200 bg-gray-50 p-6 text-left text-sm text-gray-600 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-300">
             <div className="flex justify-between">
               <span>Factura</span>
-              <span className="font-semibold text-white">{resultado.numeroFactura}</span>
+              <span className="font-semibold text-gray-900 dark:text-white">{resultado.numeroFactura}</span>
             </div>
             <div className="flex justify-between">
               <span>Subtotal</span>
@@ -176,7 +176,7 @@ function Checkout() {
               <span>Envío</span>
               <span>{formatPrice(resultado.costoEnvio)}</span>
             </div>
-            <div className="mt-2 flex justify-between border-t border-slate-800 pt-2 text-base font-bold text-white">
+            <div className="mt-2 flex justify-between border-t border-gray-200 pt-2 text-base font-bold text-gray-900 dark:border-slate-800 dark:text-white">
               <span>Total</span>
               <span>{formatPrice(resultado.total)}</span>
             </div>
@@ -191,10 +191,10 @@ function Checkout() {
   }
 
   return (
-    <section className="min-h-screen bg-slate-950 px-6 py-16 text-white">
+    <section className="min-h-screen bg-gray-50 px-6 py-16 text-gray-900 dark:bg-slate-950 dark:text-white">
       <div className="mx-auto max-w-5xl">
         <div className="mb-10 text-center">
-          <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-cyan-300">
+          <span className="rounded-full border border-indigo-300 bg-indigo-50 px-4 py-2 text-indigo-600 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300">
             Checkout
           </span>
           <h1 className="mt-6 text-4xl font-bold sm:text-5xl">
@@ -209,7 +209,7 @@ function Checkout() {
         )}
 
         {!cargandoDatos && cantidadProductos === 0 && (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-400">
+          <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-gray-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
             Tu carrito está vacío. Agrega productos antes de continuar.
             <div className="mt-6">
               <Button onClick={() => navigate("/catalogo")}>Ir al catálogo</Button>
@@ -221,14 +221,14 @@ function Checkout() {
           <div className="grid gap-8 lg:grid-cols-3">
             <div className="space-y-6 lg:col-span-2">
               {errorCarga && (
-                <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                <p className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
                   {errorCarga}
                 </p>
               )}
 
               {/* Dirección */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-                <h2 className="mb-4 text-lg font-semibold">Dirección de envío</h2>
+              <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60">
+                <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Dirección de envío</h2>
 
                 {direcciones.length > 0 && (
                   <div className="space-y-3">
@@ -237,8 +237,8 @@ function Checkout() {
                         key={dir.id}
                         className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${
                           String(dir.id) === direccionId
-                            ? "border-cyan-400 bg-cyan-400/5"
-                            : "border-slate-700"
+                            ? "border-indigo-400 bg-indigo-50 dark:border-cyan-400 dark:bg-cyan-400/5"
+                            : "border-gray-200 dark:border-slate-700"
                         }`}
                       >
                         <input
@@ -248,7 +248,7 @@ function Checkout() {
                           checked={String(dir.id) === direccionId}
                           onChange={() => setDireccionId(String(dir.id))}
                         />
-                        <span className="text-sm text-slate-300">
+                        <span className="text-sm text-gray-600 dark:text-slate-300">
                           {dir.calle}, {dir.ciudad}, {dir.departamento}
                           {dir.codigoPostal ? ` (${dir.codigoPostal})` : ""}
                         </span>
@@ -261,14 +261,14 @@ function Checkout() {
                   <button
                     type="button"
                     onClick={() => setMostrarFormDireccion(true)}
-                    className="mt-4 text-sm font-semibold text-cyan-400 hover:text-cyan-300"
+                    className="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-700 dark:text-cyan-400 dark:hover:text-cyan-300"
                   >
                     + Agregar nueva dirección
                   </button>
                 )}
 
                 {mostrarFormDireccion && (
-                  <div className="mt-4 space-y-3 rounded-xl border border-slate-700 p-4">
+                  <div className="mt-4 space-y-3 rounded-xl border border-gray-200 p-4 dark:border-slate-700">
                     <Input
                       label="Calle"
                       value={nuevaDireccion.calle}
@@ -307,16 +307,16 @@ function Checkout() {
               </div>
 
               {/* Empaque */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-                <h2 className="mb-4 text-lg font-semibold">Tipo de empaque</h2>
+              <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60">
+                <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Tipo de empaque</h2>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {empaques.map((emp) => (
                     <label
                       key={emp.id}
                       className={`cursor-pointer rounded-xl border p-4 text-sm transition ${
                         String(emp.id) === empaqueId
-                          ? "border-cyan-400 bg-cyan-400/5"
-                          : "border-slate-700"
+                          ? "border-indigo-400 bg-indigo-50 dark:border-cyan-400 dark:bg-cyan-400/5"
+                          : "border-gray-200 dark:border-slate-700"
                       }`}
                     >
                       <input
@@ -326,9 +326,9 @@ function Checkout() {
                         checked={String(emp.id) === empaqueId}
                         onChange={() => setEmpaqueId(String(emp.id))}
                       />
-                      <p className="font-semibold text-white">{emp.tipo}</p>
-                      <p className="mt-1 text-slate-400">{emp.descripcion}</p>
-                      <p className="mt-2 text-cyan-300">
+                      <p className="font-semibold text-gray-900 dark:text-white">{emp.tipo}</p>
+                      <p className="mt-1 text-gray-500 dark:text-slate-400">{emp.descripcion}</p>
+                      <p className="mt-2 text-indigo-600 dark:text-cyan-300">
                         {Number(emp.costoAdicional) > 0
                           ? `+${formatPrice(emp.costoAdicional)}`
                           : "Gratis"}
@@ -339,18 +339,18 @@ function Checkout() {
               </div>
 
               {/* Cupón y método de pago */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-                <h2 className="mb-4 text-lg font-semibold">Cupón y pago</h2>
+              <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60">
+                <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Cupón y pago</h2>
 
                 {cupones.length > 0 && (
                   <div className="mb-4">
-                    <label className="mb-2 block text-sm text-slate-400">
+                    <label className="mb-2 block text-sm text-gray-500 dark:text-slate-400">
                       Cupón de descuento (opcional)
                     </label>
                     <select
                       value={cuponId}
                       onChange={(e) => setCuponId(e.target.value)}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400"
+                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-cyan-400"
                     >
                       <option value="">Sin cupón</option>
                       {cupones.map((c) => (
@@ -363,13 +363,13 @@ function Checkout() {
                 )}
 
                 <div className="mb-4">
-                  <label className="mb-2 block text-sm text-slate-400">
+                  <label className="mb-2 block text-sm text-gray-500 dark:text-slate-400">
                     Método de pago
                   </label>
                   <select
                     value={metodoPago}
                     onChange={(e) => setMetodoPago(e.target.value)}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-cyan-400"
                   >
                     {METODOS_PAGO.map((m) => (
                       <option key={m.value} value={m.value}>
@@ -390,10 +390,10 @@ function Checkout() {
 
             {/* Resumen */}
             <div>
-              <div className="sticky top-24 rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
-                <h2 className="mb-4 text-lg font-semibold">Resumen</h2>
+              <div className="sticky top-24 rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/80">
+                <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Resumen</h2>
 
-                <div className="space-y-2 text-sm text-slate-300">
+                <div className="space-y-2 text-sm text-gray-600 dark:text-slate-300">
                   <div className="flex justify-between">
                     <span>Subtotal ({cantidadProductos} productos)</span>
                     <span>{formatPrice(total)}</span>
@@ -412,17 +412,17 @@ function Checkout() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex justify-between border-t border-slate-800 pt-4 text-lg font-bold text-white">
+                <div className="mt-4 flex justify-between border-t border-gray-200 pt-4 text-lg font-bold text-gray-900 dark:border-slate-800 dark:text-white">
                   <span>Total estimado</span>
                   <span>{formatPrice(totalEstimado)}</span>
                 </div>
 
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
                   El descuento del cupón y el costo final se calculan al confirmar.
                 </p>
 
                 {errorCheckout && (
-                  <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                  <p className="mt-4 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
                     {errorCheckout}
                   </p>
                 )}

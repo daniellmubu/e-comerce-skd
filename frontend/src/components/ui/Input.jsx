@@ -20,7 +20,7 @@ function Input({
       {label && (
         <label
           htmlFor={id}
-          className="mb-2 block text-sm font-medium text-slate-300"
+          className="mb-2 block text-sm font-medium text-gray-600 dark:text-slate-300"
         >
           {label}
         </label>
@@ -28,7 +28,7 @@ function Input({
 
       <div className="relative">
         {icon && (
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500">
             {icon}
           </div>
         )}
@@ -40,18 +40,22 @@ function Input({
             w-full
             rounded-xl
             border
-            bg-slate-900
+            bg-white
+            dark:bg-slate-900
             py-3
-            text-white
-            placeholder-slate-500
+            text-gray-900
+            dark:text-white
+            placeholder-gray-400
+            dark:placeholder-slate-500
             outline-none
             transition-all
             duration-300
             focus:ring-4
-            focus:ring-cyan-500/10
+            focus:ring-indigo-500/10
+            dark:focus:ring-cyan-500/10
             ${icon ? "pl-11" : "pl-4"}
             ${type === "password" ? "pr-12" : "pr-4"}
-            ${error ? "border-red-500" : "border-slate-700 focus:border-cyan-400"}
+            ${error ? "border-red-500" : "border-gray-200 dark:border-slate-700 focus:border-indigo-400 dark:focus:border-cyan-400"}
             ${className}
           `}
           {...props}
@@ -61,14 +65,14 @@ function Input({
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-cyan-400 transition"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-500 dark:text-slate-500 dark:hover:text-cyan-400 transition"
           >
             {showPassword ? <FaEyeSlash /> : <FaEye />}
           </button>
         )}
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="mt-2 text-sm text-red-500 dark:text-red-400">{error}</p>}
     </div>
   );
 }

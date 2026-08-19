@@ -92,6 +92,7 @@ export function CartProvider({ children }) {
 
       setError(null);
       abrirCarrito();
+      return itemActualizado;
     } catch (err) {
       console.error(err);
       setError("No fue posible agregar el producto al carrito.");
