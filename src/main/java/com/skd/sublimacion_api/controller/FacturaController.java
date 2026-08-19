@@ -12,8 +12,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/facturas")
 @RequiredArgsConstructor
@@ -21,11 +19,6 @@ public class FacturaController {
 
     private final FacturaService facturaService;
     private final FacturaPdfService facturaPdfService;
-
-    @GetMapping
-    public List<FacturaResponse> listar() {
-        return facturaService.listar();
-    }
 
     @GetMapping("/{id}")
     public FacturaResponse obtener(@PathVariable Long id) {

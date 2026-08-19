@@ -23,15 +23,6 @@ public class DireccionServiceImpl implements DireccionService {
     private final UsuarioRepository usuarioRepository;
 
     @Override
-    public List<DireccionResponse> listar() {
-
-        return direccionRepository.findAll()
-                .stream()
-                .map(this::convertir)
-                .toList();
-    }
-
-    @Override
     public DireccionResponse obtenerPorId(Long id) {
 
         Direccion direccion = direccionRepository.findById(id)

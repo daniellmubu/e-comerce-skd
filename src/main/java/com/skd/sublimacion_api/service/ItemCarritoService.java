@@ -7,8 +7,6 @@ import java.util.List;
 
 public interface ItemCarritoService {
 
-    List<ItemCarritoResponse> listar();
-
     ItemCarritoResponse obtenerPorId(Long id);
 
     ItemCarritoResponse guardar(ItemCarritoRequest request, Long usuarioId);

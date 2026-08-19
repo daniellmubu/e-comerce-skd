@@ -6,11 +6,7 @@ import com.skd.sublimacion_api.dto.pago.PagoResponse;
 import com.skd.sublimacion_api.dto.pago.SimulacionPagoResponse;
 import com.skd.sublimacion_api.dto.pago.SimularTarjetaRequest;
 
-import java.util.List;
-
 public interface PagoService {
-
-    List<PagoResponse> listar();
 
     PagoResponse obtenerPorId(Long id);
 

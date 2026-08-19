@@ -25,11 +25,6 @@ public class DireccionController {
 
     private final DireccionService direccionService;
 
-    @GetMapping
-    public List<DireccionResponse> listar(){
-        return direccionService.listar();
-    }
-
     @GetMapping("/{id}")
     public DireccionResponse obtener(@PathVariable Long id){
         return direccionService.obtenerPorId(id);
