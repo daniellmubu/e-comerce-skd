@@ -12,6 +12,7 @@ import { listarEmpaques } from "../services/empaqueService";
 import { listarCupones, listarMisCupones } from "../services/cuponService";
 import { procesarCheckout } from "../services/checkoutService";
 import { iniciarPagoWompi } from "../services/pagoService";
+import { calcularEnvio } from "../services/envioService";
 import { getErrorMessage } from "../services/api";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
@@ -62,6 +63,9 @@ function Checkout() {
   const [fechaEntregaDeseada, setFechaEntregaDeseada] = useState("");
   const fechaMinima = obtenerFechaMinimaHoy();
 
+  const [envioInfo, setEnvioInfo] = useState(null);
+  const [cargandoEnvio, setCargandoEnvio] = useState(false);
+
   const [nuevaDireccion, setNuevaDireccion] = useState({
     calle: "",
     ciudad: "",
@@ -82,6 +86,30 @@ function Checkout() {
     cargarDatosIniciales();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!direccionId) {
+      setEnvioInfo(null);
+      return;
+    }
+
+    let activo = true;
+    setCargandoEnvio(true);
+    calcularEnvio(Number(direccionId))
+      .then((info) => {
+        if (activo) setEnvioInfo(info);
+      })
+      .catch(() => {
+        if (activo) setEnvioInfo(null);
+      })
+      .finally(() => {
+        if (activo) setCargandoEnvio(false);
+      });
+
+    return () => {
+      activo = false;
+    };
+  }, [direccionId]);
 
   async function cargarDatosIniciales() {
     setCargandoDatos(true);
@@ -171,14 +199,14 @@ function Checkout() {
   };
 
   const empaqueSeleccionado = empaques.find((e) => String(e.id) === empaqueId);
-  const costoEnvioEstimado = 12000;
+  const costoEnvioEstimado = envioInfo ? Number(envioInfo.costoEnvio) : null;
   const descuentoEstimado = cuponAplicado
     ? (total * Number(cuponAplicado.descuentoPorcentaje)) / 100
     : 0;
   const totalEstimado =
     total +
     (empaqueSeleccionado ? Number(empaqueSeleccionado.costoAdicional) : 0) +
-    costoEnvioEstimado -
+    (costoEnvioEstimado ?? 0) -
     descuentoEstimado;
 
   const aplicarCupon = () => {
@@ -278,6 +306,12 @@ function Checkout() {
               <span>Envío</span>
               <span>{formatPrice(resultado.costoEnvio)}</span>
             </div>
+            {resultado.diasEstimadosEntrega && (
+              <div className="flex justify-between text-gray-400 dark:text-slate-500">
+                <span>Entrega estimada</span>
+                <span>{resultado.diasEstimadosEntrega} días hábiles</span>
+              </div>
+            )}
             <div className="mt-2 flex justify-between border-t border-gray-200 pt-2 text-base font-bold text-gray-900 dark:border-slate-800 dark:text-white">
               <span>Total</span>
               <span>{formatPrice(resultado.total)}</span>
@@ -559,8 +593,18 @@ function Checkout() {
                   </div>
                   <div className="flex justify-between">
                     <span>Envío estimado</span>
-                    <span>{formatPrice(costoEnvioEstimado)}</span>
+                    <span>
+                      {cargandoEnvio || costoEnvioEstimado === null
+                        ? "Calculando..."
+                        : formatPrice(costoEnvioEstimado)}
+                    </span>
                   </div>
+                  {envioInfo && (
+                    <div className="flex justify-between text-gray-400 dark:text-slate-500">
+                      <span>Entrega estimada</span>
+                      <span>{envioInfo.diasEstimados} días hábiles</span>
+                    </div>
+                  )}
                   {cuponAplicado && (
                     <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                       <span>Descuento ({cuponAplicado.codigo})</span>

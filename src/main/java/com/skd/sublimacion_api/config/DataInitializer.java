@@ -7,6 +7,7 @@ import com.skd.sublimacion_api.entity.Direccion;
 import com.skd.sublimacion_api.entity.Empaque;
 import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.entity.Rol;
+import com.skd.sublimacion_api.entity.TarifaEnvio;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.entity.ItemCarrito;
 import com.skd.sublimacion_api.repository.*;
@@ -32,6 +33,7 @@ public class DataInitializer implements CommandLineRunner {
     private final DireccionRepository direccionRepository;
     private final CarritoRepository carritoRepository;
     private final ItemCarritoRepository itemCarritoRepository;
+    private final TarifaEnvioRepository tarifaEnvioRepository;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -50,6 +52,7 @@ public class DataInitializer implements CommandLineRunner {
         crearCupones();
         crearDirecciones();
         crearCarritoConItems();
+        crearTarifasEnvio();
 
         System.out.println("=================================");
         System.out.println("Datos de prueba verificados/cargados.");
@@ -252,5 +255,43 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         System.out.println("✔ Carrito e items verificados");
+    }
+
+    // Tarifas de envío de ejemplo por departamento de Colombia. El cálculo
+    // busca por direccion.departamento; los departamentos sin tarifa usan
+    // el valor por defecto en EnvioServiceImpl.
+    private void crearTarifasEnvio() {
+
+        crearTarifaSiNoExiste("Bogotá D.C.", new BigDecimal("8000"), 2);
+        crearTarifaSiNoExiste("Cundinamarca", new BigDecimal("8000"), 2);
+        crearTarifaSiNoExiste("Antioquia", new BigDecimal("12000"), 3);
+        crearTarifaSiNoExiste("Valle del Cauca", new BigDecimal("12000"), 3);
+        crearTarifaSiNoExiste("Santander", new BigDecimal("10000"), 3);
+        crearTarifaSiNoExiste("Tolima", new BigDecimal("10000"), 3);
+        crearTarifaSiNoExiste("Norte de Santander", new BigDecimal("11000"), 4);
+        crearTarifaSiNoExiste("Atlántico", new BigDecimal("14000"), 4);
+        crearTarifaSiNoExiste("Bolívar", new BigDecimal("15000"), 5);
+        crearTarifaSiNoExiste("Magdalena", new BigDecimal("15000"), 5);
+
+        System.out.println("✔ Tarifas de envío verificadas");
+    }
+
+    private void crearTarifaSiNoExiste(
+            String departamento,
+            BigDecimal costoBase,
+            int diasEstimados) {
+
+        if (tarifaEnvioRepository
+                .findByDepartamentoIgnoreCase(departamento)
+                .isEmpty()) {
+
+            TarifaEnvio tarifa = TarifaEnvio.builder()
+                    .departamento(departamento)
+                    .costoBase(costoBase)
+                    .diasEstimados(diasEstimados)
+                    .build();
+
+            tarifaEnvioRepository.save(tarifa);
+        }
     }
 }
