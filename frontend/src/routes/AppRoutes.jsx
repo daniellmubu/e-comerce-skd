@@ -12,6 +12,7 @@ import Checkout from "../pages/Checkout";
 import CheckoutResultado from "../pages/CheckoutResultado";
 import MisPedidos from "../pages/MisPedidos";
 import MisCupones from "../pages/MisCupones";
+import MisFavoritos from "../pages/MisFavoritos";
 import DetalleProducto from "../pages/DetalleProducto";
 import SeguimientoPedido from "../pages/SeguimientoPedido";
 import RutaProtegida from "./RutaProtegida";
@@ -71,6 +72,14 @@ function AppRoutes() {
         element={
           <RutaProtegida>
             <MisCupones />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/mis-favoritos"
+        element={
+          <RutaProtegida>
+            <MisFavoritos />
           </RutaProtegida>
         }
       />

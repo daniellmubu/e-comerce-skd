@@ -38,6 +38,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/imagenes/**").permitAll()
                         .requestMatchers("/api/categorias/**").permitAll()
                         .requestMatchers("/api/caracteristicas/**").permitAll()
+                        // Las reseñas por producto son públicas; crearlas exige
+                        // autenticación (queda cubierta por anyRequest()).
+                        .requestMatchers("/api/resenas/producto/**").permitAll()
                         // El enum Rol solo define admin y cliente (en minúsculas). getAuthorities()
                         // genera "ROLE_admin" / "ROLE_cliente", por eso se usa hasRole("admin")
                         // (en minúsculas) para proteger el panel administrativo.

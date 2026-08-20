@@ -26,4 +26,10 @@ public class ProductoResponse {
 
     private String categoria;
 
+    private Double promedioCalificacion;
+
+    private Long cantidadResenas;
+
+    private Boolean esFavorito;
+
 }

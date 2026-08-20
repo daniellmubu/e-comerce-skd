@@ -1,7 +1,9 @@
 package com.skd.sublimacion_api.service.impl;
 
 import com.skd.sublimacion_api.entity.Producto;
+import com.skd.sublimacion_api.repository.FavoritoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
+import com.skd.sublimacion_api.repository.ResenaRepository;
 import com.skd.sublimacion_api.service.ProductoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -10,7 +12,11 @@ import com.skd.sublimacion_api.repository.CategoriaRepository;
 import com.skd.sublimacion_api.dto.producto.ProductoRequest;
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
 import com.skd.sublimacion_api.entity.Categoria;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -18,23 +24,19 @@ public class ProductoServiceImpl implements ProductoService {
 
     private final ProductoRepository productoRepository;
     private final CategoriaRepository categoriaRepository;
+    private final ResenaRepository resenaRepository;
+    private final FavoritoRepository favoritoRepository;
 
     @Override
-    public List<ProductoResponse> listar() {
+    public List<ProductoResponse> listar(Long usuarioId) {
+
+        ResumenResenas resumen = obtenerResumenResenas(usuarioId);
+
         return productoRepository.findByActivoTrue()
             .stream()
-            .map(producto -> ProductoResponse.builder()
-                    .id(producto.getId())
-                    .nombre(producto.getNombre())
-                    .descripcion(producto.getDescripcion())
-                    .precio(producto.getPrecio())
-                    .stock(producto.getStock())
-                    .activo(producto.getActivo())
-                    .masVendido(producto.getMasVendido())
-                    .categoria(producto.getCategoria().getNombre())
-                    .build())
+            .map(producto -> convertir(producto, resumen))
             .toList();
-    }   
+    }
     @Override
     public ProductoResponse guardar(ProductoRequest request) {
 
@@ -55,16 +57,7 @@ public class ProductoServiceImpl implements ProductoService {
 
     Producto guardado = productoRepository.save(producto);
 
-    return ProductoResponse.builder()
-            .id(guardado.getId())
-            .nombre(guardado.getNombre())
-            .descripcion(guardado.getDescripcion())
-            .precio(guardado.getPrecio())
-            .stock(guardado.getStock())
-            .activo(guardado.getActivo())
-            .masVendido(guardado.getMasVendido())
-            .categoria(guardado.getCategoria().getNombre())
-            .build();
+    return convertir(guardado, obtenerResumenResenas(null));
     }
 
     @Override
@@ -88,16 +81,7 @@ public class ProductoServiceImpl implements ProductoService {
 
         Producto actualizado = productoRepository.save(producto);
 
-        return ProductoResponse.builder()
-            .id(actualizado.getId())
-            .nombre(actualizado.getNombre())
-            .descripcion(actualizado.getDescripcion())
-            .precio(actualizado.getPrecio())
-            .stock(actualizado.getStock())
-            .activo(actualizado.getActivo())
-            .masVendido(actualizado.getMasVendido())
-            .categoria(actualizado.getCategoria().getNombre())
-            .build();
+        return convertir(actualizado, obtenerResumenResenas(null));
     }
     
 
@@ -112,54 +96,82 @@ public class ProductoServiceImpl implements ProductoService {
     }
 
     @Override
-    public List<ProductoResponse> buscarPorNombre(String nombre) {
+    public List<ProductoResponse> buscarPorNombre(String nombre, Long usuarioId) {
+
+        ResumenResenas resumen = obtenerResumenResenas(usuarioId);
+
         return productoRepository.findByNombreContainingIgnoreCase(nombre)
             .stream()
-            .map(producto -> ProductoResponse.builder()
-                .id(producto.getId())
-                .nombre(producto.getNombre())
-                .descripcion(producto.getDescripcion())
-                .precio(producto.getPrecio())
-                .stock(producto.getStock())
-                .activo(producto.getActivo())
-                .masVendido(producto.getMasVendido())
-                .categoria(producto.getCategoria().getNombre())
-                .build())
+            .map(producto -> convertir(producto, resumen))
             .toList();
     }
 
     @Override
-    public List<ProductoResponse> buscarPorCategoria(Long categoriaId) {
+    public List<ProductoResponse> buscarPorCategoria(Long categoriaId, Long usuarioId) {
+
+        ResumenResenas resumen = obtenerResumenResenas(usuarioId);
+
         return productoRepository.findByCategoriaId(categoriaId)
         .stream()
-        .map(producto -> ProductoResponse.builder()
-                .id(producto.getId())
-                .nombre(producto.getNombre())
-                .descripcion(producto.getDescripcion())
-                .precio(producto.getPrecio())
-                .stock(producto.getStock())
-                .activo(producto.getActivo())
-                .masVendido(producto.getMasVendido())
-                .categoria(producto.getCategoria().getNombre())
-                .build())
+        .map(producto -> convertir(producto, resumen))
         .toList();
     }
     @Override
-    public ProductoResponse obtenerPorId(Long id) {
+    public ProductoResponse obtenerPorId(Long id, Long usuarioId) {
 
         Producto producto = productoRepository.findById(id)
             .orElseThrow(() ->
                     new ResourceNotFoundException("Producto no encontrado con id: " + id));
 
+        return convertir(producto, obtenerResumenResenas(usuarioId));
+    }
+
+    private record ResumenResenas(
+            Map<Long, Double> promedios,
+            Map<Long, Long> conteos,
+            Set<Long> favoritos) {}
+
+    // Una sola consulta agregada para el catálogo:
+    // SELECT producto_id, AVG(calificacion), COUNT(*) FROM resena GROUP BY producto_id
+    // + si hay usuario autenticado, sus favoritos (1 query extra).
+    private ResumenResenas obtenerResumenResenas(Long usuarioId) {
+
+        Map<Long, Double> promedios = new HashMap<>();
+        Map<Long, Long> conteos = new HashMap<>();
+
+        for (Object[] fila : resenaRepository.promedioYConteoPorProducto()) {
+
+            Long productoId = ((Number) fila[0]).longValue();
+            promedios.put(productoId, ((Number) fila[1]).doubleValue());
+            conteos.put(productoId, ((Number) fila[2]).longValue());
+        }
+
+        Set<Long> favoritos = usuarioId == null
+                ? new HashSet<>()
+                : favoritoRepository.findProductoIdsByUsuarioId(usuarioId);
+
+        return new ResumenResenas(promedios, conteos, favoritos);
+    }
+
+    private ProductoResponse convertir(
+            Producto producto,
+            ResumenResenas resumen) {
+
         return ProductoResponse.builder()
-            .id(producto.getId())
-            .nombre(producto.getNombre())
-            .descripcion(producto.getDescripcion())
-            .precio(producto.getPrecio())
-            .stock(producto.getStock())
-            .activo(producto.getActivo())
-            .masVendido(producto.getMasVendido())
-            .categoria(producto.getCategoria().getNombre())
-            .build();
-    }  
+                .id(producto.getId())
+                .nombre(producto.getNombre())
+                .descripcion(producto.getDescripcion())
+                .precio(producto.getPrecio())
+                .stock(producto.getStock())
+                .activo(producto.getActivo())
+                .masVendido(producto.getMasVendido())
+                .categoria(producto.getCategoria().getNombre())
+                .promedioCalificacion(
+                        resumen.promedios.getOrDefault(producto.getId(), 0.0))
+                .cantidadResenas(
+                        resumen.conteos.getOrDefault(producto.getId(), 0L))
+                .esFavorito(
+                        resumen.favoritos().contains(producto.getId()))
+                .build();
+    }
 }

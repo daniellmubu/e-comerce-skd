@@ -7,9 +7,9 @@ import java.util.List;
 
 public interface ProductoService {
 
-    List<ProductoResponse> listar();
+    List<ProductoResponse> listar(Long usuarioId);
 
-    ProductoResponse obtenerPorId(Long id);
+    ProductoResponse obtenerPorId(Long id, Long usuarioId);
 
     ProductoResponse guardar(ProductoRequest request);
 
@@ -17,7 +17,7 @@ public interface ProductoService {
 
     void eliminar(Long id);
 
-    List<ProductoResponse> buscarPorNombre(String nombre);
+    List<ProductoResponse> buscarPorNombre(String nombre, Long usuarioId);
 
-    List<ProductoResponse> buscarPorCategoria(Long categoriaId);
+    List<ProductoResponse> buscarPorCategoria(Long categoriaId, Long usuarioId);
 }
