@@ -16,4 +16,12 @@ public interface ItemPedidoRepository extends JpaRepository<ItemPedido, Long> {
            "FROM ItemPedido ip GROUP BY ip.producto.id, ip.producto.nombre " +
            "ORDER BY SUM(ip.cantidad) DESC")
     List<Object[]> productosMasVendidos(Pageable pageable);
+
+    @Query("SELECT ip.producto.id, ip.producto.nombre, SUM(ip.cantidad) AS unidades, " +
+           "SUM(ip.cantidad * ip.precioUnitario) AS ingreso " +
+           "FROM ItemPedido ip JOIN ip.pedido p JOIN Pago pag ON pag.pedido = p " +
+           "WHERE pag.estado = 'aprobado' " +
+           "GROUP BY ip.producto.id, ip.producto.nombre " +
+           "ORDER BY SUM(ip.cantidad) DESC")
+    List<Object[]> productosMasVendidosAprobados(Pageable pageable);
 }

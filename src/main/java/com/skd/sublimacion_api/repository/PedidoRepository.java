@@ -1,6 +1,7 @@
 package com.skd.sublimacion_api.repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -31,4 +32,15 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
            "FROM Pedido p WHERE p.estado <> 'cancelado' " +
            "GROUP BY FUNCTION('to_char', p.creadoEn, 'YYYY-MM') ORDER BY periodo")
     List<Object[]> ventasPorPeriodo();
+
+    @Query("SELECT FUNCTION('to_char', p.creadoEn, 'YYYY-MM-DD') AS dia, COALESCE(SUM(p.total), 0) " +
+           "FROM Pedido p JOIN Pago pag ON pag.pedido = p " +
+           "WHERE pag.estado = 'aprobado' AND p.creadoEn >= :desde AND p.creadoEn < :hastaExclusivo " +
+           "GROUP BY FUNCTION('to_char', p.creadoEn, 'YYYY-MM-DD') ORDER BY dia")
+    List<Object[]> ventasPorDia(LocalDateTime desde, LocalDateTime hastaExclusivo);
+
+    @Query("SELECT COALESCE(SUM(p.total), 0), COUNT(p) " +
+           "FROM Pedido p JOIN Pago pag ON pag.pedido = p " +
+           "WHERE pag.estado = 'aprobado'")
+    List<Object[]> resumenEstadisticas();
 }
