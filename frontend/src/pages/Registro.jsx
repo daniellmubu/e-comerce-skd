@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { FaGift } from "react-icons/fa";
 
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
@@ -8,6 +9,13 @@ import { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// "2026-09-18" -> "18/09/2026"
+function formatearFecha(iso) {
+  if (!iso) return "";
+  const [anio, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${anio}`;
+}
 
 function Registro() {
   const navigate = useNavigate();
@@ -22,6 +30,7 @@ function Registro() {
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [bienvenida, setBienvenida] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -69,14 +78,21 @@ function Registro() {
 
     setLoading(true);
     try {
-      await registrarse({
+      const respuesta = await registrarse({
         nombre: form.nombre.trim(),
         username: form.username.trim(),
         correo: form.correo.trim(),
         password: form.password,
       });
       actualizarSesion();
-      navigate("/dashboard");
+      if (respuesta.cuponBienvenida) {
+        setBienvenida({
+          nombre: form.nombre.trim(),
+          ...respuesta.cuponBienvenida,
+        });
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err) {
       const message = getErrorMessage(err);
 
@@ -192,6 +208,56 @@ function Registro() {
           </Link>
         </p>
       </div>
+
+      {bienvenida && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => navigate("/dashboard")}
+            aria-hidden="true"
+          />
+
+          <div className="relative w-full max-w-md rounded-3xl border border-gray-200 bg-white p-8 text-center shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_0_45px_rgba(34,211,238,0.15)]">
+            <FaGift className="mx-auto mb-4 text-5xl text-emerald-500" />
+
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              ¡Bienvenido, {bienvenida.nombre}!
+            </h2>
+            <p className="mt-2 text-gray-500 dark:text-slate-400">
+              Te regalamos un cupón del{" "}
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                {Number(bienvenida.descuentoPorcentaje)}%
+              </span>{" "}
+              para que lo uses en tu primera compra.
+            </p>
+
+            <div className="mt-6 rounded-2xl border-2 border-dashed border-indigo-400 bg-indigo-50 p-5 dark:border-cyan-400/60 dark:bg-cyan-400/5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-500 dark:text-cyan-300">
+                Tu código de descuento
+              </p>
+              <p className="mt-2 text-2xl font-black tracking-widest text-indigo-700 dark:text-cyan-300">
+                {bienvenida.codigo}
+              </p>
+              <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+                Vence el {formatearFecha(bienvenida.fechaVencimiento)}
+              </p>
+            </div>
+
+            <div className="mt-6">
+              <Button fullWidth onClick={() => navigate("/catalogo")}>
+                Usar mi cupón ahora
+              </Button>
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard")}
+                className="mt-3 text-sm text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                Ir al inicio
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,18 +1,27 @@
 package com.skd.sublimacion_api.service.impl.admin;
 
+import com.skd.sublimacion_api.dto.cupon.AsignarCuponRequest;
+import com.skd.sublimacion_api.dto.cupon.AsignarCuponResponse;
 import com.skd.sublimacion_api.dto.cupon.CuponRequest;
 import com.skd.sublimacion_api.dto.cupon.CuponResponse;
 import com.skd.sublimacion_api.entity.Cupon;
+import com.skd.sublimacion_api.entity.CuponUsuario;
+import com.skd.sublimacion_api.entity.Rol;
+import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.mapper.CuponMapper;
 import com.skd.sublimacion_api.repository.CuponRepository;
+import com.skd.sublimacion_api.repository.CuponUsuarioRepository;
+import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.service.admin.AdminCuponService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 import org.springframework.data.jpa.domain.Specification;
 import com.skd.sublimacion_api.specification.CuponSpecification;
 
@@ -21,6 +30,8 @@ import com.skd.sublimacion_api.specification.CuponSpecification;
 public class AdminCuponServiceImpl implements AdminCuponService {
 
     private final CuponRepository cuponRepository;
+    private final CuponUsuarioRepository cuponUsuarioRepository;
+    private final UsuarioRepository usuarioRepository;
     private final CuponMapper cuponMapper;
 
     @Override
@@ -90,6 +101,80 @@ public class AdminCuponServiceImpl implements AdminCuponService {
         cuponRepository.delete(cupon);
     }
 
+    @Override
+    @Transactional
+    public AsignarCuponResponse asignar(
+            Long id,
+            AsignarCuponRequest request) {
+
+        Cupon cupon = buscarCupon(id);
+
+        boolean aTodos = Boolean.TRUE.equals(request.getAsignarATodos());
+        boolean individual = request.getUsuarioId() != null;
+
+        if (aTodos == individual) {
+            throw new IllegalArgumentException(
+                    "Indica un usuarioId o asignarATodos, pero no ambos ni ninguno.");
+        }
+
+        int asignados = 0;
+        int yaAsignados = 0;
+
+        if (aTodos) {
+
+            List<Usuario> clientes = usuarioRepository.findAll()
+                    .stream()
+                    .filter(usuario -> usuario.getRol() == Rol.cliente)
+                    .toList();
+
+            for (Usuario usuario : clientes) {
+                if (crearAsignacionSiNoExiste(cupon, usuario)) {
+                    asignados++;
+                } else {
+                    yaAsignados++;
+                }
+            }
+
+        } else {
+
+            Usuario usuario = usuarioRepository
+                    .findById(request.getUsuarioId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Usuario no encontrado con id: "
+                                    + request.getUsuarioId()));
+
+            if (crearAsignacionSiNoExiste(cupon, usuario)) {
+                asignados++;
+            } else {
+                yaAsignados++;
+            }
+        }
+
+        return AsignarCuponResponse.builder()
+                .cuponId(cupon.getId())
+                .asignados(asignados)
+                .yaAsignados(yaAsignados)
+                .build();
+    }
+
+    private boolean crearAsignacionSiNoExiste(
+            Cupon cupon,
+            Usuario usuario) {
+
+        if (cuponUsuarioRepository
+                .findByCupon_IdAndUsuario_Id(cupon.getId(), usuario.getId())
+                .isPresent()) {
+            return false;
+        }
+
+        cuponUsuarioRepository.save(CuponUsuario.builder()
+                .cupon(cupon)
+                .usuario(usuario)
+                .build());
+
+        return true;
+    }
+
     private Cupon buscarCupon(Long id) {
 
         return cuponRepository.findById(id)
@@ -108,6 +193,10 @@ public class AdminCuponServiceImpl implements AdminCuponService {
         cupon.setFechaFin(request.getFechaFin());
         cupon.setUsosMaximos(request.getUsosMaximos());
         cupon.setActivo(request.getActivo());
+        cupon.setEsUnicoPorUsuario(
+                request.getEsUnicoPorUsuario() != null
+                        ? request.getEsUnicoPorUsuario()
+                        : false);
     }
 
     private void validarCodigo(

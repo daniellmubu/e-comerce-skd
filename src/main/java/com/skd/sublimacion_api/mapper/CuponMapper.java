@@ -23,6 +23,7 @@ public class CuponMapper {
                 .usosMaximos(cupon.getUsosMaximos())
                 .usosActuales(cupon.getUsosActuales())
                 .activo(cupon.getActivo())
+                .esUnicoPorUsuario(cupon.getEsUnicoPorUsuario())
                 .build();
     }
 

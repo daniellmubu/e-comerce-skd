@@ -9,7 +9,7 @@ import {
   crearDireccion,
 } from "../services/direccionService";
 import { listarEmpaques } from "../services/empaqueService";
-import { listarCupones } from "../services/cuponService";
+import { listarCupones, listarMisCupones } from "../services/cuponService";
 import { procesarCheckout } from "../services/checkoutService";
 import { iniciarPagoWompi } from "../services/pagoService";
 import { getErrorMessage } from "../services/api";
@@ -47,6 +47,7 @@ function Checkout() {
   const [direcciones, setDirecciones] = useState([]);
   const [empaques, setEmpaques] = useState([]);
   const [cupones, setCupones] = useState([]);
+  const [cuponesDisponibles, setCuponesDisponibles] = useState([]);
 
   const [cargandoDatos, setCargandoDatos] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
@@ -54,6 +55,9 @@ function Checkout() {
   const [direccionId, setDireccionId] = useState("");
   const [empaqueId, setEmpaqueId] = useState("");
   const [cuponId, setCuponId] = useState("");
+  const [codigoCupon, setCodigoCupon] = useState("");
+  const [cuponAplicado, setCuponAplicado] = useState(null);
+  const [errorCupon, setErrorCupon] = useState(null);
   const [metodoPago, setMetodoPago] = useState(METODOS_PAGO[0].value);
   const [fechaEntregaDeseada, setFechaEntregaDeseada] = useState("");
   const fechaMinima = obtenerFechaMinimaHoy();
@@ -83,15 +87,52 @@ function Checkout() {
     setCargandoDatos(true);
     try {
       const usuarioId = obtenerUsuarioId();
-      const [dirs, emps, cups] = await Promise.all([
+      const [dirs, emps, mios, globales] = await Promise.all([
         listarDireccionesPorUsuario(usuarioId),
         listarEmpaques(),
+        listarMisCupones().catch(() => []),
         listarCupones().catch(() => []),
       ]);
 
       setDirecciones(dirs);
       setEmpaques(emps);
-      setCupones(cups.filter((c) => c.activo));
+
+      const hoy = new Date().toISOString().split("T")[0];
+
+      // Cupones propios: asignados, sin usar y vigentes. Se muestran como
+      // tarjetas clicables y se pueden resolver por código.
+      const propios = mios.filter((c) => !c.usado && c.fechaFin >= hoy);
+
+      // Cupones globales no exclusivos: activos, vigentes y con usos
+      // disponibles. Permiten escribir un código público (ej: SKD20).
+      const globalesUsables = globales.filter(
+        (c) =>
+          c.activo &&
+          c.fechaFin >= hoy &&
+          c.esUnicoPorUsuario !== true &&
+          (c.usosMaximos == null || c.usosActuales < c.usosMaximos),
+      );
+
+      setCupones(propios);
+
+      // Mapa codigo -> cupón, deduplicado por cuponId (un cupón asignado
+      // también aparece en el catálogo global).
+      const porCodigo = new Map();
+      propios.forEach((c) =>
+        porCodigo.set(c.codigo, {
+          cuponId: c.cuponId,
+          codigo: c.codigo,
+          descuentoPorcentaje: c.descuentoPorcentaje,
+        }),
+      );
+      globalesUsables.forEach((c) =>
+        porCodigo.set(c.codigo, {
+          cuponId: c.id,
+          codigo: c.codigo,
+          descuentoPorcentaje: c.descuentoPorcentaje,
+        }),
+      );
+      setCuponesDisponibles([...porCodigo.values()]);
 
       const predeterminada = dirs.find((d) => d.predeterminada) || dirs[0];
       if (predeterminada) setDireccionId(String(predeterminada.id));
@@ -131,8 +172,50 @@ function Checkout() {
 
   const empaqueSeleccionado = empaques.find((e) => String(e.id) === empaqueId);
   const costoEnvioEstimado = 12000;
+  const descuentoEstimado = cuponAplicado
+    ? (total * Number(cuponAplicado.descuentoPorcentaje)) / 100
+    : 0;
   const totalEstimado =
-    total + (empaqueSeleccionado ? Number(empaqueSeleccionado.costoAdicional) : 0) + costoEnvioEstimado;
+    total +
+    (empaqueSeleccionado ? Number(empaqueSeleccionado.costoAdicional) : 0) +
+    costoEnvioEstimado -
+    descuentoEstimado;
+
+  const aplicarCupon = () => {
+    const codigo = codigoCupon.trim().toUpperCase();
+
+    if (!codigo) {
+      setErrorCupon("Escribe un código de cupón.");
+      return;
+    }
+
+    const encontrado = cuponesDisponibles.find((c) => c.codigo === codigo);
+
+    if (!encontrado) {
+      setErrorCupon("Cupón no válido o no disponible para tu cuenta.");
+      setCuponId("");
+      setCuponAplicado(null);
+      return;
+    }
+
+    setCuponId(encontrado.cuponId);
+    setCuponAplicado(encontrado);
+    setErrorCupon(null);
+  };
+
+  const seleccionarCupon = (c) => {
+    setCodigoCupon(c.codigo);
+    setCuponId(c.cuponId);
+    setCuponAplicado(c);
+    setErrorCupon(null);
+  };
+
+  const quitarCupon = () => {
+    setCodigoCupon("");
+    setCuponId("");
+    setCuponAplicado(null);
+    setErrorCupon(null);
+  };
 
   const handleConfirmar = async () => {
     if (!direccionId || !empaqueId) {
@@ -361,23 +444,71 @@ function Checkout() {
               <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60">
                 <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Cupón y pago</h2>
 
+                <div className="mb-4">
+                  <label className="mb-2 block text-sm text-gray-500 dark:text-slate-400">
+                    Cupón de descuento (opcional)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      value={codigoCupon}
+                      onChange={(e) => setCodigoCupon(e.target.value.toUpperCase())}
+                      placeholder="Escribe el código (ej: SKD20)"
+                      className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-cyan-400"
+                    />
+                    {cuponAplicado ? (
+                      <Button size="sm" onClick={quitarCupon}>
+                        Quitar
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={aplicarCupon}>
+                        Aplicar
+                      </Button>
+                    )}
+                  </div>
+
+                  {errorCupon && (
+                    <p className="mt-2 text-sm text-red-500">{errorCupon}</p>
+                  )}
+
+                  {cuponAplicado && (
+                    <p className="mt-2 text-sm text-emerald-600 dark:text-emerald-400">
+                      Cupón {cuponAplicado.codigo} aplicado: -
+                      {Number(cuponAplicado.descuentoPorcentaje)}%
+                    </p>
+                  )}
+                </div>
+
                 {cupones.length > 0 && (
                   <div className="mb-4">
-                    <label className="mb-2 block text-sm text-gray-500 dark:text-slate-400">
-                      Cupón de descuento (opcional)
-                    </label>
-                    <select
-                      value={cuponId}
-                      onChange={(e) => setCuponId(e.target.value)}
-                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-cyan-400"
-                    >
-                      <option value="">Sin cupón</option>
-                      {cupones.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.codigo} (-{Number(c.descuentoPorcentaje)}%)
-                        </option>
-                      ))}
-                    </select>
+                    <p className="mb-2 text-sm text-gray-500 dark:text-slate-400">
+                      Tus cupones disponibles
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {cupones.map((c) => {
+                        const activo =
+                          cuponAplicado?.cuponId === c.cuponId;
+                        return (
+                          <button
+                            key={c.cuponId}
+                            type="button"
+                            onClick={() =>
+                              seleccionarCupon({
+                                cuponId: c.cuponId,
+                                codigo: c.codigo,
+                                descuentoPorcentaje: c.descuentoPorcentaje,
+                              })
+                            }
+                            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                              activo
+                                ? "border-indigo-400 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-400/10 dark:text-cyan-300"
+                                : "border-dashed border-gray-300 text-gray-600 hover:border-indigo-300 dark:border-slate-600 dark:text-slate-300 dark:hover:border-cyan-400/60"
+                            }`}
+                          >
+                            {c.codigo} (-{Number(c.descuentoPorcentaje)}%)
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
@@ -430,6 +561,12 @@ function Checkout() {
                     <span>Envío estimado</span>
                     <span>{formatPrice(costoEnvioEstimado)}</span>
                   </div>
+                  {cuponAplicado && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                      <span>Descuento ({cuponAplicado.codigo})</span>
+                      <span>-{formatPrice(descuentoEstimado)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 flex justify-between border-t border-gray-200 pt-4 text-lg font-bold text-gray-900 dark:border-slate-800 dark:text-white">
@@ -438,7 +575,7 @@ function Checkout() {
                 </div>
 
                 <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
-                  El descuento del cupón y el costo final se calculan al confirmar.
+                  El costo final se confirma al procesar el pedido.
                 </p>
 
                 {errorCheckout && (

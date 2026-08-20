@@ -48,4 +48,8 @@ public class Cupon {
     @Builder.Default
     private Boolean activo = true;
 
+    @Builder.Default
+    @Column(name = "es_unico_por_usuario", nullable = false)
+    private Boolean esUnicoPorUsuario = false;
+
 }

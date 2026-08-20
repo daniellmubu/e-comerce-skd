@@ -1,31 +1,27 @@
 package com.skd.sublimacion_api.dto.cupon;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
 import lombok.Builder;
 import lombok.Data;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
-
 @Data
 @Builder
-public class CuponResponse {
+public class CuponUsuarioResponse {
 
     private Long id;
+
+    private Long cuponId;
 
     private String codigo;
 
     private BigDecimal descuentoPorcentaje;
 
-    private LocalDate fechaInicio;
-
     private LocalDate fechaFin;
 
-    private Integer usosMaximos;
+    private Boolean usado;
 
-    private Integer usosActuales;
-
-    private Boolean activo;
-
-    private Boolean esUnicoPorUsuario;
-
+    private LocalDateTime fechaUso;
 }

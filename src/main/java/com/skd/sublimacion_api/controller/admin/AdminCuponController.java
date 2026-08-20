@@ -1,5 +1,7 @@
 package com.skd.sublimacion_api.controller.admin;
 
+import com.skd.sublimacion_api.dto.cupon.AsignarCuponRequest;
+import com.skd.sublimacion_api.dto.cupon.AsignarCuponResponse;
 import com.skd.sublimacion_api.dto.cupon.CuponRequest;
 import com.skd.sublimacion_api.dto.cupon.CuponResponse;
 import com.skd.sublimacion_api.service.admin.AdminCuponService;
@@ -109,6 +111,26 @@ public class AdminCuponController {
             @Valid @RequestBody CuponRequest request) {
 
         return adminCuponService.actualizar(id, request);
+    }
+
+
+    @Operation(
+        summary = "Asignar cupón a usuarios",
+        description = "Asigna el cupón a un usuario específico (usuarioId) o a "
+                + "todos los clientes (asignarATodos). Es idempotente: si ya "
+                + "estaba asignado, no se duplica."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Cupón asignado correctamente"),
+            @ApiResponse(responseCode = "400", description = "Solicitud inválida"),
+            @ApiResponse(responseCode = "404", description = "Cupón o usuario no encontrado")
+    })
+    @PostMapping("/{id}/asignar")
+    public AsignarCuponResponse asignar(
+            @PathVariable Long id,
+            @RequestBody AsignarCuponRequest request) {
+
+        return adminCuponService.asignar(id, request);
     }
 
 

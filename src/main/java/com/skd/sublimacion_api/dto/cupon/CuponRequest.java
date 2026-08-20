@@ -32,4 +32,6 @@ public class CuponRequest {
 
     @NotNull(message = "El estado es obligatorio")
     private Boolean activo;
+
+    private Boolean esUnicoPorUsuario;
 }
