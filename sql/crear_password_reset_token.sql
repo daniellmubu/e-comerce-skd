@@ -1,7 +1,6 @@
 -- Tabla de tokens para recuperación de contraseña.
 --
--- MIGRACIÓN: ejecutar manualmente en Supabase (SQL Editor) antes de arrancar
--- la app. spring.jpa.hibernate.ddl-auto=validate exige que la tabla exista.
+-- MIGRACIÓN: ya fue ejecutada no usar de nuevo.
 --
 -- Relación: password_reset_token.usuario_id -> usuario(id)
 
