@@ -1,6 +1,7 @@
 package com.skd.sublimacion_api.service.impl;
 
 import com.skd.sublimacion_api.entity.Producto;
+import com.skd.sublimacion_api.repository.FavoritoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.repository.ResenaRepository;
 import com.skd.sublimacion_api.service.ProductoService;
@@ -12,8 +13,10 @@ import com.skd.sublimacion_api.dto.producto.ProductoRequest;
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
 import com.skd.sublimacion_api.entity.Categoria;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -22,11 +25,12 @@ public class ProductoServiceImpl implements ProductoService {
     private final ProductoRepository productoRepository;
     private final CategoriaRepository categoriaRepository;
     private final ResenaRepository resenaRepository;
+    private final FavoritoRepository favoritoRepository;
 
     @Override
-    public List<ProductoResponse> listar() {
+    public List<ProductoResponse> listar(Long usuarioId) {
 
-        ResumenResenas resumen = obtenerResumenResenas();
+        ResumenResenas resumen = obtenerResumenResenas(usuarioId);
 
         return productoRepository.findByActivoTrue()
             .stream()
@@ -53,7 +57,7 @@ public class ProductoServiceImpl implements ProductoService {
 
     Producto guardado = productoRepository.save(producto);
 
-    return convertir(guardado, obtenerResumenResenas());
+    return convertir(guardado, obtenerResumenResenas(null));
     }
 
     @Override
@@ -77,7 +81,7 @@ public class ProductoServiceImpl implements ProductoService {
 
         Producto actualizado = productoRepository.save(producto);
 
-        return convertir(actualizado, obtenerResumenResenas());
+        return convertir(actualizado, obtenerResumenResenas(null));
     }
     
 
@@ -92,9 +96,9 @@ public class ProductoServiceImpl implements ProductoService {
     }
 
     @Override
-    public List<ProductoResponse> buscarPorNombre(String nombre) {
+    public List<ProductoResponse> buscarPorNombre(String nombre, Long usuarioId) {
 
-        ResumenResenas resumen = obtenerResumenResenas();
+        ResumenResenas resumen = obtenerResumenResenas(usuarioId);
 
         return productoRepository.findByNombreContainingIgnoreCase(nombre)
             .stream()
@@ -103,9 +107,9 @@ public class ProductoServiceImpl implements ProductoService {
     }
 
     @Override
-    public List<ProductoResponse> buscarPorCategoria(Long categoriaId) {
+    public List<ProductoResponse> buscarPorCategoria(Long categoriaId, Long usuarioId) {
 
-        ResumenResenas resumen = obtenerResumenResenas();
+        ResumenResenas resumen = obtenerResumenResenas(usuarioId);
 
         return productoRepository.findByCategoriaId(categoriaId)
         .stream()
@@ -113,22 +117,24 @@ public class ProductoServiceImpl implements ProductoService {
         .toList();
     }
     @Override
-    public ProductoResponse obtenerPorId(Long id) {
+    public ProductoResponse obtenerPorId(Long id, Long usuarioId) {
 
         Producto producto = productoRepository.findById(id)
             .orElseThrow(() ->
                     new ResourceNotFoundException("Producto no encontrado con id: " + id));
 
-        return convertir(producto, obtenerResumenResenas());
+        return convertir(producto, obtenerResumenResenas(usuarioId));
     }
 
     private record ResumenResenas(
             Map<Long, Double> promedios,
-            Map<Long, Long> conteos) {}
+            Map<Long, Long> conteos,
+            Set<Long> favoritos) {}
 
-    // Una sola consulta agregada para todo el catálogo:
+    // Una sola consulta agregada para el catálogo:
     // SELECT producto_id, AVG(calificacion), COUNT(*) FROM resena GROUP BY producto_id
-    private ResumenResenas obtenerResumenResenas() {
+    // + si hay usuario autenticado, sus favoritos (1 query extra).
+    private ResumenResenas obtenerResumenResenas(Long usuarioId) {
 
         Map<Long, Double> promedios = new HashMap<>();
         Map<Long, Long> conteos = new HashMap<>();
@@ -140,7 +146,11 @@ public class ProductoServiceImpl implements ProductoService {
             conteos.put(productoId, ((Number) fila[2]).longValue());
         }
 
-        return new ResumenResenas(promedios, conteos);
+        Set<Long> favoritos = usuarioId == null
+                ? new HashSet<>()
+                : favoritoRepository.findProductoIdsByUsuarioId(usuarioId);
+
+        return new ResumenResenas(promedios, conteos, favoritos);
     }
 
     private ProductoResponse convertir(
@@ -160,6 +170,8 @@ public class ProductoServiceImpl implements ProductoService {
                         resumen.promedios.getOrDefault(producto.getId(), 0.0))
                 .cantidadResenas(
                         resumen.conteos.getOrDefault(producto.getId(), 0L))
+                .esFavorito(
+                        resumen.favoritos().contains(producto.getId()))
                 .build();
     }
 }

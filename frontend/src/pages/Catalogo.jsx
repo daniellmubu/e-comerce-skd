@@ -6,6 +6,8 @@ import camiseta from "../assets/images/products/camiseta.png";
 import mug from "../assets/images/products/mug.png";
 import termo from "../assets/images/products/termo.png";
 import { listarProductos } from "../services/productService";
+import { agregarFavorito, eliminarFavorito } from "../services/favoritoService";
+import { estaAutenticado } from "../services/authService";
 import { getErrorMessage } from "../services/api";
 
 const SORT_OPTIONS = [
@@ -55,6 +57,11 @@ function Catalogo() {
     try {
       const data = await listarProductos();
       setProducts(data.filter((p) => p.activo !== false));
+      // El backend marca esFavorito cuando el usuario está logueado;
+      // con eso sembramos el estado local del corazón.
+      setFavorites(
+        new Set(data.filter((p) => p.esFavorito).map((p) => p.id))
+      );
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -90,16 +97,43 @@ function Catalogo() {
     return result;
   }, [products, search, category, sortBy]);
 
-  const toggleFavorite = (id) => {
+  // Persiste el favorito en el backend (POST/DELETE) y actualiza el estado
+  // local de forma optimista; si la petición falla, revierte el cambio.
+  const toggleFavorite = async (id) => {
+    if (!estaAutenticado()) {
+      navigate("/login");
+      return;
+    }
+
+    const agregando = !favorites.has(id);
     setFavorites((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
+      if (agregando) {
         next.add(id);
+      } else {
+        next.delete(id);
       }
       return next;
     });
+
+    try {
+      if (agregando) {
+        await agregarFavorito(id);
+      } else {
+        await eliminarFavorito(id);
+      }
+    } catch {
+      // Revierte el cambio local si el backend rechazó la petición.
+      setFavorites((prev) => {
+        const next = new Set(prev);
+        if (agregando) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return next;
+      });
+    }
   };
 
   const handlePersonalizar = (product) => {

@@ -30,4 +30,6 @@ public class ProductoResponse {
 
     private Long cantidadResenas;
 
+    private Boolean esFavorito;
+
 }
