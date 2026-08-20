@@ -44,6 +44,9 @@ public class Pedido {
     @Column(name = "costo_envio", precision = 10, scale = 2)
     private BigDecimal costoEnvio;
 
+    @Column(name = "dias_estimados_entrega")
+    private Integer diasEstimadosEntrega;
+
     @Column(precision = 10, scale = 2)
     private BigDecimal descuento;
 

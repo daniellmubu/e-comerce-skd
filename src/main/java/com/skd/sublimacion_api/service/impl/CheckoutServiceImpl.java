@@ -40,6 +40,7 @@ import com.skd.sublimacion_api.repository.PedidoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.service.CheckoutService;
+import com.skd.sublimacion_api.service.EnvioService;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -59,6 +60,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final CuponUsuarioRepository cuponUsuarioRepository;
     private final ProductoRepository productoRepository;
     private final DisenoRepository disenoRepository;
+    private final EnvioService envioService;
     private final ApplicationEventPublisher applicationEventPublisher;
 
     @Override
@@ -90,12 +92,13 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         BigDecimal costoEmpaque = calcularCostoEmpaque(empaque);
 
-        BigDecimal costoEnvio = calcularCostoEnvio();
+        EnvioService.CostoEnvio costoEnvio =
+                envioService.calcularParaCheckout(direccion);
 
         BigDecimal total = subtotal
             .subtract(descuento)
             .add(costoEmpaque)
-            .add(costoEnvio);
+            .add(costoEnvio.costo());
         Pedido pedido = crearPedido(
             usuario,
             direccion,
@@ -103,7 +106,8 @@ public class CheckoutServiceImpl implements CheckoutService {
             cupon,
             subtotal,
             descuento,
-            costoEnvio,
+            costoEnvio.costo(),
+            costoEnvio.diasEstimados(),
             total,
             request
         );
@@ -132,7 +136,8 @@ public class CheckoutServiceImpl implements CheckoutService {
             .numeroFactura(factura.getNumeroFactura())
             .subtotal(subtotal)
             .descuento(descuento)
-            .costoEnvio(costoEnvio)
+            .costoEnvio(costoEnvio.costo())
+            .diasEstimadosEntrega(costoEnvio.diasEstimados())
             .total(total)
             .estado(pedido.getEstado())
             .mensaje("Checkout realizado correctamente")
@@ -275,9 +280,6 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         return empaque.getCostoAdicional();
     }
-    private BigDecimal calcularCostoEnvio() {
-        return BigDecimal.valueOf(12000);
-    }
     private Pedido crearPedido(
         Usuario usuario,
         Direccion direccion,
@@ -286,6 +288,7 @@ public class CheckoutServiceImpl implements CheckoutService {
         BigDecimal subtotal,
         BigDecimal descuento,
         BigDecimal costoEnvio,
+        Integer diasEstimadosEntrega,
         BigDecimal total,
         CheckoutRequest request
 ) {
@@ -299,6 +302,7 @@ public class CheckoutServiceImpl implements CheckoutService {
             .subtotal(subtotal)
             .descuento(descuento)
             .costoEnvio(costoEnvio)
+            .diasEstimadosEntrega(diasEstimadosEntrega)
             .total(total)
             .fechaEntregaDeseada(request.getFechaEntregaDeseada())
             .build();
