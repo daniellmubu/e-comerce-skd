@@ -1,19 +1,16 @@
 import * as THREE from "three";
 import camisetaBase from "../assets/images/products/base/camiseta-base.png";
 import mugBase from "../assets/images/products/base/mug-base.png";
-import termoBase from "../assets/images/products/base/termo-base.png";
 
 const IMAGENES = {
   camiseta: camisetaBase,
   mug: mugBase,
-  termo: termoBase,
 };
 
 // Misma posición relativa del diseño que usa el Generador para el overlay CSS.
 const OVERLAY = {
   camiseta: { top: 0.33, width: 0.5 },
   mug: { top: 0.35, width: 0.58 },
-  termo: { top: 0.31, width: 0.52 },
 };
 
 function cargarImagen(src, crossOrigin) {
@@ -94,7 +91,7 @@ export async function componerTextura(tipo, color, disenoUrl, { recortar = false
   return textura;
 }
 
-// Textura para prendas cilíndricas (mug/termo): cilindro de color sólido con
+// Textura para prendas cilíndricas (mug): cilindro de color sólido con
 // el diseño dibujado encima. A diferencia de la foto, no hay distorsión ni
 // fondo transparente. `anchoFraccion` es qué parte de la circunferencia ocupa
 // el diseño; `circunferencia` y `altura` (en unidades del mundo) se usan para

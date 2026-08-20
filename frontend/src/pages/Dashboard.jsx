@@ -71,7 +71,7 @@ function Dashboard() {
         {/* Accesos rápidos */}
         <div className="mb-12 grid gap-6 sm:grid-cols-2">
           <button
-            onClick={() => navigate("/generador")}
+            onClick={() => navigate("/personalizador")}
             className="group flex items-center gap-5 rounded-3xl border border-gray-200 bg-white p-6 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/80 dark:backdrop-blur dark:hover:border-cyan-400/50 dark:hover:shadow-[0_0_35px_rgba(34,211,238,0.15)]"
           >
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-xl text-white dark:bg-gradient-to-br dark:from-cyan-500 dark:to-violet-600">
@@ -118,7 +118,7 @@ function Dashboard() {
             <FaPalette className="mb-4 text-3xl text-gray-400 dark:text-slate-600" />
             <p className="text-gray-500 dark:text-slate-400">Aún no tienes diseños guardados.</p>
             <button
-              onClick={() => navigate("/generador")}
+              onClick={() => navigate("/personalizador")}
               className="mt-4 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:scale-[1.02] hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
             >
               Crear mi primer diseño

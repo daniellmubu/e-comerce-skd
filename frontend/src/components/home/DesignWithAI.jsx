@@ -5,7 +5,6 @@ import { Link } from "react-router-dom";
 const EXAMPLE_PROMPTS = [
   "Camiseta negra con un dragón japonés en tonos azules, estilo cyberpunk",
   "Mug blanco con un astronauta minimalista flotando entre estrellas",
-  "Termo verde con un patrón geométrico inspirado en la naturaleza",
 ];
 
 function DesignWithAI() {

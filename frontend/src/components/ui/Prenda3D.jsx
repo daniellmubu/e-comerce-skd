@@ -4,35 +4,20 @@ import { componerTextura, componerTexturaSolida } from "../../utils/texturaPrend
 
 const FACTOR_ROTACION = 0.01;
 
-// La camiseta es una lámina curvada; el mug y el termo son cilindros sólidos.
+// La camiseta es una lámina curvada; el mug es un cilindro sólido.
 const FORMAS = {
   camiseta: "plana",
   mug: "cilindro",
-  termo: "cilindro",
 };
 
-// Dimensiones en unidades del mundo. El termo se construye en tres piezas
-// (cuerpo con el diseño, hombro cónico y tapa) para que tenga forma de termo.
+// Dimensiones en unidades del mundo.
 const DIMENSIONES = {
   camiseta: { ancho: 2.6, alto: 2.6 },
   mug: { radioSuperior: 1.1, radioInferior: 1.1, altura: 2.0 },
-  termo: {
-    radioInferior: 0.72,
-    radioCuerpo: 0.65,
-    alturaCuerpo: 1.7,
-    radioCuello: 0.28,
-    alturaHombro: 0.35,
-    radioTapa: 0.32,
-    alturaTapa: 0.45,
-  },
 };
 
 // Mitad de la altura total de cada prenda (para ubicar la sombra).
 function mediaAlturaDe(tipo) {
-  if (tipo === "termo") {
-    const t = DIMENSIONES.termo;
-    return (t.alturaCuerpo + t.alturaHombro + t.alturaTapa) / 2;
-  }
   if (tipo === "camiseta") return DIMENSIONES.camiseta.alto / 2;
   return DIMENSIONES.mug.altura / 2;
 }
@@ -40,14 +25,6 @@ function mediaAlturaDe(tipo) {
 // Datos para envolver el diseño en cada cilindro: la circunferencia y la altura
 // de la zona imprimible y qué fracción de esa circunferencia ocupa el diseño.
 function configDisenoCilindro(tipo) {
-  if (tipo === "termo") {
-    const { radioInferior, radioCuerpo, alturaCuerpo } = DIMENSIONES.termo;
-    return {
-      anchoFraccion: 0.26,
-      circunferencia: Math.PI * (radioInferior + radioCuerpo),
-      altura: alturaCuerpo,
-    };
-  }
   const { radioSuperior, altura } = DIMENSIONES[tipo];
   return {
     anchoFraccion: ANCHO_DISENO_CILINDRO[tipo] ?? 0.3,
@@ -56,11 +33,10 @@ function configDisenoCilindro(tipo) {
   };
 }
 
-// Acabado del material según la prenda (cerámica, metal o tela).
+// Acabado del material según la prenda (cerámica o tela).
 const ACABADOS = {
   camiseta: { roughness: 0.6, metalness: 0 },
   mug: { roughness: 0.4, metalness: 0.05 },
-  termo: { roughness: 0.25, metalness: 0.7 },
 };
 
 // Qué fracción de la circunferencia ocupa el diseño en cada cilindro.
@@ -150,134 +126,64 @@ function Prenda3D({ tipo, color, disenoUrl }) {
     const recursos = [];
 
     if (esCilindro) {
-      if (tipo === "termo") {
-        const t = DIMENSIONES.termo;
-        const alturaTotal = t.alturaCuerpo + t.alturaHombro + t.alturaTapa;
-        const baseY = -alturaTotal / 2;
+      const { radioSuperior, radioInferior, altura } = DIMENSIONES[tipo];
 
-        // Cuerpo con el diseño (zona imprimible).
-        const geoCuerpo = new THREE.CylinderGeometry(
-          t.radioCuerpo,
-          t.radioInferior,
-          t.alturaCuerpo,
-          64,
-          1,
-          true
-        );
-        recursos.push(geoCuerpo);
+      const geometry = new THREE.CylinderGeometry(
+        radioSuperior,
+        radioInferior,
+        altura,
+        64,
+        1,
+        true
+      );
+      recursos.push(geometry);
 
-        const materialCuerpo = fabricaMaterial();
-        materialRef.current = materialCuerpo;
-        recursos.push(materialCuerpo);
+      const material = fabricaMaterial();
+      materialRef.current = material;
+      recursos.push(material);
 
-        const cuerpo = new THREE.Mesh(geoCuerpo, materialCuerpo);
-        // La textura envuelve el cilindro dejando el centro (u = 0.5) en la
-        // cara trasera; con una rotación de PI lo dejamos mirando a la cámara.
-        cuerpo.rotation.y = Math.PI;
-        cuerpo.position.y = baseY + t.alturaCuerpo / 2;
-        prenda.add(cuerpo);
+      const cuerpo = new THREE.Mesh(geometry, material);
+      // La textura envuelve el cilindro dejando el centro (u = 0.5) en la cara
+      // trasera; con una rotación de PI lo dejamos mirando a la cámara.
+      cuerpo.rotation.y = Math.PI;
+      prenda.add(cuerpo);
 
-        // Hombro cónico y base, en el color liso (sin diseño).
-        const materialSecundario = new THREE.MeshStandardMaterial({
+      // Tapas para que el cilindro se vea sólido y no hueco.
+      const materialTapa = new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        roughness: 0.6,
+        metalness: 0.05,
+      });
+      recursos.push(materialTapa);
+      const geometriaTapa = new THREE.CircleGeometry(radioSuperior, 64);
+      recursos.push(geometriaTapa);
+
+      const tapaSuperior = new THREE.Mesh(geometriaTapa, materialTapa);
+      tapaSuperior.rotation.x = -Math.PI / 2;
+      tapaSuperior.position.y = altura / 2;
+      prenda.add(tapaSuperior);
+
+      const tapaInferior = new THREE.Mesh(geometriaTapa, materialTapa);
+      tapaInferior.rotation.x = Math.PI / 2;
+      tapaInferior.position.y = -altura / 2;
+      prenda.add(tapaInferior);
+
+      // Asa para el mug (un aro que asoma por el costado).
+      if (tipo === "mug") {
+        const materialAsa = new THREE.MeshStandardMaterial({
           color,
-          roughness: ACABADOS.termo.roughness,
-          metalness: ACABADOS.termo.metalness,
-        });
-        materialColorRef.current = materialSecundario;
-        recursos.push(materialSecundario);
-
-        const geoHombro = new THREE.CylinderGeometry(
-          t.radioCuello,
-          t.radioCuerpo,
-          t.alturaHombro,
-          64,
-          1,
-          true
-        );
-        recursos.push(geoHombro);
-        const hombro = new THREE.Mesh(geoHombro, materialSecundario);
-        hombro.position.y = baseY + t.alturaCuerpo + t.alturaHombro / 2;
-        prenda.add(hombro);
-
-        const geoBase = new THREE.CircleGeometry(t.radioInferior, 64);
-        recursos.push(geoBase);
-        const base = new THREE.Mesh(geoBase, materialSecundario);
-        base.rotation.x = Math.PI / 2;
-        base.position.y = baseY;
-        prenda.add(base);
-
-        // Tapa (lid) de acero.
-        const materialTapa = new THREE.MeshStandardMaterial({
-          color: 0x94a3b8,
-          roughness: 0.3,
-          metalness: 0.9,
-        });
-        recursos.push(materialTapa);
-        const geoTapa = new THREE.CylinderGeometry(t.radioTapa, t.radioTapa, t.alturaTapa, 64);
-        recursos.push(geoTapa);
-        const tapa = new THREE.Mesh(geoTapa, materialTapa);
-        tapa.position.y = baseY + t.alturaCuerpo + t.alturaHombro + t.alturaTapa / 2;
-        prenda.add(tapa);
-      } else {
-        const { radioSuperior, radioInferior, altura } = DIMENSIONES[tipo];
-
-        const geometry = new THREE.CylinderGeometry(
-          radioSuperior,
-          radioInferior,
-          altura,
-          64,
-          1,
-          true
-        );
-        recursos.push(geometry);
-
-        const material = fabricaMaterial();
-        materialRef.current = material;
-        recursos.push(material);
-
-        const cuerpo = new THREE.Mesh(geometry, material);
-        // La textura envuelve el cilindro dejando el centro (u = 0.5) en la cara
-        // trasera; con una rotación de PI lo dejamos mirando a la cámara.
-        cuerpo.rotation.y = Math.PI;
-        prenda.add(cuerpo);
-
-        // Tapas para que el cilindro se vea sólido y no hueco.
-        const materialTapa = new THREE.MeshStandardMaterial({
-          color: 0x1e293b,
-          roughness: 0.6,
+          roughness: 0.4,
           metalness: 0.05,
         });
-        recursos.push(materialTapa);
-        const geometriaTapa = new THREE.CircleGeometry(radioSuperior, 64);
-        recursos.push(geometriaTapa);
+        materialColorRef.current = materialAsa;
+        recursos.push(materialAsa);
 
-        const tapaSuperior = new THREE.Mesh(geometriaTapa, materialTapa);
-        tapaSuperior.rotation.x = -Math.PI / 2;
-        tapaSuperior.position.y = altura / 2;
-        prenda.add(tapaSuperior);
-
-        const tapaInferior = new THREE.Mesh(geometriaTapa, materialTapa);
-        tapaInferior.rotation.x = Math.PI / 2;
-        tapaInferior.position.y = -altura / 2;
-        prenda.add(tapaInferior);
-
-        // Asa para el mug (un aro que asoma por el costado).
-        if (tipo === "mug") {
-          const materialAsa = new THREE.MeshStandardMaterial({
-            color,
-            roughness: 0.4,
-            metalness: 0.05,
-          });
-          materialColorRef.current = materialAsa;
-          recursos.push(materialAsa);
-
-          const asa = new THREE.Mesh(
-            new THREE.TorusGeometry(0.6, 0.12, 16, 48),
-            materialAsa
-          );
-          asa.position.set(radioSuperior + 0.15, 0, 0);
-          prenda.add(asa);
-        }
+        const asa = new THREE.Mesh(
+          new THREE.TorusGeometry(0.6, 0.12, 16, 48),
+          materialAsa
+        );
+        asa.position.set(radioSuperior + 0.15, 0, 0);
+        prenda.add(asa);
       }
     } else {
       // Camiseta: lámina curvada con cara delantera (diseño) y trasera (lisa).

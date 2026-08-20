@@ -3,7 +3,6 @@ import { FaEye } from "react-icons/fa";
 
 import camiseta from "../../assets/images/products/camiseta.png";
 import mug from "../../assets/images/products/mug.png";
-import termo from "../../assets/images/products/termo.png";
 
 const designs = [
   {
@@ -15,11 +14,6 @@ const designs = [
     title: "Neon Dragon",
     category: "Mugs",
     image: mug,
-  },
-  {
-    title: "Anime Street",
-    category: "Termos",
-    image: termo,
   },
 ];
 
@@ -48,7 +42,7 @@ function Gallery() {
           </p>
         </div>
 
-        <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-3">
+        <div className="grid gap-8 sm:grid-cols-2">
           {designs.map((design, index) => (
             <div
               key={design.title}

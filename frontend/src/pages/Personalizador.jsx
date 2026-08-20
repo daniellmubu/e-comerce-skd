@@ -4,7 +4,6 @@ import {
   FaUpload,
   FaSyncAlt,
   FaSearchPlus,
-  FaEye,
   FaSave,
   FaShoppingCart,
   FaMagic,
@@ -12,22 +11,22 @@ import {
   FaPalette,
   FaTrash,
 } from "react-icons/fa";
+import { Shirt, Coffee } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { guardarPersonalizacion } from "../services/personalizacionService";
+import { generarDiseno } from "../services/disenoService";
+import { getErrorMessage } from "../services/api";
+import PrendaMockup from "../components/ui/PrendaMockup";
 
 const COSTO_PERSONALIZACION = 5000;
 
-// Paletas simuladas para el resultado "generado por IA" — hasta que se
-// conecte un proveedor real (OpenAI Images, Stability, etc.) esto es
-// solo una representación visual del resultado.
-const PALETAS_IA = [
-  "from-cyan-500 via-slate-700 to-violet-600",
-  "from-pink-500 via-slate-700 to-rose-600",
-  "from-emerald-500 via-slate-700 to-teal-600",
-  "from-amber-500 via-slate-700 to-orange-600",
-];
+// Categoría del backend -> tipo de mockup interno del personalizador.
+const TIPO_POR_CATEGORIA = {
+  Camisetas: "camiseta",
+  Mugs: "mug",
+};
 
 // Paleta amplia de colores preseleccionables para pintar el diseño/objeto.
 const PALETA_COLORES = [
@@ -59,10 +58,16 @@ function Personalizador() {
   const productoOrigen = location.state ?? null;
   const precioBase = productoOrigen?.precio ?? 25000;
 
+  // Producto seleccionado en el personalizador (controla el mockup mostrado).
+  // Si el usuario llega desde un producto concreto del catálogo, se preselecciona.
+  const [selectedProduct, setSelectedProduct] = useState(
+    () => TIPO_POR_CATEGORIA[productoOrigen?.categoria] ?? "camiseta"
+  );
+
   const [imagenSubida, setImagenSubida] = useState(null); // dataURL
   const [prompt, setPrompt] = useState("");
   const [generandoIA, setGenerandoIA] = useState(false);
-  const [resultadoIA, setResultadoIA] = useState(null); // clase de gradiente
+  const [resultadoIA, setResultadoIA] = useState(null); // url de la imagen generada
   const [colorSeleccionado, setColorSeleccionado] = useState(null); // hex
   const [textoDiseno, setTextoDiseno] = useState("");
   const [colorTexto, setColorTexto] = useState("#111111");
@@ -70,13 +75,16 @@ function Personalizador() {
   const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "color" | "texto"
   const [rotacion, setRotacion] = useState(0);
   const [escala, setEscala] = useState(1);
-  const [mostrarVistaPrevia3D, setMostrarVistaPrevia3D] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
 
   const hayDiseno = Boolean(
     imagenSubida || resultadoIA || colorSeleccionado || textoDiseno.trim()
   );
+
+  // Imagen que se estampa sobre el producto (subida o generada por IA).
+  // Se mantiene aunque el usuario cambie de producto.
+  const disenoActual = imagenSubida || resultadoIA;
 
   const total = useMemo(() => precioBase + COSTO_PERSONALIZACION, [precioBase]);
 
@@ -94,22 +102,42 @@ function Personalizador() {
     lector.readAsDataURL(archivo);
   };
 
-  const handleGenerarIA = () => {
+  const handleGenerarIA = async () => {
     if (!prompt.trim() || generandoIA) return;
+
+    if (!usuario) {
+      navigate("/login");
+      return;
+    }
 
     setGenerandoIA(true);
     setMensaje(null);
 
-    // Simulación — reemplazar por la llamada real a un proveedor de
-    // generación de imágenes (requiere backend + API key propia).
-    setTimeout(() => {
-      const paleta = PALETAS_IA[Math.floor(Math.random() * PALETAS_IA.length)];
-      setResultadoIA(paleta);
-      setImagenSubida(null); // el resultado de IA reemplaza cualquier imagen subida
-      setRotacion(0);
-      setEscala(1);
+    try {
+      const resultado = await generarDiseno({
+        prompt,
+        productoId: productoOrigen?.id ?? null,
+      });
+
+      const imagenUrl =
+        resultado.imagenUrl ?? resultado.url ?? resultado.imagen ?? null;
+
+      if (imagenUrl) {
+        setResultadoIA(imagenUrl);
+        setImagenSubida(null); // el resultado de IA reemplaza cualquier imagen subida
+        setRotacion(0);
+        setEscala(1);
+      } else {
+        setMensaje({
+          tipo: "error",
+          texto: "La IA no pudo generar un diseño. Intenta de nuevo.",
+        });
+      }
+    } catch (error) {
+      setMensaje({ tipo: "error", texto: getErrorMessage(error) });
+    } finally {
       setGenerandoIA(false);
-    }, 1600);
+    }
   };
 
   const handleRotar = () => {
@@ -174,6 +202,7 @@ function Personalizador() {
       // personalización asociada (imagen, rotación, escala, costo extra).
       if (item?.id) {
         const notas = [
+          `Producto: ${selectedProduct === "camiseta" ? "Camiseta" : "Mug"}`,
           resultadoIA ? `Generado por IA: ${prompt}` : null,
           colorSeleccionado ? `Color elegido: ${colorSeleccionado}` : null,
           textoDiseno.trim() ? `Texto: "${textoDiseno.trim()}" (${colorTexto}, ${tamanoTexto}px)` : null,
@@ -183,7 +212,7 @@ function Personalizador() {
 
         await guardarPersonalizacion({
           itemCarritoId: item.id,
-          imagenUrl: imagenSubida ?? null,
+          imagenUrl: imagenSubida ?? resultadoIA ?? null,
           texto: notas || null,
           rotacion,
           escala,
@@ -214,6 +243,39 @@ function Personalizador() {
             Personalizando: <strong>{productoOrigen.nombre}</strong>
           </p>
         )}
+
+        {/* Selector de producto */}
+        <div className="mb-8">
+          <p className="mb-3 text-sm font-semibold text-gray-500 dark:text-slate-400">
+            Elige el producto
+          </p>
+          <div className="grid max-w-md grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setSelectedProduct("camiseta")}
+              className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-5 transition ${
+                selectedProduct === "camiseta"
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-200 dark:ring-cyan-500/40"
+                  : "border-gray-200 bg-white text-gray-500 hover:border-gray-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-500"
+              }`}
+            >
+              <Shirt className="h-8 w-8" />
+              <span className="font-semibold">Camiseta</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedProduct("mug")}
+              className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-5 transition ${
+                selectedProduct === "mug"
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-200 dark:ring-cyan-500/40"
+                  : "border-gray-200 bg-white text-gray-500 hover:border-gray-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-500"
+              }`}
+            >
+              <Coffee className="h-8 w-8" />
+              <span className="font-semibold">Mug</span>
+            </button>
+          </div>
+        </div>
 
         <div className="flex flex-col gap-6 lg:flex-row">
           {/* Herramientas */}
@@ -416,67 +478,31 @@ function Personalizador() {
             </button>
           </div>
 
-          {/* Zona de diseño */}
+          {/* Zona de diseño (mockup del producto seleccionado) */}
           <div className="relative flex min-h-[420px] flex-1 items-center justify-center rounded-2xl border border-gray-200 bg-gray-100 dark:border-slate-800 dark:bg-slate-900">
             {hayDiseno && (
               <button
                 type="button"
                 onClick={handleQuitarDiseno}
                 aria-label="Quitar diseño"
-                className="absolute right-4 top-4 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-sm transition hover:border-red-300 hover:text-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:text-red-400"
+                className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-sm transition hover:border-red-300 hover:text-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:text-red-400"
               >
                 <FaTrash /> Quitar diseño
               </button>
             )}
 
-            {imagenSubida ? (
-              <div
-                className="relative max-h-[380px] max-w-[80%] transition-transform duration-300"
-                style={{ transform: `rotate(${rotacion}deg) scale(${escala})` }}
-              >
-                <img
-                  src={imagenSubida}
-                  alt="Diseño subido"
-                  className="max-h-[380px] max-w-full object-contain"
-                />
-                {colorSeleccionado && (
-                  <div
-                    className="absolute inset-0 mix-blend-multiply"
-                    style={{ backgroundColor: colorSeleccionado, opacity: 0.55 }}
-                  />
-                )}
-              </div>
-            ) : resultadoIA && !colorSeleccionado ? (
-              <div
-                className={`h-64 w-64 rounded-2xl bg-gradient-to-br ${resultadoIA} shadow-lg transition-transform duration-300`}
-                style={{ transform: `rotate(${rotacion}deg) scale(${escala})` }}
+            <div className="w-full max-w-[500px] p-2">
+              <PrendaMockup
+                tipo={selectedProduct}
+                color={colorSeleccionado}
+                disenoUrl={disenoActual}
+                rotacion={rotacion}
+                escala={escala}
+                texto={textoDiseno}
+                colorTexto={colorTexto}
+                tamanoTexto={tamanoTexto}
               />
-            ) : colorSeleccionado ? (
-              <div
-                className="h-64 w-64 rounded-2xl shadow-lg transition-transform duration-300"
-                style={{
-                  backgroundColor: colorSeleccionado,
-                  transform: `rotate(${rotacion}deg) scale(${escala})`,
-                }}
-              />
-            ) : !hayDiseno ? (
-              <span className="text-gray-400 dark:text-slate-500">Zona de diseño</span>
-            ) : null}
-
-            {textoDiseno.trim() && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
-                <p
-                  className="text-center font-semibold"
-                  style={{
-                    color: colorTexto,
-                    fontSize: `${tamanoTexto}px`,
-                    transform: `rotate(${rotacion}deg) scale(${escala})`,
-                  }}
-                >
-                  {textoDiseno}
-                </p>
-              </div>
-            )}
+            </div>
           </div>
 
           {/* Vista previa */}
@@ -485,17 +511,20 @@ function Personalizador() {
               Vista previa
             </h2>
 
-            <div className="flex h-32 items-center justify-center rounded-xl bg-gray-100 text-sm text-gray-400 dark:bg-slate-800 dark:text-slate-500">
-              Vista previa 3D
+            <div className="mb-4 flex items-center justify-center rounded-xl bg-gray-100 p-4 dark:bg-slate-800">
+              <div className="w-64">
+                <PrendaMockup
+                  tipo={selectedProduct}
+                  color={colorSeleccionado}
+                  disenoUrl={disenoActual}
+                  rotacion={rotacion}
+                  escala={escala}
+                  texto={textoDiseno}
+                  colorTexto={colorTexto}
+                  tamanoTexto={tamanoTexto}
+                />
+              </div>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setMostrarVistaPrevia3D((v) => !v)}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
-            >
-              <FaEye /> Vista previa 3D
-            </button>
 
             <button
               type="button"

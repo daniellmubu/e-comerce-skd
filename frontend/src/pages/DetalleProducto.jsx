@@ -4,7 +4,6 @@ import { FaStar, FaShoppingCart, FaMagic, FaArrowLeft } from "react-icons/fa";
 
 import camiseta from "../assets/images/products/camiseta.png";
 import mug from "../assets/images/products/mug.png";
-import termo from "../assets/images/products/termo.png";
 import { obtenerProductoPorId, listarProductos } from "../services/productService";
 import { listarResenasPorProducto } from "../services/resenaService";
 import { listarCaracteristicasPorProducto } from "../services/caracteristicaService";
@@ -17,7 +16,6 @@ import Loading from "../components/ui/Loading";
 const CATEGORY_META = {
   Camisetas: { image: camiseta, color: "from-cyan-500 to-blue-700" },
   Mugs: { image: mug, color: "from-violet-500 to-purple-700" },
-  Termos: { image: termo, color: "from-emerald-500 to-green-700" },
 };
 const DEFAULT_META = { image: camiseta, color: "from-slate-500 to-slate-700" };
 

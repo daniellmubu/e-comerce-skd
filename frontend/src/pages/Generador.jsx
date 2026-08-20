@@ -1,11 +1,10 @@
 import { useState, useMemo } from "react";
 import { FaMagic, FaSpinner, FaArrowRight, FaTimes, FaLock, FaPlus } from "react-icons/fa";
-import { Shirt, Coffee, GlassWater, Share2 } from "lucide-react";
+import { Shirt, Coffee, Share2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import camiseta from "../assets/images/products/camiseta.png";
 import mug from "../assets/images/products/mug.png";
-import termo from "../assets/images/products/termo.png";
 import { useAuth } from "../context/AuthContext";
 import { generarDiseno } from "../services/disenoService";
 import { getErrorMessage } from "../services/api";
@@ -14,16 +13,14 @@ import Prenda3D from "../components/ui/Prenda3D";
 const PRODUCT_TYPES = [
   { id: "camiseta", name: "Camiseta", image: camiseta, icon: Shirt },
   { id: "mug", name: "Mug", image: mug, icon: Coffee },
-  { id: "termo", name: "Termo", image: termo, icon: GlassWater },
 ];
 
 // El Catálogo manda la categoría tal como la devuelve el backend
-// ("Camisetas", "Mugs", "Termos"); acá la traducimos al id interno
+// ("Camisetas", "Mugs"); acá la traducimos al id interno
 // que usan las tarjetas de producto de este componente.
 const CATEGORIA_TO_TIPO = {
   Camisetas: "camiseta",
   Mugs: "mug",
-  Termos: "termo",
 };
 
 const COLORS = [
@@ -237,7 +234,7 @@ function Generador() {
               <label className="mb-3 block text-sm font-semibold text-slate-300">
                 Producto
               </label>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 {PRODUCT_TYPES.map((product) => {
                   const Icono = product.icon;
                   return (

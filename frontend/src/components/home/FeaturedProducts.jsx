@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 
 import camiseta from "../../assets/images/products/camiseta.png";
 import mug from "../../assets/images/products/mug.png";
-import termo from "../../assets/images/products/termo.png";
 
 const products = [
   {
@@ -22,14 +21,6 @@ const products = [
     category: "Mugs",
     image: mug,
   },
-  {
-    id: 3,
-    name: "Termo Sport",
-    price: "$59.900",
-    rating: 5,
-    category: "Termos",
-    image: termo,
-  },
 ];
 
 function FeaturedProducts() {
@@ -40,7 +31,7 @@ function FeaturedProducts() {
           Más vendidos
         </h2>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2">
           {products.map((product) => (
             <div
               key={product.id}
