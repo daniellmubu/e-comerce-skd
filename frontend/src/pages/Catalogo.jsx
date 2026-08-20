@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { FaSearch, FaHeart } from "react-icons/fa";
 
 import camiseta from "../assets/images/products/camiseta.png";
@@ -35,12 +35,16 @@ function formatPrice(value) {
 
 function Catalogo() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [search, setSearch] = useState("");
+  // Si llegamos vía el buscador superior (?q=...), prellenamos la búsqueda.
+  const [search, setSearch] = useState(
+    () => searchParams.get("q") ?? ""
+  );
   const [category, setCategory] = useState("Todos");
   const [sortBy, setSortBy] = useState("relevancia");
   const [favorites, setFavorites] = useState(new Set());
