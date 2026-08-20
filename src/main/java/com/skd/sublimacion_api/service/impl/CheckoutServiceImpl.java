@@ -1,6 +1,7 @@
 package com.skd.sublimacion_api.service.impl;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -15,6 +16,7 @@ import com.skd.sublimacion_api.event.CheckoutCompletadoEvent;
 import com.skd.sublimacion_api.entity.Factura;
 import com.skd.sublimacion_api.entity.Carrito;
 import com.skd.sublimacion_api.entity.Cupon;
+import com.skd.sublimacion_api.entity.CuponUsuario;
 import com.skd.sublimacion_api.entity.Direccion;
 import com.skd.sublimacion_api.entity.Empaque;
 import com.skd.sublimacion_api.entity.Pago;
@@ -26,6 +28,7 @@ import com.skd.sublimacion_api.entity.Diseno;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CarritoRepository;
 import com.skd.sublimacion_api.repository.CuponRepository;
+import com.skd.sublimacion_api.repository.CuponUsuarioRepository;
 import com.skd.sublimacion_api.repository.DireccionRepository;
 import com.skd.sublimacion_api.repository.DisenoRepository;
 import com.skd.sublimacion_api.repository.EmpaqueRepository;
@@ -53,6 +56,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final DireccionRepository direccionRepository;
     private final EmpaqueRepository empaqueRepository;
     private final CuponRepository cuponRepository;
+    private final CuponUsuarioRepository cuponUsuarioRepository;
     private final ProductoRepository productoRepository;
     private final DisenoRepository disenoRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
@@ -71,6 +75,8 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         if (request.getCuponId() != null) {
             cupon = obtenerCupon(request.getCuponId());
+            validarCupon(cupon, usuarioId);
+            registrarUsoCupon(cupon, usuarioId);
         }
 
         Carrito carrito = obtenerCarrito(usuario);
@@ -159,6 +165,54 @@ public class CheckoutServiceImpl implements CheckoutService {
         return cuponRepository.findById(cuponId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException("Cupón no encontrado"));
+    }
+
+    private void validarCupon(Cupon cupon, Long usuarioId) {
+
+        if (!Boolean.TRUE.equals(cupon.getActivo())) {
+            throw new IllegalArgumentException("El cupón no está activo");
+        }
+
+        LocalDate hoy = LocalDate.now();
+
+        if (hoy.isBefore(cupon.getFechaInicio()) ||
+                hoy.isAfter(cupon.getFechaFin())) {
+            throw new IllegalArgumentException(
+                    "El cupón no está vigente en esta fecha");
+        }
+
+        if (cupon.getUsosMaximos() != null &&
+                cupon.getUsosActuales() != null &&
+                cupon.getUsosActuales() >= cupon.getUsosMaximos()) {
+            throw new IllegalArgumentException(
+                    "El cupón alcanzó su máximo de usos");
+        }
+
+        if (Boolean.TRUE.equals(cupon.getEsUnicoPorUsuario()) &&
+                cuponUsuarioRepository
+                        .existsByCupon_IdAndUsuario_IdAndUsadoTrue(
+                                cupon.getId(), usuarioId)) {
+            throw new IllegalArgumentException(
+                    "Este cupón ya fue utilizado por tu cuenta");
+        }
+    }
+
+    private void registrarUsoCupon(Cupon cupon, Long usuarioId) {
+
+        cupon.setUsosActuales(
+                (cupon.getUsosActuales() == null ? 0 : cupon.getUsosActuales()) + 1);
+        cuponRepository.save(cupon);
+
+        if (Boolean.TRUE.equals(cupon.getEsUnicoPorUsuario())) {
+
+            cuponUsuarioRepository
+                    .findByCupon_IdAndUsuario_Id(cupon.getId(), usuarioId)
+                    .ifPresent(registro -> {
+                        registro.setUsado(true);
+                        registro.setFechaUso(LocalDateTime.now());
+                        cuponUsuarioRepository.save(registro);
+                    });
+        }
     }
 
     private Carrito obtenerCarrito(Usuario usuario) {

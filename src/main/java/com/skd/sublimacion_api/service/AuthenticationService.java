@@ -3,9 +3,14 @@ package com.skd.sublimacion_api.service;
 import com.skd.sublimacion_api.dto.AuthResponse;
 import com.skd.sublimacion_api.dto.LoginRequest;
 import com.skd.sublimacion_api.dto.RegistroRequest;
+import com.skd.sublimacion_api.dto.cupon.CuponBienvenidaResponse;
+import com.skd.sublimacion_api.entity.Cupon;
+import com.skd.sublimacion_api.entity.CuponUsuario;
 import com.skd.sublimacion_api.entity.PasswordResetToken;
 import com.skd.sublimacion_api.entity.Rol;
 import com.skd.sublimacion_api.entity.Usuario;
+import com.skd.sublimacion_api.repository.CuponRepository;
+import com.skd.sublimacion_api.repository.CuponUsuarioRepository;
 import com.skd.sublimacion_api.repository.PasswordResetTokenRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.security.JwtService;
@@ -15,6 +20,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -28,6 +35,8 @@ public class AuthenticationService {
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final CuponRepository cuponRepository;
+    private final CuponUsuarioRepository cuponUsuarioRepository;
 
     public AuthResponse registrar(RegistroRequest request) {
 
@@ -48,6 +57,8 @@ public class AuthenticationService {
 
         usuarioRepository.save(usuario);
 
+        Cupon cuponBienvenida = crearCuponBienvenida(usuario);
+
         emailService.enviarBienvenida(usuario.getCorreo(), usuario.getNombre());
 
         String token = jwtService.generateToken(usuario);
@@ -61,7 +72,34 @@ public class AuthenticationService {
                 .username(usuario.getUsername())
                 .correo(usuario.getCorreo())
                 .rol(usuario.getRol().name())
+                .cuponBienvenida(CuponBienvenidaResponse.builder()
+                        .codigo(cuponBienvenida.getCodigo())
+                        .descuentoPorcentaje(cuponBienvenida.getDescuentoPorcentaje())
+                        .fechaVencimiento(cuponBienvenida.getFechaFin())
+                        .build())
                 .build();
+    }
+
+    private Cupon crearCuponBienvenida(Usuario usuario) {
+
+        Cupon cupon = Cupon.builder()
+                .codigo("BIENVENIDA-" + usuario.getId())
+                .descuentoPorcentaje(new BigDecimal("10"))
+                .fechaInicio(LocalDate.now())
+                .fechaFin(LocalDate.now().plusDays(30))
+                .usosMaximos(1)
+                .activo(true)
+                .esUnicoPorUsuario(true)
+                .build();
+
+        cuponRepository.save(cupon);
+
+        cuponUsuarioRepository.save(CuponUsuario.builder()
+                .cupon(cupon)
+                .usuario(usuario)
+                .build());
+
+        return cupon;
     }
 
     public AuthResponse login(LoginRequest request) {

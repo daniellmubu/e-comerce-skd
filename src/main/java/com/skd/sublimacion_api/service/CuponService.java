@@ -2,6 +2,7 @@ package com.skd.sublimacion_api.service;
 
 import com.skd.sublimacion_api.dto.cupon.CuponRequest;
 import com.skd.sublimacion_api.dto.cupon.CuponResponse;
+import com.skd.sublimacion_api.dto.cupon.CuponUsuarioResponse;
 
 import java.util.List;
 
@@ -14,5 +15,7 @@ public interface CuponService {
     CuponResponse guardar(CuponRequest request);
 
     void eliminar(Long id);
+
+    List<CuponUsuarioResponse> listarMios(Long usuarioId);
 
 }

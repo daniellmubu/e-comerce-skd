@@ -1,5 +1,7 @@
 package com.skd.sublimacion_api.service.admin;
 
+import com.skd.sublimacion_api.dto.cupon.AsignarCuponRequest;
+import com.skd.sublimacion_api.dto.cupon.AsignarCuponResponse;
 import com.skd.sublimacion_api.dto.cupon.CuponRequest;
 import com.skd.sublimacion_api.dto.cupon.CuponResponse;
 import org.springframework.data.domain.Page;
@@ -23,5 +25,7 @@ public interface AdminCuponService {
     CuponResponse actualizar(Long id, CuponRequest request);
 
     void eliminar(Long id);
+
+    AsignarCuponResponse asignar(Long id, AsignarCuponRequest request);
 
 }

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon } from "react-icons/fa";
+import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -69,6 +69,15 @@ function Navbar() {
                 <span className="hidden max-w-[100px] truncate sm:inline">
                   {usuario.nombre?.split(" ")[0] || usuario.username}
                 </span>
+              </Link>
+
+              <Link
+                to="/mis-cupones"
+                aria-label="Mis cupones"
+                title="Mis cupones"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+              >
+                <FaTicketAlt className="text-lg" />
               </Link>
 
               <button

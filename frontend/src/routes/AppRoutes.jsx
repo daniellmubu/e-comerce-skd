@@ -11,6 +11,7 @@ import Carrito from "../pages/Carrito";
 import Checkout from "../pages/Checkout";
 import CheckoutResultado from "../pages/CheckoutResultado";
 import MisPedidos from "../pages/MisPedidos";
+import MisCupones from "../pages/MisCupones";
 import DetalleProducto from "../pages/DetalleProducto";
 import SeguimientoPedido from "../pages/SeguimientoPedido";
 import RutaProtegida from "./RutaProtegida";
@@ -62,6 +63,14 @@ function AppRoutes() {
         element={
           <RutaProtegida>
             <MisPedidos />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/mis-cupones"
+        element={
+          <RutaProtegida>
+            <MisCupones />
           </RutaProtegida>
         }
       />
