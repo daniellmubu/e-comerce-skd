@@ -1,7 +1,10 @@
 package com.skd.sublimacion_api.service;
 
+import com.skd.sublimacion_api.dto.producto.ProductoBusquedaRequest;
+import com.skd.sublimacion_api.dto.producto.ProductoListaResponse;
 import com.skd.sublimacion_api.dto.producto.ProductoRequest;
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -17,7 +20,10 @@ public interface ProductoService {
 
     void eliminar(Long id);
 
-    List<ProductoResponse> buscarPorNombre(String nombre, Long usuarioId);
-
     List<ProductoResponse> buscarPorCategoria(Long categoriaId, Long usuarioId);
+
+    ProductoListaResponse buscar(
+            ProductoBusquedaRequest filtros,
+            Pageable pageable,
+            Long usuarioId);
 }
