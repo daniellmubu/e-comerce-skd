@@ -4,12 +4,22 @@ import com.skd.sublimacion_api.entity.ItemPedido;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
 public interface ItemPedidoRepository extends JpaRepository<ItemPedido, Long> {
 
     List<ItemPedido> findByPedidoId(Long pedidoId);
+
+    @Query("SELECT COUNT(ip) > 0 FROM ItemPedido ip " +
+            "JOIN ip.pedido p JOIN Pago pag ON pag.pedido = p " +
+            "WHERE ip.producto.id = :productoId " +
+            "AND p.usuario.id = :usuarioId " +
+            "AND pag.estado = 'aprobado'")
+    boolean existeCompraAprobada(
+            @Param("productoId") Long productoId,
+            @Param("usuarioId") Long usuarioId);
 
     @Query("SELECT ip.producto.id, ip.producto.nombre, SUM(ip.cantidad) AS unidades, " +
            "SUM(ip.cantidad * ip.precioUnitario) AS ingreso " +
