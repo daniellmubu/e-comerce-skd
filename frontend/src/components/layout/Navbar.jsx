@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt } from "react-icons/fa";
+import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt, FaHeart } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -78,6 +78,15 @@ function Navbar() {
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
               >
                 <FaTicketAlt className="text-lg" />
+              </Link>
+
+              <Link
+                to="/mis-favoritos"
+                aria-label="Mis favoritos"
+                title="Mis favoritos"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+              >
+                <FaHeart className="text-lg" />
               </Link>
 
               <button
