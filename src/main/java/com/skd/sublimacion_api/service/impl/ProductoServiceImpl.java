@@ -9,9 +9,19 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CategoriaRepository;
+import com.skd.sublimacion_api.dto.producto.ProductoBusquedaRequest;
+import com.skd.sublimacion_api.dto.producto.ProductoListaResponse;
+import com.skd.sublimacion_api.dto.producto.OrdenProducto;
 import com.skd.sublimacion_api.dto.producto.ProductoRequest;
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
 import com.skd.sublimacion_api.entity.Categoria;
+import com.skd.sublimacion_api.specification.ProductoSpecification;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -96,17 +106,6 @@ public class ProductoServiceImpl implements ProductoService {
     }
 
     @Override
-    public List<ProductoResponse> buscarPorNombre(String nombre, Long usuarioId) {
-
-        ResumenResenas resumen = obtenerResumenResenas(usuarioId);
-
-        return productoRepository.findByNombreContainingIgnoreCase(nombre)
-            .stream()
-            .map(producto -> convertir(producto, resumen))
-            .toList();
-    }
-
-    @Override
     public List<ProductoResponse> buscarPorCategoria(Long categoriaId, Long usuarioId) {
 
         ResumenResenas resumen = obtenerResumenResenas(usuarioId);
@@ -116,6 +115,50 @@ public class ProductoServiceImpl implements ProductoService {
         .map(producto -> convertir(producto, resumen))
         .toList();
     }
+
+    @Override
+    public ProductoListaResponse buscar(
+            ProductoBusquedaRequest filtros,
+            Pageable pageable,
+            Long usuarioId) {
+
+        OrdenProducto orden = OrdenProducto.desdeValor(filtros.getOrdenarPor());
+
+        Specification<Producto> specification = Specification
+                .where(ProductoSpecification.activoEs(true))
+                .and(ProductoSpecification.textoContiene(filtros.getTexto()))
+                .and(ProductoSpecification.categoriaEs(filtros.getCategoriaId()))
+                .and(ProductoSpecification.precioMayorIgual(filtros.getPrecioMin()))
+                .and(ProductoSpecification.precioMenorIgual(filtros.getPrecioMax()))
+                .and(ProductoSpecification.calificacionMinimaEs(
+                        filtros.getCalificacionMinima()));
+
+        // "mejorCalificado" ordena por el promedio calculado al vuelo, que no
+        // está en la tabla producto. Se trae el set filtrado, se convierte con
+        // el mismo resumen del catálogo y se ordena en memoria antes de paginar.
+        if (orden == OrdenProducto.MEJOR_CALIFICADO) {
+            return buscarMejorCalificado(specification, pageable, usuarioId);
+        }
+
+        Page<Producto> pagina = productoRepository
+                .findAll(specification, aplicarOrden(pageable, orden));
+
+        ResumenResenas resumen = obtenerResumenResenas(usuarioId);
+
+        List<ProductoResponse> contenido = pagina.getContent()
+                .stream()
+                .map(producto -> convertir(producto, resumen))
+                .toList();
+
+        return ProductoListaResponse.builder()
+                .contenido(contenido)
+                .pagina(pagina.getNumber())
+                .tamanio(pagina.getSize())
+                .total(pagina.getTotalElements())
+                .totalPaginas(pagina.getTotalPages())
+                .build();
+    }
+
     @Override
     public ProductoResponse obtenerPorId(Long id, Long usuarioId) {
 
@@ -124,6 +167,57 @@ public class ProductoServiceImpl implements ProductoService {
                     new ResourceNotFoundException("Producto no encontrado con id: " + id));
 
         return convertir(producto, obtenerResumenResenas(usuarioId));
+    }
+
+    private Pageable aplicarOrden(Pageable pageable, OrdenProducto orden) {
+
+        Sort sort = switch (orden) {
+            case PRECIO_ASC -> Sort.by(Sort.Direction.ASC, "precio");
+            case PRECIO_DESC -> Sort.by(Sort.Direction.DESC, "precio");
+            case MAS_VENDIDO -> Sort.by(Sort.Direction.DESC, "masVendido")
+                    .and(Sort.by(Sort.Direction.ASC, "id"));
+            default -> Sort.unsorted();
+        };
+
+        return PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                sort);
+    }
+
+    private ProductoListaResponse buscarMejorCalificado(
+            Specification<Producto> specification,
+            Pageable pageable,
+            Long usuarioId) {
+
+        ResumenResenas resumen = obtenerResumenResenas(usuarioId);
+
+        List<ProductoResponse> todos = productoRepository
+                .findAll(specification)
+                .stream()
+                .map(producto -> convertir(producto, resumen))
+                .sorted(Comparator.comparing(
+                        ProductoResponse::getPromedioCalificacion,
+                        Comparator.reverseOrder()))
+                .toList();
+
+        int total = todos.size();
+        int inicio = Math.min(
+                pageable.getPageNumber() * pageable.getPageSize(),
+                total);
+        int fin = Math.min(inicio + pageable.getPageSize(), total);
+
+        int totalPaginas = pageable.getPageSize() == 0
+                ? 0
+                : (int) Math.ceil((double) total / pageable.getPageSize());
+
+        return ProductoListaResponse.builder()
+                .contenido(todos.subList(inicio, fin))
+                .pagina(pageable.getPageNumber())
+                .tamanio(pageable.getPageSize())
+                .total(total)
+                .totalPaginas(totalPaginas)
+                .build();
     }
 
     private record ResumenResenas(
