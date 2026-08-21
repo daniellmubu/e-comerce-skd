@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt, FaHeart } from "react-icons/fa";
 
@@ -9,10 +10,19 @@ function Navbar() {
   const navigate = useNavigate();
   const { usuario, cerrarSesion } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+  const [busqueda, setBusqueda] = useState("");
 
   const handleLogout = () => {
     cerrarSesion();
     navigate("/");
+  };
+
+  // El buscador superior es la puerta de entrada al catálogo: navega con
+  // ?q= para que el catálogo lo recoja y filtre.
+  const handleBuscar = (e) => {
+    if (e.key !== "Enter") return;
+    const texto = busqueda.trim();
+    navigate(texto ? `/catalogo?q=${encodeURIComponent(texto)}` : "/catalogo");
   };
 
   return (
@@ -31,9 +41,9 @@ function Navbar() {
           <input
             type="text"
             placeholder="Buscar productos..."
-            onKeyDown={(e) => {
-              if (e.key === "Enter") navigate("/catalogo");
-            }}
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            onKeyDown={handleBuscar}
             className="w-full rounded-lg border border-gray-200 bg-gray-100 py-2 pl-10 pr-3 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:placeholder:text-slate-500"
           />
         </div>

@@ -22,6 +22,8 @@ public class CheckoutResponse {
 
     private BigDecimal costoEnvio;
 
+    private Integer diasEstimadosEntrega;
+
     private BigDecimal total;
 
     private String estado;

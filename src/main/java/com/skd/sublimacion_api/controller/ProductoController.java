@@ -1,11 +1,15 @@
 package com.skd.sublimacion_api.controller;
 
+import com.skd.sublimacion_api.dto.producto.ProductoBusquedaRequest;
+import com.skd.sublimacion_api.dto.producto.ProductoListaResponse;
 import com.skd.sublimacion_api.dto.producto.ProductoRequest;
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.service.ProductoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -52,12 +56,23 @@ public class ProductoController {
     public void eliminar(@PathVariable Long id) {
         productoService.eliminar(id);
     }
-    @GetMapping("/buscar")
-    public List<ProductoResponse> buscarPorNombre(
-        @RequestParam String nombre,
-        @AuthenticationPrincipal Usuario usuario) {
 
-    return productoService.buscarPorNombre(nombre, idOpcional(usuario));
+    // Búsqueda avanzada: todos los parámetros son opcionales y combinables.
+    // texto, categoriaId, precioMin, precioMax, calificacionMinima, ordenarPor,
+    // paginado (pagina, tamanio). Público.
+    @GetMapping("/buscar")
+    public ProductoListaResponse buscar(
+            ProductoBusquedaRequest filtros,
+            @RequestParam(defaultValue = "0") int pagina,
+            @RequestParam(defaultValue = "12") int tamanio,
+            @AuthenticationPrincipal Usuario usuario) {
+
+        Pageable pageable = PageRequest.of(
+                Math.max(pagina, 0),
+                Math.max(tamanio, 1));
+
+        return productoService.buscar(
+                filtros, pageable, idOpcional(usuario));
     }
 
     @GetMapping("/categoria/{categoriaId}")
