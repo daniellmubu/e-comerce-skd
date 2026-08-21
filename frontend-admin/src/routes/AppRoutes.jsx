@@ -6,6 +6,7 @@ import Login from "../pages/Login";
 import Dashboard from "../pages/Dashboard";
 import Productos from "../pages/Productos";
 import Categorias from "../pages/Categorias";
+import Usuarios from "../pages/Usuarios";
 import Placeholder from "../pages/Placeholder";
 
 function AppRoutes() {
@@ -41,10 +42,7 @@ function AppRoutes() {
           path="pedidos"
           element={<Placeholder titulo="Pedidos" descripcion="Gestión de pedidos (Fase 6)." />}
         />
-        <Route
-          path="usuarios"
-          element={<Placeholder titulo="Usuarios" descripcion="Administración de usuarios (Fase 5)." />}
-        />
+        <Route path="usuarios" element={<Usuarios />} />
         <Route
           path="tarifas-envio"
           element={<Placeholder titulo="Tarifas de envío" descripcion="CRUD de tarifas de envío (Fase 9)." />}
