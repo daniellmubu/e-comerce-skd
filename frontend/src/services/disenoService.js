@@ -1,7 +1,12 @@
 import api from "./api";
 
-export async function generarDiseno({ prompt, productoId }) {
-  const { data } = await api.post("/disenos/generar", { prompt, productoId });
+export async function generarDiseno({ prompt, productoId, estilo, imagenReferencia }) {
+  const { data } = await api.post("/disenos/generar", {
+    prompt,
+    productoId,
+    estilo,
+    imagenReferencia,
+  });
   return data;
 }
 

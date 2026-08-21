@@ -43,6 +43,10 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
         Carrito carrito = carritoRepository.findById(request.getCarritoId())
                 .orElseThrow(() -> new ResourceNotFoundException("Carrito no encontrado"));
 
+        if (request.getProductoId() == null) {
+            throw new BadRequestException("Debes elegir un producto antes de añadirlo al carrito.");
+        }
+
         Producto producto = productoRepository.findById(request.getProductoId())
                 .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado"));
 

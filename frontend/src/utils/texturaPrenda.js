@@ -23,10 +23,31 @@ function cargarImagen(src, crossOrigin) {
   });
 }
 
+// Dibuja el texto del personalizador en el canvas. `texto` trae contenido,
+// color, tamaño, posición (en %), rotación y escala; se usa el mismo criterio
+// que el mockup 2D para que la vista 3D coincida.
+function dibujarTexto(ctx, texto, w, h) {
+  if (!texto || !texto.contenido || !texto.contenido.trim()) return;
+
+  const x = (texto.x / 100) * w;
+  const y = (texto.y / 100) * h;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(((texto.rotacion || 0) * Math.PI) / 180);
+  ctx.scale(texto.escala || 1, texto.escala || 1);
+  ctx.fillStyle = texto.color || "#111111";
+  ctx.font = `600 ${texto.tamano || 32}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(texto.contenido, 0, 0);
+  ctx.restore();
+}
+
 // Dibuja la prenda completa (base + color + diseño) en un canvas y la devuelve
 // como textura de three.js. `recortar` recorta el diseño a la silueta de la
 // prenda (necesario para prendas planas como la camiseta).
-export async function componerTextura(tipo, color, disenoUrl, { recortar = false } = {}) {
+export async function componerTextura(tipo, color, disenoUrl, { recortar = false, texto = null } = {}) {
   const base = await cargarImagen(IMAGENES[tipo]);
 
   let diseno = null;
@@ -86,6 +107,9 @@ export async function componerTextura(tipo, color, disenoUrl, { recortar = false
     }
   }
 
+  // 4. Texto del personalizador, dibujado encima del diseño.
+  dibujarTexto(ctx, texto, w, h);
+
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;
   return textura;
@@ -96,7 +120,7 @@ export async function componerTextura(tipo, color, disenoUrl, { recortar = false
 // fondo transparente. `anchoFraccion` es qué parte de la circunferencia ocupa
 // el diseño; `circunferencia` y `altura` (en unidades del mundo) se usan para
 // pre-distorsionar el diseño y que al envolverse se vea con su proporción real.
-export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura }) {
+export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null }) {
   const texW = 1024;
   const texH = 1024;
 
@@ -131,6 +155,9 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
       ctx.drawImage(diseno, dx, dy, dw, dh);
     }
   }
+
+  // 3. Texto del personalizador, dibujado encima del diseño.
+  dibujarTexto(ctx, texto, texW, texH);
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;

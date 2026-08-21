@@ -1,11 +1,13 @@
 package com.skd.sublimacion_api.entity;
 
 import jakarta.persistence.*;
+import lombok.EqualsAndHashCode;
 import lombok.*;
 
 @Entity
 @Table(name = "direccion")
 @Data
+@EqualsAndHashCode(of = "id")
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

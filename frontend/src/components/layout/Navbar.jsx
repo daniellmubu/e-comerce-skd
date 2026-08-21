@@ -42,7 +42,7 @@ function Navbar() {
           <Link to="/catalogo" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
             Categorías
           </Link>
-          <Link to="/personalizador" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
+          <Link to="/generador" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
             Diseña con IA
           </Link>
         </div>

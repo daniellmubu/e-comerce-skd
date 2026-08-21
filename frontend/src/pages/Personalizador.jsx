@@ -19,6 +19,8 @@ import { guardarPersonalizacion } from "../services/personalizacionService";
 import { generarDiseno } from "../services/disenoService";
 import { getErrorMessage } from "../services/api";
 import PrendaMockup from "../components/ui/PrendaMockup";
+import Prenda3D from "../components/ui/Prenda3D";
+import { removeBackground } from "@imgly/background-removal";
 
 const COSTO_PERSONALIZACION = 5000;
 
@@ -46,6 +48,15 @@ function formatPrice(value) {
   });
 }
 
+function blobToDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const lector = new FileReader();
+    lector.onload = () => resolve(lector.result);
+    lector.onerror = reject;
+    lector.readAsDataURL(blob);
+  });
+}
+
 function Personalizador() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -66,17 +77,20 @@ function Personalizador() {
 
   const [imagenSubida, setImagenSubida] = useState(null); // dataURL
   const [prompt, setPrompt] = useState("");
+  const [estiloIA, setEstiloIA] = useState(null); // "caricatura" | "minimalista" | "retro" | "lineas" | null
   const [generandoIA, setGenerandoIA] = useState(false);
   const [resultadoIA, setResultadoIA] = useState(null); // url de la imagen generada
   const [colorSeleccionado, setColorSeleccionado] = useState(null); // hex
   const [textoDiseno, setTextoDiseno] = useState("");
   const [colorTexto, setColorTexto] = useState("#111111");
   const [tamanoTexto, setTamanoTexto] = useState(32);
+  const [posicionTexto, setPosicionTexto] = useState({ x: 50, y: 50 });
   const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "color" | "texto"
   const [rotacion, setRotacion] = useState(0);
   const [escala, setEscala] = useState(1);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
+  const [procesandoImagen, setProcesandoImagen] = useState(false);
 
   const hayDiseno = Boolean(
     imagenSubida || resultadoIA || colorSeleccionado || textoDiseno.trim()
@@ -88,18 +102,37 @@ function Personalizador() {
 
   const total = useMemo(() => precioBase + COSTO_PERSONALIZACION, [precioBase]);
 
-  const handleSubirImagen = (e) => {
+  const handleSubirImagen = async (e) => {
     const archivo = e.target.files?.[0];
     if (!archivo) return;
 
-    const lector = new FileReader();
-    lector.onload = () => {
-      setImagenSubida(lector.result);
+    setProcesandoImagen(true);
+    setMensaje(null);
+
+    try {
+      // Quita el fondo automáticamente (persona, animal, objeto) para dejar
+      // solo el sujeto. La primera vez descarga el modelo en el navegador.
+      const blob = await removeBackground(archivo);
+      const dataUrl = await blobToDataURL(blob);
+
+      setImagenSubida(dataUrl);
       setResultadoIA(null); // la imagen subida reemplaza cualquier resultado de IA
       setRotacion(0);
       setEscala(1);
-    };
-    lector.readAsDataURL(archivo);
+    } catch {
+      // Si el recorte falla (sin conexión, navegador sin soporte, etc.),
+      // usamos la imagen original tal cual para no bloquear al usuario.
+      const lector = new FileReader();
+      lector.onload = () => {
+        setImagenSubida(lector.result);
+        setResultadoIA(null);
+        setRotacion(0);
+        setEscala(1);
+      };
+      lector.readAsDataURL(archivo);
+    } finally {
+      setProcesandoImagen(false);
+    }
   };
 
   const handleGenerarIA = async () => {
@@ -117,6 +150,7 @@ function Personalizador() {
       const resultado = await generarDiseno({
         prompt,
         productoId: productoOrigen?.id ?? null,
+        estilo: estiloIA,
       });
 
       const imagenUrl =
@@ -161,6 +195,7 @@ function Personalizador() {
     setTextoDiseno("");
     setColorTexto("#111111");
     setTamanoTexto(32);
+    setPosicionTexto({ x: 50, y: 50 });
     setRotacion(0);
     setEscala(1);
     setPrompt("");
@@ -205,7 +240,9 @@ function Personalizador() {
           `Producto: ${selectedProduct === "camiseta" ? "Camiseta" : "Mug"}`,
           resultadoIA ? `Generado por IA: ${prompt}` : null,
           colorSeleccionado ? `Color elegido: ${colorSeleccionado}` : null,
-          textoDiseno.trim() ? `Texto: "${textoDiseno.trim()}" (${colorTexto}, ${tamanoTexto}px)` : null,
+          textoDiseno.trim()
+            ? `Texto: "${textoDiseno.trim()}" (${colorTexto}, ${tamanoTexto}px, posición ${Math.round(posicionTexto.x)}%,${Math.round(posicionTexto.y)}%)`
+            : null,
         ]
           .filter(Boolean)
           .join(" · ");
@@ -333,10 +370,20 @@ function Personalizador() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-gray-300 py-8 text-sm text-gray-500 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+                  disabled={procesandoImagen}
+                  className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-gray-300 py-8 text-sm text-gray-500 transition hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-400 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
                 >
-                  <FaUpload />
-                  Click para subir o arrastra aquí
+                  {procesandoImagen ? (
+                    <>
+                      <FaSpinner className="animate-spin" />
+                      Quitando fondo... (la primera vez tarda un poco)
+                    </>
+                  ) : (
+                    <>
+                      <FaUpload />
+                      Click para subir o arrastra aquí
+                    </>
+                  )}
                 </button>
                 <input
                   ref={fileInputRef}
@@ -353,6 +400,32 @@ function Personalizador() {
                   <FaMagic className="text-indigo-500 dark:text-cyan-400" />
                   Generar con IA
                 </p>
+
+                {/* Selector de estilo */}
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {[
+                    { id: "caricatura", label: "Caricatura" },
+                    { id: "minimalista", label: "Minimalista" },
+                    { id: "retro", label: "Retro" },
+                    { id: "lineas", label: "Línea simple" },
+                  ].map((op) => (
+                    <button
+                      key={op.id}
+                      type="button"
+                      onClick={() =>
+                        setEstiloIA((actual) => (actual === op.id ? null : op.id))
+                      }
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                        estiloIA === op.id
+                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
+                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400"
+                      }`}
+                    >
+                      {op.label}
+                    </button>
+                  ))}
+                </div>
+
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
@@ -360,6 +433,7 @@ function Personalizador() {
                   rows={3}
                   className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 placeholder:text-gray-400 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
                 />
+
                 <button
                   type="button"
                   onClick={handleGenerarIA}
@@ -501,6 +575,8 @@ function Personalizador() {
                 texto={textoDiseno}
                 colorTexto={colorTexto}
                 tamanoTexto={tamanoTexto}
+                posicionTexto={posicionTexto}
+                onPosicionTextoChange={setPosicionTexto}
               />
             </div>
           </div>
@@ -511,17 +587,19 @@ function Personalizador() {
               Vista previa
             </h2>
 
-            <div className="mb-4 flex items-center justify-center rounded-xl bg-gray-100 p-4 dark:bg-slate-800">
-              <div className="w-64">
-                <PrendaMockup
+            <div className="mb-4 flex items-center justify-center overflow-hidden rounded-xl bg-gray-100 p-4 dark:bg-slate-800">
+              <div className="relative h-64 w-full" style={{ aspectRatio: "220 / 260" }}>
+                <Prenda3D
+                  key={selectedProduct}
                   tipo={selectedProduct}
-                  color={colorSeleccionado}
+                  color={colorSeleccionado ?? "#ffffff"}
                   disenoUrl={disenoActual}
-                  rotacion={rotacion}
-                  escala={escala}
                   texto={textoDiseno}
                   colorTexto={colorTexto}
                   tamanoTexto={tamanoTexto}
+                  posicionTexto={posicionTexto}
+                  rotacion={rotacion}
+                  escala={escala}
                 />
               </div>
             </div>

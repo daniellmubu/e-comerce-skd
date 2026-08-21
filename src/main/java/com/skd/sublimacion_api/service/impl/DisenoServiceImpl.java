@@ -13,7 +13,12 @@ import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.service.DisenoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import javax.imageio.ImageIO;
@@ -54,7 +59,13 @@ public class DisenoServiceImpl implements DisenoService {
     @Value("${supabase.storage.bucket}")
     private String supabaseBucket;
 
-    private static final String MODELO = "@cf/black-forest-labs/flux-1-schnell";
+    // Modelo de texto->imagen. flux-1-schnell es la versión rápida (menor
+    // calidad); flux-1.1-pro genera mucho más detalle a cambio de más tiempo y
+    // más Neurons por imagen. Si quieres volver a la versión rápida/barata,
+    // cambia esta constante por "@cf/black-forest-labs/flux-1-schnell".
+    private static final String MODELO = "@cf/black-forest-labs/flux-1.1-pro";
+    private static final String MODELO_CON_REFERENCIA = "@cf/black-forest-labs/flux-2-klein-9b";
+    private static final int MAX_LADO_IMAGEN_REFERENCIA = 512;
 
     // Si Cloudflare no responde en este tiempo, cortamos la espera en vez de
     // dejar la petición colgada indefinidamente.
@@ -88,7 +99,9 @@ public class DisenoServiceImpl implements DisenoService {
         }
 
         String promptFinal = construirPrompt(request);
-        byte[] imagenBruta = generarImagenConCloudflare(promptFinal);
+        byte[] imagenBruta = (request.getImagenReferencia() != null && !request.getImagenReferencia().isBlank())
+                ? generarImagenConReferencia(promptFinal, request.getImagenReferencia())
+                : generarImagenConCloudflare(promptFinal);
         ImagenProcesada procesada = procesarImagen(imagenBruta);
         String imagenUrl = subirImagenASupabase(
                 procesada.bytes(), procesada.extension(), procesada.contentType());
@@ -147,11 +160,21 @@ public class DisenoServiceImpl implements DisenoService {
         }
     }
 
+    private static final Map<String, String> ESTILOS = Map.of(
+            "caricatura", "cartoon caricature style, exaggerated features, bold outlines, playful",
+            "minimalista", "minimalist style, simple geometric shapes, limited color palette, negative space",
+            "retro", "retro vintage style, 80s aesthetic, halftone texture, warm nostalgic colors",
+            "lineas", "single line art style, continuous line drawing, monochrome, elegant simplicity"
+    );
+
     private String construirPrompt(DisenoRequest r) {
+        String estiloKeywords = r.getEstilo() == null ? "" : ESTILOS.getOrDefault(r.getEstilo(), "");
         return String.format(
-                "Sticker art, die-cut style, isolated on a plain white background, "
-                        + "vibrant colors, clean edges, high quality, no text, no mockup, "
-                        + "no product. Design: %s",
+                "Premium apparel print design, isolated on a pure white background, "
+                        + "highly detailed, crisp clean outlines, rich vibrant colors, sharp edges, "
+                        + "no text, no watermark, no mockup, no product, no background scene, "
+                        + "centered composition, print-ready for sublimation, professional quality%s. Design: %s",
+                estiloKeywords.isBlank() ? "" : ", " + estiloKeywords,
                 r.getPrompt()
         );
     }
@@ -169,7 +192,7 @@ public class DisenoServiceImpl implements DisenoService {
             respuesta = client.post()
                     .uri(url)
                     .header("Authorization", "Bearer " + cloudflareApiToken)
-                    .bodyValue(Map.of("prompt", promptFinal, "steps", 8))
+                    .bodyValue(Map.of("prompt", promptFinal))
                     .retrieve()
                     .bodyToMono(Map.class)
                     .timeout(TIMEOUT_CLOUDFLARE)
@@ -193,6 +216,103 @@ public class DisenoServiceImpl implements DisenoService {
 
         String base64 = (String) result.get("image");
         return Base64.getDecoder().decode(base64);
+    }
+
+    /**
+     * Genera un diseño a partir de una imagen de referencia (foto, mascota, logo, etc.)
+     * usando flux-2-klein-9b, que sí soporta editar/estilizar imágenes existentes.
+     */
+    @SuppressWarnings("unchecked")
+    private byte[] generarImagenConReferencia(String promptFinal, String imagenReferenciaDataUrl) {
+
+        byte[] referenciaBytes = decodificarDataUrl(imagenReferenciaDataUrl);
+        byte[] referenciaRedimensionada = redimensionarSiExcede(referenciaBytes, MAX_LADO_IMAGEN_REFERENCIA);
+
+        String url = "https://api.cloudflare.com/client/v4/accounts/"
+                + cloudflareAccountId + "/ai/run/" + MODELO_CON_REFERENCIA;
+
+        MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
+        form.add("prompt", promptFinal);
+        HttpHeaders imgHeaders = new HttpHeaders();
+        imgHeaders.setContentType(MediaType.IMAGE_PNG);
+        form.add("input_image_0", new org.springframework.http.HttpEntity<>(
+                new ByteArrayResource(referenciaRedimensionada) {
+                    @Override
+                    public String getFilename() {
+                        return "referencia.png";
+                    }
+                }, imgHeaders));
+
+        WebClient client = webClientBuilder.build();
+
+        Map<String, Object> respuesta;
+        try {
+            respuesta = client.post()
+                    .uri(url)
+                    .header("Authorization", "Bearer " + cloudflareApiToken)
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .bodyValue(form)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(TIMEOUT_CLOUDFLARE)
+                    .block();
+        } catch (RuntimeException ex) {
+            if (ex.getCause() instanceof TimeoutException) {
+                throw new BadRequestException(
+                        "Cloudflare tardó demasiado en responder. Intenta de nuevo en unos segundos.");
+            }
+            throw new BadRequestException("Cloudflare no pudo generar la imagen. Intenta de nuevo.");
+        }
+
+        if (respuesta == null || Boolean.FALSE.equals(respuesta.get("success"))) {
+            throw new BadRequestException("Cloudflare no pudo generar la imagen. Intenta de nuevo.");
+        }
+
+        Map<String, Object> result = (Map<String, Object>) respuesta.get("result");
+        if (result == null || result.get("image") == null) {
+            throw new BadRequestException("La IA no devolvió ninguna imagen. Intenta con otro prompt.");
+        }
+
+        String base64 = (String) result.get("image");
+        return Base64.getDecoder().decode(base64);
+    }
+
+    private byte[] decodificarDataUrl(String dataUrl) {
+        String base64 = dataUrl.contains(",") ? dataUrl.substring(dataUrl.indexOf(',') + 1) : dataUrl;
+        try {
+            return Base64.getDecoder().decode(base64);
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("La imagen de referencia no es válida.");
+        }
+    }
+
+    private byte[] redimensionarSiExcede(byte[] imagenBytes, int maxLado) {
+        try {
+            BufferedImage original = ImageIO.read(new ByteArrayInputStream(imagenBytes));
+            if (original == null) {
+                throw new BadRequestException("La imagen de referencia no es válida.");
+            }
+
+            int w = original.getWidth();
+            int h = original.getHeight();
+            if (w <= maxLado && h <= maxLado) {
+                return imagenBytes;
+            }
+
+            double factor = (double) maxLado / Math.max(w, h);
+            int nuevoAncho = Math.max(1, (int) (w * factor));
+            int nuevoAlto = Math.max(1, (int) (h * factor));
+
+            BufferedImage redimensionada = new BufferedImage(nuevoAncho, nuevoAlto, BufferedImage.TYPE_INT_ARGB);
+            redimensionada.getGraphics().drawImage(
+                    original.getScaledInstance(nuevoAncho, nuevoAlto, java.awt.Image.SCALE_SMOOTH), 0, 0, null);
+
+            ByteArrayOutputStream salida = new ByteArrayOutputStream();
+            ImageIO.write(redimensionada, "png", salida);
+            return salida.toByteArray();
+        } catch (IOException ex) {
+            throw new BadRequestException("No se pudo procesar la imagen de referencia.");
+        }
     }
 
     private ImagenProcesada procesarImagen(byte[] imagenBytes) {

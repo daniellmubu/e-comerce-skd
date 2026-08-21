@@ -74,7 +74,17 @@ function crearTexturaSombra() {
   return new THREE.CanvasTexture(canvas);
 }
 
-function Prenda3D({ tipo, color, disenoUrl }) {
+function Prenda3D({
+  tipo,
+  color,
+  disenoUrl,
+  texto = "",
+  colorTexto = "#111111",
+  tamanoTexto = 32,
+  posicionTexto = { x: 50, y: 50 },
+  rotacion = 0,
+  escala = 1,
+}) {
   const canvasRef = useRef(null);
   const materialRef = useRef(null);
   const materialFrontalRef = useRef(null);
@@ -312,10 +322,23 @@ function Prenda3D({ tipo, color, disenoUrl }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Regenera la textura cuando cambia el producto, el color o el diseño.
+  // Regenera la textura cuando cambia el producto, el color, el diseño o el texto.
   useEffect(() => {
     let cancelado = false;
     const esCilindro = FORMAS[tipo] === "cilindro";
+
+    const textoConfig =
+      texto && texto.trim()
+        ? {
+            contenido: texto,
+            color: colorTexto,
+            tamano: tamanoTexto,
+            x: posicionTexto.x,
+            y: posicionTexto.y,
+            rotacion,
+            escala,
+          }
+        : null;
 
     const aplicar = (material, textura, ref) => {
       if (!material || material.map === textura) return;
@@ -331,9 +354,15 @@ function Prenda3D({ tipo, color, disenoUrl }) {
 
     if (esCilindro) {
       const config = configDisenoCilindro(tipo);
-      frontal = componerTexturaSolida(color, disenoUrl, config);
+      frontal = componerTexturaSolida(color, disenoUrl, {
+        ...config,
+        texto: textoConfig,
+      });
     } else {
-      frontal = componerTextura(tipo, color, disenoUrl, { recortar: true });
+      frontal = componerTextura(tipo, color, disenoUrl, {
+        recortar: true,
+        texto: textoConfig,
+      });
       trasera = componerTextura(tipo, color, null);
     }
 
@@ -357,7 +386,7 @@ function Prenda3D({ tipo, color, disenoUrl }) {
     return () => {
       cancelado = true;
     };
-  }, [tipo, color, disenoUrl]);
+  }, [tipo, color, disenoUrl, texto, colorTexto, tamanoTexto, posicionTexto, rotacion, escala]);
 
   return (
     <canvas
