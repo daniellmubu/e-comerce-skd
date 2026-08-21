@@ -5,6 +5,7 @@ import AdminLayout from "../layouts/AdminLayout";
 import Login from "../pages/Login";
 import Dashboard from "../pages/Dashboard";
 import Productos from "../pages/Productos";
+import Categorias from "../pages/Categorias";
 import Placeholder from "../pages/Placeholder";
 
 function AppRoutes() {
@@ -27,10 +28,7 @@ function AppRoutes() {
 
         {/* Módulos que se irán implementando por fase */}
         <Route path="productos" element={<Productos />} />
-        <Route
-          path="categorias"
-          element={<Placeholder titulo="Categorías" descripcion="CRUD de categorías (Fase 4)." />}
-        />
+        <Route path="categorias" element={<Categorias />} />
         <Route
           path="cupones"
           element={<Placeholder titulo="Cupones" descripcion="CRUD de cupones (Fase 7)." />}
