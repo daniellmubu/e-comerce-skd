@@ -8,6 +8,7 @@ import Productos from "../pages/Productos";
 import Categorias from "../pages/Categorias";
 import Usuarios from "../pages/Usuarios";
 import Pedidos from "../pages/Pedidos";
+import Cupones from "../pages/Cupones";
 import Placeholder from "../pages/Placeholder";
 
 function AppRoutes() {
@@ -31,10 +32,7 @@ function AppRoutes() {
         {/* Módulos que se irán implementando por fase */}
         <Route path="productos" element={<Productos />} />
         <Route path="categorias" element={<Categorias />} />
-        <Route
-          path="cupones"
-          element={<Placeholder titulo="Cupones" descripcion="CRUD de cupones (Fase 7)." />}
-        />
+        <Route path="cupones" element={<Cupones />} />
         <Route
           path="empaques"
           element={<Placeholder titulo="Empaques" descripcion="CRUD de empaques (Fase 8)." />}
