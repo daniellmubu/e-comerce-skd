@@ -11,7 +11,7 @@ import Pedidos from "../pages/Pedidos";
 import Cupones from "../pages/Cupones";
 import Empaques from "../pages/Empaques";
 import TarifasEnvio from "../pages/TarifasEnvio";
-import Placeholder from "../pages/Placeholder";
+import Reportes from "../pages/Reportes";
 
 function AppRoutes() {
   return (
@@ -39,10 +39,7 @@ function AppRoutes() {
         <Route path="pedidos" element={<Pedidos />} />
         <Route path="usuarios" element={<Usuarios />} />
         <Route path="tarifas-envio" element={<TarifasEnvio />} />
-        <Route
-          path="reportes"
-          element={<Placeholder titulo="Reportes" descripcion="Reportes y exportaciones (Fases 10-11)." />}
-        />
+        <Route path="reportes" element={<Reportes />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
