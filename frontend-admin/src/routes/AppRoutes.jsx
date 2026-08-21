@@ -4,6 +4,7 @@ import ProtectedRoute from "../components/ProtectedRoute";
 import AdminLayout from "../layouts/AdminLayout";
 import Login from "../pages/Login";
 import Dashboard from "../pages/Dashboard";
+import Productos from "../pages/Productos";
 import Placeholder from "../pages/Placeholder";
 
 function AppRoutes() {
@@ -25,10 +26,7 @@ function AppRoutes() {
         <Route path="dashboard" element={<Dashboard />} />
 
         {/* Módulos que se irán implementando por fase */}
-        <Route
-          path="productos"
-          element={<Placeholder titulo="Productos" descripcion="CRUD de productos (Fase 3)." />}
-        />
+        <Route path="productos" element={<Productos />} />
         <Route
           path="categorias"
           element={<Placeholder titulo="Categorías" descripcion="CRUD de categorías (Fase 4)." />}
