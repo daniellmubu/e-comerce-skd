@@ -9,6 +9,7 @@ import Categorias from "../pages/Categorias";
 import Usuarios from "../pages/Usuarios";
 import Pedidos from "../pages/Pedidos";
 import Cupones from "../pages/Cupones";
+import Empaques from "../pages/Empaques";
 import Placeholder from "../pages/Placeholder";
 
 function AppRoutes() {
@@ -33,10 +34,7 @@ function AppRoutes() {
         <Route path="productos" element={<Productos />} />
         <Route path="categorias" element={<Categorias />} />
         <Route path="cupones" element={<Cupones />} />
-        <Route
-          path="empaques"
-          element={<Placeholder titulo="Empaques" descripcion="CRUD de empaques (Fase 8)." />}
-        />
+        <Route path="empaques" element={<Empaques />} />
         <Route path="pedidos" element={<Pedidos />} />
         <Route path="usuarios" element={<Usuarios />} />
         <Route
