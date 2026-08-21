@@ -10,6 +10,7 @@ import Usuarios from "../pages/Usuarios";
 import Pedidos from "../pages/Pedidos";
 import Cupones from "../pages/Cupones";
 import Empaques from "../pages/Empaques";
+import TarifasEnvio from "../pages/TarifasEnvio";
 import Placeholder from "../pages/Placeholder";
 
 function AppRoutes() {
@@ -37,10 +38,7 @@ function AppRoutes() {
         <Route path="empaques" element={<Empaques />} />
         <Route path="pedidos" element={<Pedidos />} />
         <Route path="usuarios" element={<Usuarios />} />
-        <Route
-          path="tarifas-envio"
-          element={<Placeholder titulo="Tarifas de envío" descripcion="CRUD de tarifas de envío (Fase 9)." />}
-        />
+        <Route path="tarifas-envio" element={<TarifasEnvio />} />
         <Route
           path="reportes"
           element={<Placeholder titulo="Reportes" descripcion="Reportes y exportaciones (Fases 10-11)." />}
