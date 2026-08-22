@@ -1,17 +1,31 @@
 import * as THREE from "three";
-import camisetaBase from "../assets/images/products/base/camiseta-base.png";
-import mugBase from "../assets/images/products/base/mug-base.png";
 
-const IMAGENES = {
-  camiseta: camisetaBase,
-  mug: mugBase,
+// Contorno de la camiseta (tipo "buzo") en unidades del mundo (caja de 2.6 x
+// 2.6). Se usa tanto para la geometría extruida (grosor real con bisel) como
+// para recortar el "decal" de los diseños a la silueta.
+const CAMISETA = {
+  puntos: [
+    [-0.95, -1.25],
+    [-0.95, -0.15],
+    [-1.3, 0.05],
+    [-1.3, -0.5],
+    [-0.95, -0.65],
+    [-0.6, 0.85],
+    [-0.28, 1.05],
+    [0.28, 1.05],
+    [0.6, 0.85],
+    [0.95, -0.65],
+    [1.3, -0.5],
+    [1.3, 0.05],
+    [0.95, -0.15],
+    [0.95, -1.25],
+  ],
+  cuelloControl: [0, 0.75],
 };
 
-// Misma posición relativa del diseño que usa el Generador para el overlay CSS.
-const OVERLAY = {
-  camiseta: { top: 0.33, width: 0.5 },
-  mug: { top: 0.35, width: 0.58 },
-};
+// Ancho base de cada imagen insertada (fracción del contenedor), igual que en
+// PrendaMockup, para que la vista 3D coincida con el mockup 2D.
+const ANCHO_IMAGEN_BASE = 0.38;
 
 function cargarImagen(src, crossOrigin) {
   return new Promise((resolve, reject) => {
@@ -23,9 +37,49 @@ function cargarImagen(src, crossOrigin) {
   });
 }
 
-// Dibuja el texto del personalizador en el canvas. `texto` trae contenido,
-// color, tamaño, posición (en %), rotación y escala; se usa el mismo criterio
-// que el mockup 2D para que la vista 3D coincida.
+// Construye el contorno de la camiseta usando un objeto con las mismas
+// operaciones de un path 2D (canvas) o un THREE.Shape, para no duplicar las
+// coordenadas. El segmento entre el índice 6 y 7 es la curva del cuello.
+function construirContorno(p) {
+  p.moveTo(CAMISETA.puntos[0][0], CAMISETA.puntos[0][1]);
+  for (let i = 1; i < CAMISETA.puntos.length; i++) {
+    const [x, y] = CAMISETA.puntos[i];
+    if (i === 7) {
+      p.quadraticCurveTo(CAMISETA.cuelloControl[0], CAMISETA.cuelloControl[1], x, y);
+    } else {
+      p.lineTo(x, y);
+    }
+  }
+  p.closePath();
+}
+
+// Devuelve un THREE.Shape con la silueta de la camiseta (para extruir).
+export function crearShapeCamiseta() {
+  const shape = new THREE.Shape();
+  construirContorno({
+    moveTo: (x, y) => shape.moveTo(x, y),
+    lineTo: (x, y) => shape.lineTo(x, y),
+    quadraticCurveTo: (cx, cy, x, y) => shape.quadraticCurveTo(cx, cy, x, y),
+    closePath: () => shape.closePath(),
+  });
+  return shape;
+}
+
+// Dibuja el contorno de la camiseta sobre un canvas 2D (para recortar el decal).
+function dibujarContornoCamiseta(ctx, tamano) {
+  const escala = tamano / 2.6;
+  const cx = tamano / 2;
+  const cy = tamano / 2;
+  construirContorno({
+    moveTo: (x, y) => ctx.moveTo(cx + x * escala, cy - y * escala),
+    lineTo: (x, y) => ctx.lineTo(cx + x * escala, cy - y * escala),
+    quadraticCurveTo: (cxp, cyp, x, y) =>
+      ctx.quadraticCurveTo(cx + cxp * escala, cy - cyp * escala, cx + x * escala, cy - y * escala),
+    closePath: () => ctx.closePath(),
+  });
+}
+
+// Dibuja el texto del personalizador en el canvas.
 function dibujarTexto(ctx, texto, w, h) {
   if (!texto || !texto.contenido || !texto.contenido.trim()) return;
 
@@ -34,93 +88,59 @@ function dibujarTexto(ctx, texto, w, h) {
 
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(((texto.rotacion || 0) * Math.PI) / 180);
-  ctx.scale(texto.escala || 1, texto.escala || 1);
   ctx.fillStyle = texto.color || "#111111";
-  ctx.font = `600 ${texto.tamano || 32}px sans-serif`;
+  ctx.font = `600 ${Math.round((texto.tamano || 32) * (w / 500))}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(texto.contenido, 0, 0);
   ctx.restore();
 }
 
-// Dibuja la prenda completa (base + color + diseño) en un canvas y la devuelve
-// como textura de three.js. `recortar` recorta el diseño a la silueta de la
-// prenda (necesario para prendas planas como la camiseta).
-export async function componerTextura(tipo, color, disenoUrl, { recortar = false, texto = null } = {}) {
-  const base = await cargarImagen(IMAGENES[tipo]);
-
-  let diseno = null;
-  if (disenoUrl) {
-    try {
-      diseno = await cargarImagen(disenoUrl, "anonymous");
-    } catch {
-      diseno = null;
-    }
-  }
-
-  const w = base.naturalWidth || 500;
-  const h = base.naturalHeight || 500;
-
+// Textura "decal" para el frente de la camiseta: dibuja los diseños y el texto
+// sobre un canvas transparente y luego recorta todo a la silueta de la prenda.
+export async function componerTexturaDiseno(disenos, texto, { tamano = 512 } = {}) {
   const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = tamano;
+  canvas.height = tamano;
   const ctx = canvas.getContext("2d");
 
-  // 1. La foto real del producto, en blanco/gris.
-  ctx.drawImage(base, 0, 0, w, h);
-
-  // 2. Capa de color en "multiply", recortada a la silueta de la base para que
-  //    el fondo transparente no se vuelva opaco (equivale al maskImage CSS).
-  const colorCanvas = document.createElement("canvas");
-  colorCanvas.width = w;
-  colorCanvas.height = h;
-  const cctx = colorCanvas.getContext("2d");
-  cctx.fillStyle = color;
-  cctx.fillRect(0, 0, w, h);
-  cctx.globalCompositeOperation = "destination-in";
-  cctx.drawImage(base, 0, 0, w, h);
-
-  ctx.globalCompositeOperation = "multiply";
-  ctx.drawImage(colorCanvas, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-
-  // 3. Diseño generado por la IA, centrado encima.
-  if (diseno) {
-    const config = OVERLAY[tipo] ?? { top: 0.35, width: 0.58 };
-    const dw = w * config.width;
-    const dh = dw * (diseno.naturalHeight / diseno.naturalWidth);
-    const dx = (w - dw) / 2;
-    const dy = h * config.top;
-
-    if (recortar) {
-      const disenoCanvas = document.createElement("canvas");
-      disenoCanvas.width = w;
-      disenoCanvas.height = h;
-      const dctx = disenoCanvas.getContext("2d");
-      dctx.drawImage(diseno, dx, dy, dw, dh);
-      dctx.globalCompositeOperation = "destination-in";
-      dctx.drawImage(base, 0, 0, w, h);
-      ctx.drawImage(disenoCanvas, 0, 0);
-    } else {
-      ctx.drawImage(diseno, dx, dy, dw, dh);
+  for (const d of disenos ?? []) {
+    let img;
+    try {
+      img = await cargarImagen(d.url, "anonymous");
+    } catch {
+      img = null;
     }
+    if (!img) continue;
+
+    const baseW = tamano * ANCHO_IMAGEN_BASE * (d.escala ?? 1);
+    const baseH = baseW * (img.naturalHeight / img.naturalWidth);
+    const cx = (d.x / 100) * tamano;
+    const cy = (d.y / 100) * tamano;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(((d.rotacion ?? 0) * Math.PI) / 180);
+    ctx.drawImage(img, -baseW / 2, -baseH / 2, baseW, baseH);
+    ctx.restore();
   }
 
-  // 4. Texto del personalizador, dibujado encima del diseño.
-  dibujarTexto(ctx, texto, w, h);
+  dibujarTexto(ctx, texto, tamano, tamano);
+
+  // Recorta a la silueta de la camiseta para que el diseño no se salga.
+  ctx.globalCompositeOperation = "destination-in";
+  dibujarContornoCamiseta(ctx, tamano);
+  ctx.fill();
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;
   return textura;
 }
 
-// Textura para prendas cilíndricas (mug): cilindro de color sólido con
-// el diseño dibujado encima. A diferencia de la foto, no hay distorsión ni
-// fondo transparente. `anchoFraccion` es qué parte de la circunferencia ocupa
-// el diseño; `circunferencia` y `altura` (en unidades del mundo) se usan para
-// pre-distorsionar el diseño y que al envolverse se vea con su proporción real.
-export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null }) {
+// Textura para prendas cilíndricas (mug): cilindro de color sólido con los
+// diseños dibujados encima. `disenos` (o `disenoUrl` para un único diseño) se
+// pre-distorsionan para compensar el envolver del cilindro.
+export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null, disenos = null }) {
   const texW = 1024;
   const texH = 1024;
 
@@ -133,27 +153,41 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
   ctx.fillStyle = color;
   ctx.fillRect(0, 0, texW, texH);
 
-  // 2. Diseño centrado, pre-distorsionado para compensar el envolver del cilindro.
-  if (disenoUrl) {
+  // 2. Diseños, pre-distorsionados para compensar el envolver del cilindro.
+  const dibujarUnDiseno = async (d, anchoFraccionPropio) => {
     let diseno;
     try {
-      diseno = await cargarImagen(disenoUrl, "anonymous");
+      diseno = await cargarImagen(d.url, "anonymous");
     } catch {
       diseno = null;
     }
+    if (!diseno) return;
 
-    if (diseno) {
-      const aspect = diseno.naturalHeight / diseno.naturalWidth;
-      const anchoFisico = anchoFraccion * circunferencia;
-      const altoFisico = anchoFisico * aspect;
+    const aspect = diseno.naturalHeight / diseno.naturalWidth;
+    const anchoFisico = anchoFraccionPropio * circunferencia;
+    const altoFisico = anchoFisico * aspect;
 
-      const dw = anchoFraccion * texW;
-      const dh = (altoFisico / altura) * texH;
-      const dx = (texW - dw) / 2;
-      const dy = (texH - dh) / 2;
+    const dw = anchoFraccionPropio * texW;
+    const dh = (altoFisico / altura) * texH;
+    const cx = (d.x / 100) * texW;
+    const cy = (d.y / 100) * texH;
 
-      ctx.drawImage(diseno, dx, dy, dw, dh);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(((d.rotacion ?? 0) * Math.PI) / 180);
+    ctx.drawImage(diseno, -dw / 2, -dh / 2, dw, dh);
+    ctx.restore();
+  };
+
+  if (disenos && disenos.length) {
+    for (const d of disenos) {
+      await dibujarUnDiseno(d, ANCHO_IMAGEN_BASE * (d.escala ?? 1));
     }
+  } else if (disenoUrl) {
+    await dibujarUnDiseno(
+      { url: disenoUrl, x: 50, y: 50, escala: 1, rotacion: 0 },
+      anchoFraccion
+    );
   }
 
   // 3. Texto del personalizador, dibujado encima del diseño.

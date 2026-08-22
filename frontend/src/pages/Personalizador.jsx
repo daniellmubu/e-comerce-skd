@@ -3,13 +3,14 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaUpload,
   FaSyncAlt,
-  FaSearchPlus,
   FaSave,
   FaShoppingCart,
   FaMagic,
   FaSpinner,
   FaPalette,
   FaTrash,
+  FaExpand,
+  FaTimes,
 } from "react-icons/fa";
 import { Shirt, Coffee } from "lucide-react";
 
@@ -18,11 +19,17 @@ import { useCart } from "../context/CartContext";
 import { guardarPersonalizacion } from "../services/personalizacionService";
 import { generarDiseno } from "../services/disenoService";
 import { getErrorMessage } from "../services/api";
-import PrendaMockup from "../components/ui/PrendaMockup";
+import PrendaMockup, { ANCHO_IMAGEN_BASE } from "../components/ui/PrendaMockup";
 import Prenda3D from "../components/ui/Prenda3D";
 import { removeBackground } from "@imgly/background-removal";
 
 const COSTO_PERSONALIZACION = 5000;
+
+// Tamaño del lienzo (px) donde se "aplana" el diseño final antes de guardarlo.
+const TAMANO_LIENZO = 1000;
+// El mockup de referencia mide 500px; el texto y las imágenes se escalan a este
+// lienzo más grande para que la imagen guardada se vea nítida.
+const FACTOR_LIENZO = TAMANO_LIENZO / 500;
 
 // Categoría del backend -> tipo de mockup interno del personalizador.
 const TIPO_POR_CATEGORIA = {
@@ -57,6 +64,18 @@ function blobToDataURL(blob) {
   });
 }
 
+// Carga una imagen (dataURL o URL remota) como elemento <img> para poder
+// dibujarla en el lienzo final. Devuelve null si no se puede cargar.
+function cargarImagenElemento(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    if (url.startsWith("http")) img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 function Personalizador() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -75,64 +94,118 @@ function Personalizador() {
     () => TIPO_POR_CATEGORIA[productoOrigen?.categoria] ?? "camiseta"
   );
 
-  const [imagenSubida, setImagenSubida] = useState(null); // dataURL
+  // Lista de imágenes insertadas (subidas o generadas por IA). Cada una guarda
+  // su posición (%), rotación (grados) y escala para poder moverla y redimensionarla.
+  const [imagenes, setImagenes] = useState([]); // { id, url, x, y, escala, rotacion }
+  const [imagenActivaId, setImagenActivaId] = useState(null);
+
   const [prompt, setPrompt] = useState("");
   const [estiloIA, setEstiloIA] = useState(null); // "caricatura" | "minimalista" | "retro" | "lineas" | null
   const [generandoIA, setGenerandoIA] = useState(false);
-  const [resultadoIA, setResultadoIA] = useState(null); // url de la imagen generada
   const [colorSeleccionado, setColorSeleccionado] = useState(null); // hex
   const [textoDiseno, setTextoDiseno] = useState("");
   const [colorTexto, setColorTexto] = useState("#111111");
   const [tamanoTexto, setTamanoTexto] = useState(32);
   const [posicionTexto, setPosicionTexto] = useState({ x: 50, y: 50 });
+  const [rotacionTexto, setRotacionTexto] = useState(0);
+  const [escalaTexto, setEscalaTexto] = useState(1);
+  const [textoActivo, setTextoActivo] = useState(false);
   const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "color" | "texto"
-  const [rotacion, setRotacion] = useState(0);
-  const [escala, setEscala] = useState(1);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [procesandoImagen, setProcesandoImagen] = useState(false);
+  const [vista3DAbierta, setVista3DAbierta] = useState(false);
+
+  const imagenActiva = imagenes.find((img) => img.id === imagenActivaId) ?? null;
 
   const hayDiseno = Boolean(
-    imagenSubida || resultadoIA || colorSeleccionado || textoDiseno.trim()
+    imagenes.length || colorSeleccionado || textoDiseno.trim()
   );
-
-  // Imagen que se estampa sobre el producto (subida o generada por IA).
-  // Se mantiene aunque el usuario cambie de producto.
-  const disenoActual = imagenSubida || resultadoIA;
 
   const total = useMemo(() => precioBase + COSTO_PERSONALIZACION, [precioBase]);
 
+  const agregarImagen = (url) => {
+    const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    // Pequeño desplazamiento aleatorio para que al agregar varias no queden
+    // exactamente apiladas y sea más fácil separarlas.
+    const offset = Math.round((Math.random() - 0.5) * 16);
+    const nueva = {
+      id,
+      url,
+      x: 50 + offset,
+      y: 45 + offset,
+      escala: 1,
+      rotacion: 0,
+    };
+    setImagenes((prev) => [...prev, nueva]);
+    setImagenActivaId(id);
+    setTextoActivo(false);
+  };
+
+  const actualizarImagen = (id, patch) => {
+    setImagenes((prev) => prev.map((img) => (img.id === id ? { ...img, ...patch } : img)));
+  };
+
+  const seleccionarImagen = (id) => {
+    setImagenActivaId(id);
+    if (id) setTextoActivo(false);
+  };
+
+  const seleccionarTexto = () => {
+    setImagenActivaId(null);
+    setTextoActivo(true);
+  };
+
+  const handleTextoTransform = (patch) => {
+    if (patch.rotacion !== undefined) setRotacionTexto(patch.rotacion);
+    if (patch.escala !== undefined) setEscalaTexto(patch.escala);
+  };
+
+  const handleRotarImagen = () => {
+    if (!imagenActiva) return;
+    actualizarImagen(imagenActiva.id, {
+      rotacion: ((imagenActiva.rotacion ?? 0) + 90) % 360,
+    });
+  };
+
+  const handleEliminarImagen = (id) => {
+    setImagenes((prev) => prev.filter((img) => img.id !== id));
+    setImagenActivaId((actual) => (actual === id ? null : actual));
+  };
+
   const handleSubirImagen = async (e) => {
-    const archivo = e.target.files?.[0];
-    if (!archivo) return;
+    const archivos = Array.from(e.target.files ?? []);
+    if (!archivos.length) return;
 
     setProcesandoImagen(true);
     setMensaje(null);
 
-    try {
-      // Quita el fondo automáticamente (persona, animal, objeto) para dejar
-      // solo el sujeto. La primera vez descarga el modelo en el navegador.
-      const blob = await removeBackground(archivo);
-      const dataUrl = await blobToDataURL(blob);
-
-      setImagenSubida(dataUrl);
-      setResultadoIA(null); // la imagen subida reemplaza cualquier resultado de IA
-      setRotacion(0);
-      setEscala(1);
-    } catch {
-      // Si el recorte falla (sin conexión, navegador sin soporte, etc.),
-      // usamos la imagen original tal cual para no bloquear al usuario.
-      const lector = new FileReader();
-      lector.onload = () => {
-        setImagenSubida(lector.result);
-        setResultadoIA(null);
-        setRotacion(0);
-        setEscala(1);
-      };
-      lector.readAsDataURL(archivo);
-    } finally {
-      setProcesandoImagen(false);
+    // Procesa todas las imágenes seleccionadas, una por una.
+    for (const archivo of archivos) {
+      try {
+        // Quita el fondo automáticamente (persona, animal, objeto) para dejar
+        // solo el sujeto. La primera vez descarga el modelo en el navegador.
+        const blob = await removeBackground(archivo);
+        const dataUrl = await blobToDataURL(blob);
+        agregarImagen(dataUrl);
+      } catch {
+        // Si el recorte falla (sin conexión, navegador sin soporte, etc.),
+        // usamos la imagen original tal cual para no bloquear al usuario.
+        const lector = new FileReader();
+        await new Promise((resolve) => {
+          lector.onload = () => {
+            agregarImagen(lector.result);
+            resolve();
+          };
+          lector.onerror = () => resolve();
+          lector.readAsDataURL(archivo);
+        });
+      }
     }
+
+    setProcesandoImagen(false);
+    // Limpia el input para poder volver a subir el mismo archivo si se quiere.
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleGenerarIA = async () => {
@@ -157,10 +230,9 @@ function Personalizador() {
         resultado.imagenUrl ?? resultado.url ?? resultado.imagen ?? null;
 
       if (imagenUrl) {
-        setResultadoIA(imagenUrl);
-        setImagenSubida(null); // el resultado de IA reemplaza cualquier imagen subida
-        setRotacion(0);
-        setEscala(1);
+        // El resultado de IA se agrega como una imagen más, para poder
+        // combinarlo con las que ya se hayan subido.
+        agregarImagen(imagenUrl);
       } else {
         setMensaje({
           tipo: "error",
@@ -174,33 +246,69 @@ function Personalizador() {
     }
   };
 
-  const handleRotar = () => {
-    if (!hayDiseno) return;
-    setRotacion((prev) => (prev + 90) % 360);
-  };
-
-  const handleEscalar = () => {
-    if (!hayDiseno) return;
-    setEscala((prev) => (prev >= 1.4 ? 0.8 : prev + 0.2));
-  };
-
   const handleSeleccionarColor = (color) => {
     setColorSeleccionado(color);
   };
 
   const handleQuitarDiseno = () => {
-    setImagenSubida(null);
-    setResultadoIA(null);
+    setImagenes([]);
+    setImagenActivaId(null);
+    setTextoActivo(false);
     setColorSeleccionado(null);
     setTextoDiseno("");
     setColorTexto("#111111");
     setTamanoTexto(32);
     setPosicionTexto({ x: 50, y: 50 });
-    setRotacion(0);
-    setEscala(1);
+    setRotacionTexto(0);
+    setEscalaTexto(1);
     setPrompt("");
     if (fileInputRef.current) fileInputRef.current.value = "";
     setMensaje(null);
+  };
+
+  // Aplana todas las imágenes y el texto en una sola imagen PNG (con fondo
+  // transparente) para guardarla como la imagen final de la personalización.
+  const componerImagenFinal = async () => {
+    if (!imagenes.length && !textoDiseno.trim()) return null;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = TAMANO_LIENZO;
+    canvas.height = TAMANO_LIENZO;
+    const ctx = canvas.getContext("2d");
+
+    for (const imagen of imagenes) {
+      const el = await cargarImagenElemento(imagen.url);
+      if (!el) continue;
+
+      const baseW = TAMANO_LIENZO * ANCHO_IMAGEN_BASE * (imagen.escala ?? 1);
+      const baseH = baseW * (el.naturalHeight / el.naturalWidth);
+      const cx = (imagen.x / 100) * TAMANO_LIENZO;
+      const cy = (imagen.y / 100) * TAMANO_LIENZO;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(((imagen.rotacion ?? 0) * Math.PI) / 180);
+      ctx.drawImage(el, -baseW / 2, -baseH / 2, baseW, baseH);
+      ctx.restore();
+    }
+
+    if (textoDiseno.trim()) {
+      ctx.save();
+      ctx.translate(
+        (posicionTexto.x / 100) * TAMANO_LIENZO,
+        (posicionTexto.y / 100) * TAMANO_LIENZO
+      );
+      ctx.rotate(((rotacionTexto ?? 0) * Math.PI) / 180);
+      ctx.scale(escalaTexto ?? 1, escalaTexto ?? 1);
+      ctx.fillStyle = colorTexto;
+      ctx.font = `600 ${Math.round(tamanoTexto * FACTOR_LIENZO)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(textoDiseno, 0, 0);
+      ctx.restore();
+    }
+
+    return canvas.toDataURL("image/png");
   };
 
   const handleGuardarDiseno = async () => {
@@ -231,14 +339,15 @@ function Personalizador() {
     setGuardando(true);
     setMensaje(null);
     try {
+      const imagenFinal = await componerImagenFinal();
       const item = await agregarProducto(productoOrigen);
 
       // Si el carrito devolvió el item, intentamos persistir la
-      // personalización asociada (imagen, rotación, escala, costo extra).
+      // personalización asociada (imagen aplanada + descripción).
       if (item?.id) {
         const notas = [
           `Producto: ${selectedProduct === "camiseta" ? "Camiseta" : "Mug"}`,
-          resultadoIA ? `Generado por IA: ${prompt}` : null,
+          imagenes.length ? `Imágenes insertadas: ${imagenes.length}` : null,
           colorSeleccionado ? `Color elegido: ${colorSeleccionado}` : null,
           textoDiseno.trim()
             ? `Texto: "${textoDiseno.trim()}" (${colorTexto}, ${tamanoTexto}px, posición ${Math.round(posicionTexto.x)}%,${Math.round(posicionTexto.y)}%)`
@@ -249,10 +358,10 @@ function Personalizador() {
 
         await guardarPersonalizacion({
           itemCarritoId: item.id,
-          imagenUrl: imagenSubida ?? resultadoIA ?? null,
+          imagenUrl: imagenFinal ?? null,
           texto: notas || null,
-          rotacion,
-          escala,
+          rotacion: null,
+          escala: null,
           costoAdicional: COSTO_PERSONALIZACION,
         }).catch(() => {
           // No bloquea el flujo si la personalización no se pudo guardar;
@@ -269,7 +378,8 @@ function Personalizador() {
   };
 
   return (
-    <section className="min-h-screen bg-gray-50 px-6 py-10 dark:bg-slate-950">
+    <>
+      <section className="min-h-screen bg-gray-50 px-6 py-10 dark:bg-slate-950">
       <div className="mx-auto max-w-6xl">
         <h1 className="mb-8 text-2xl font-bold text-gray-900 dark:text-white">
           Personaliza tu producto
@@ -363,9 +473,9 @@ function Personalizador() {
 
             {herramienta === "imagen" ? (
               <>
-                {/* Subir imagen */}
+                {/* Subir imagen (varias a la vez) */}
                 <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Subir imagen
+                  Subir imágenes
                 </p>
                 <button
                   type="button"
@@ -376,12 +486,12 @@ function Personalizador() {
                   {procesandoImagen ? (
                     <>
                       <FaSpinner className="animate-spin" />
-                      Quitando fondo... (la primera vez tarda un poco)
+                      Procesando... (la primera vez tarda un poco)
                     </>
                   ) : (
                     <>
                       <FaUpload />
-                      Click para subir o arrastra aquí
+                      Click para subir (puedes elegir varias)
                     </>
                   )}
                 </button>
@@ -389,6 +499,7 @@ function Personalizador() {
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handleSubirImagen}
                   className="hidden"
                 />
@@ -450,6 +561,76 @@ function Personalizador() {
                     </>
                   )}
                 </button>
+
+                {/* Gestión de las imágenes insertadas */}
+                {imagenes.length > 0 && (
+                  <>
+                    <div className="my-5 border-t border-gray-200 dark:border-slate-800" />
+
+                    <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
+                      Imágenes ({imagenes.length})
+                    </p>
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {imagenes.map((img) => (
+                        <button
+                          key={img.id}
+                          type="button"
+                          onClick={() => setImagenActivaId(img.id)}
+                          title="Seleccionar imagen"
+                          className={`flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border-2 bg-gray-50 transition dark:bg-slate-800 ${
+                            img.id === imagenActivaId
+                              ? "border-indigo-500 dark:border-cyan-400"
+                              : "border-gray-200 hover:border-indigo-300 dark:border-slate-700"
+                          }`}
+                        >
+                          <img src={img.url} alt="Miniatura" className="max-h-full max-w-full object-contain" />
+                        </button>
+                      ))}
+                    </div>
+
+                    {imagenActiva && (
+                      <div className="space-y-3 rounded-xl border border-gray-200 p-3 dark:border-slate-700">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                          Imagen seleccionada
+                        </p>
+
+                        <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                          Tamaño: {Math.round((imagenActiva.escala ?? 1) * 100)}%
+                        </label>
+                        <input
+                          type="range"
+                          min={0.2}
+                          max={3}
+                          step={0.05}
+                          value={imagenActiva.escala ?? 1}
+                          onChange={(e) =>
+                            actualizarImagen(imagenActiva.id, {
+                              escala: Number(e.target.value),
+                            })
+                          }
+                          className="w-full accent-indigo-600 dark:accent-cyan-500"
+                        />
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleRotarImagen}
+                            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+                          >
+                            <FaSyncAlt /> Rotar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarImagen(imagenActiva.id)}
+                            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-red-500 transition hover:border-red-300 dark:border-slate-700 dark:text-red-400 dark:hover:border-red-500/50"
+                          >
+                            <FaTrash /> Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </>
             ) : herramienta === "color" ? (
               <>
@@ -531,25 +712,37 @@ function Personalizador() {
                   onChange={(e) => setTamanoTexto(Number(e.target.value))}
                   className="w-full accent-indigo-600 dark:accent-cyan-500"
                 />
+
+                <button
+                  type="button"
+                  onClick={() => setRotacionTexto((r) => (r + 90) % 360)}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+                >
+                  <FaSyncAlt /> Rotar texto
+                </button>
+
+                <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Escala: {Math.round(escalaTexto * 100)}%
+                </label>
+                <input
+                  type="range"
+                  min={0.2}
+                  max={3}
+                  step={0.05}
+                  value={escalaTexto}
+                  onChange={(e) => setEscalaTexto(Number(e.target.value))}
+                  className="w-full accent-indigo-600 dark:accent-cyan-500"
+                />
               </>
             )}
 
-            <div className="my-5 border-t border-gray-200 dark:border-slate-800" />
-
-            <button
-              type="button"
-              onClick={handleRotar}
-              className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
-            >
-              <FaSyncAlt /> Rotar
-            </button>
-            <button
-              type="button"
-              onClick={handleEscalar}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
-            >
-              <FaSearchPlus /> Escalar
-            </button>
+            {herramienta !== "imagen" && (
+              <p className="mt-5 border-t border-gray-200 pt-4 text-xs text-gray-400 dark:border-slate-800 dark:text-slate-500">
+                Consejo: arrastra el texto o las imágenes sobre la prenda para
+                moverlos, y usa las esquinas del elemento seleccionado para
+                redimensionar o rotar.
+              </p>
+            )}
           </div>
 
           {/* Zona de diseño (mockup del producto seleccionado) */}
@@ -569,14 +762,20 @@ function Personalizador() {
               <PrendaMockup
                 tipo={selectedProduct}
                 color={colorSeleccionado}
-                disenoUrl={disenoActual}
-                rotacion={rotacion}
-                escala={escala}
+                imagenes={imagenes}
+                imagenActivaId={imagenActivaId}
+                onImagenChange={actualizarImagen}
+                onSeleccionarImagen={seleccionarImagen}
                 texto={textoDiseno}
                 colorTexto={colorTexto}
                 tamanoTexto={tamanoTexto}
                 posicionTexto={posicionTexto}
                 onPosicionTextoChange={setPosicionTexto}
+                rotacionTexto={rotacionTexto}
+                escalaTexto={escalaTexto}
+                onTextoTransformChange={handleTextoTransform}
+                textoActivo={textoActivo}
+                onSeleccionarTexto={seleccionarTexto}
               />
             </div>
           </div>
@@ -593,16 +792,22 @@ function Personalizador() {
                   key={selectedProduct}
                   tipo={selectedProduct}
                   color={colorSeleccionado ?? "#ffffff"}
-                  disenoUrl={disenoActual}
+                  imagenes={imagenes}
                   texto={textoDiseno}
                   colorTexto={colorTexto}
                   tamanoTexto={tamanoTexto}
                   posicionTexto={posicionTexto}
-                  rotacion={rotacion}
-                  escala={escala}
                 />
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setVista3DAbierta(true)}
+              className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50 dark:border-cyan-500/40 dark:text-cyan-300 dark:hover:bg-cyan-500/10"
+            >
+              <FaExpand /> Ver en 3D a pantalla completa
+            </button>
 
             <button
               type="button"
@@ -651,7 +856,43 @@ function Personalizador() {
           </div>
         </div>
       </div>
-    </section>
+      </section>
+
+      {vista3DAbierta && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur">
+          <div className="flex items-center justify-between px-6 py-4">
+            <h2 className="text-lg font-bold text-white">Vista 3D</h2>
+            <button
+              type="button"
+              onClick={() => setVista3DAbierta(false)}
+              aria-label="Cerrar vista 3D"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white"
+            >
+              <FaTimes />
+            </button>
+          </div>
+
+          <div className="flex flex-1 items-center justify-center px-6 pb-2">
+            <div className="aspect-square w-full max-w-[560px]">
+              <Prenda3D
+                key={`modal-${selectedProduct}`}
+                tipo={selectedProduct}
+                color={colorSeleccionado ?? "#ffffff"}
+                imagenes={imagenes}
+                texto={textoDiseno}
+                colorTexto={colorTexto}
+                tamanoTexto={tamanoTexto}
+                posicionTexto={posicionTexto}
+              />
+            </div>
+          </div>
+
+          <p className="pb-6 text-center text-sm text-slate-400">
+            Arrastra para rotar · Usa la rueda para acercar o alejar
+          </p>
+        </div>
+      )}
+    </>
   );
 }
 

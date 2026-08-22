@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import Moveable from "react-moveable";
 import camisetaBase from "../../assets/images/products/base/camiseta-base.png";
 import mugBase from "../../assets/images/products/base/mug-base.png";
 import procesarDiseno from "../../utils/quitarFondoBlanco";
@@ -11,97 +12,170 @@ const IMAGENES = {
   mug: mugBase,
 };
 
-// Posición (desde arriba) y ancho relativo del diseño dentro de cada mockup.
-// Las imágenes base miden 500x500, así que estos valores son fracciones de esa
-// caja y se reutilizan igual que el overlay del resto del proyecto.
-const OVERLAY = {
-  camiseta: { top: 0.3, width: 0.52 },
-  mug: { top: 0.34, width: 0.4 },
-};
+// Ancho base de cada imagen insertada (fracción del contenedor) antes de
+// aplicar la escala del usuario. Se comparte con el Personalizador para que el
+// aplanado final (imagen que se guarda) coincida con lo que se ve en pantalla.
+export const ANCHO_IMAGEN_BASE = 0.38;
 
-function PrendaMockup({
-  tipo = "camiseta",
-  color = null,
-  disenoUrl = null,
-  rotacion = 0,
-  escala = 1,
-  texto = "",
-  colorTexto = "#111111",
-  tamanoTexto = 32,
-  posicionTexto = { x: 50, y: 50 },
-  onPosicionTextoChange,
-}) {
-  const base = IMAGENES[tipo] ?? camisetaBase;
-  const overlay = OVERLAY[tipo] ?? OVERLAY.camiseta;
+function clamp(valor, min, max) {
+  return Math.min(max, Math.max(min, valor));
+}
 
-  // Quita el fondo blanco del diseño para poder dibujarlo SIN mezcla de color.
-  // Antes el diseño usaba "multiply", que mezclaba sus colores con el de la
-  // prenda y producía un tercer color (ej: diseño azul sobre camiseta roja
-  // terminaba negro).
-  const [disenoProcesado, setDisenoProcesado] = useState({ url: null, dataUrl: null });
+// Dibuja una sola imagen del diseño quitándole el fondo blanco (para que no
+// mezcle sus colores con el color de la prenda). Procesa cada imagen por su
+// cuenta, de modo que se puedan apilar varias.
+function ImagenDiseno({ url, alt }) {
+  const [procesada, setProcesada] = useState(null);
 
   useEffect(() => {
-    if (!disenoUrl) return undefined;
+    if (!url) {
+      setProcesada(null);
+      return undefined;
+    }
 
     let activo = true;
 
-    procesarDiseno(disenoUrl)
+    procesarDiseno(url)
       .then(({ dataUrl }) => {
-        if (activo) setDisenoProcesado({ url: disenoUrl, dataUrl });
+        if (activo) setProcesada(dataUrl);
       })
       .catch(() => {
         // Si no se pudo procesar (CORS, etc.), usamos la original tal cual.
-        if (activo) setDisenoProcesado({ url: disenoUrl, dataUrl: disenoUrl });
+        if (activo) setProcesada(url);
       });
 
     return () => {
       activo = false;
     };
-  }, [disenoUrl]);
+  }, [url]);
 
-  // Solo mostramos el diseño procesado si corresponde a la URL actual; así
-  // evitamos dibujar un diseño viejo mientras se procesa el nuevo.
-  const disenoAMostrar = disenoProcesado.url === disenoUrl ? disenoProcesado.dataUrl : null;
+  if (!procesada) return null;
 
-  // Posición del texto (en % del área del mockup). Arranca centrado y el
-  // usuario lo puede arrastrar a cualquier parte de la prenda.
+  return (
+    <img
+      src={procesada}
+      alt={alt}
+      draggable={false}
+      className="block w-full"
+      style={{ pointerEvents: "none" }}
+    />
+  );
+}
+
+function PrendaMockup({
+  tipo = "camiseta",
+  color = null,
+  imagenes = [],
+  imagenActivaId = null,
+  onImagenChange,
+  onSeleccionarImagen,
+  texto = "",
+  colorTexto = "#111111",
+  tamanoTexto = 32,
+  posicionTexto = { x: 50, y: 50 },
+  onPosicionTextoChange,
+  rotacionTexto = 0,
+  escalaTexto = 1,
+  onTextoTransformChange,
+  textoActivo = false,
+  onSeleccionarTexto,
+  interactivo = true,
+}) {
+  const base = IMAGENES[tipo] ?? camisetaBase;
   const contenedorRef = useRef(null);
-  const arrastreRef = useRef(null);
+  const startRef = useRef(null);
+  const [target, setTarget] = useState(null);
 
-  const iniciarArrastreTexto = (e) => {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    arrastreRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      posX: posicionTexto.x,
-      posY: posicionTexto.y,
-    };
+  // Elemento actualmente editable (imagen activa o texto).
+  const elementoActivo = imagenActivaId
+    ? { tipo: "imagen", id: imagenActivaId }
+    : textoActivo
+      ? { tipo: "texto" }
+      : null;
+
+  const seleccionarImagen = (id) => {
+    if (!interactivo) return;
+    if (onSeleccionarImagen) onSeleccionarImagen(id);
   };
 
-  const moverTexto = (e) => {
-    const arrastre = arrastreRef.current;
-    const contenedor = contenedorRef.current;
-    if (!arrastre || !contenedor) return;
+  const seleccionarTexto = (e) => {
+    if (!interactivo) return;
+    e.stopPropagation();
+    if (onSeleccionarTexto) onSeleccionarTexto();
+  };
 
-    const rect = contenedor.getBoundingClientRect();
-    const dx = ((e.clientX - arrastre.startX) / rect.width) * 100;
-    const dy = ((e.clientY - arrastre.startY) / rect.height) * 100;
+  const limpiarSeleccion = () => {
+    if (!interactivo) return;
+    if (onSeleccionarImagen) onSeleccionarImagen(null);
+    if (onSeleccionarTexto) onSeleccionarTexto(false);
+  };
 
-    if (onPosicionTextoChange) {
-      onPosicionTextoChange({
-        x: Math.min(100, Math.max(0, arrastre.posX + dx)),
-        y: Math.min(100, Math.max(0, arrastre.posY + dy)),
-      });
+  // --- Callbacks de react-moveable (arrastrar / redimensionar / rotar) ---
+
+  const onDragStart = () => {
+    const act = elementoActivo;
+    if (!act) return;
+    if (act.tipo === "imagen") {
+      const img = imagenes.find((i) => i.id === act.id);
+      if (img) startRef.current = { tipo: "imagen", id: img.id, x: img.x, y: img.y };
+    } else {
+      startRef.current = { tipo: "texto", x: posicionTexto.x, y: posicionTexto.y };
     }
   };
 
-  const terminarArrastreTexto = () => {
-    arrastreRef.current = null;
+  const onDrag = ({ beforeTranslate }) => {
+    const s = startRef.current;
+    const contenedor = contenedorRef.current;
+    if (!s || !contenedor) return;
+
+    const rect = contenedor.getBoundingClientRect();
+    const nx = clamp(s.x + (beforeTranslate[0] / rect.width) * 100, 0, 100);
+    const ny = clamp(s.y + (beforeTranslate[1] / rect.height) * 100, 0, 100);
+
+    if (s.tipo === "imagen") onImagenChange?.(s.id, { x: nx, y: ny });
+    else onPosicionTextoChange?.({ x: nx, y: ny });
   };
 
-  // Máscara con la silueta del producto: recorta la capa de color y el diseño
-  // para que nada se salga de la prenda (así se ve "estampado" y no flotando).
+  const onResizeStart = () => {
+    const act = elementoActivo;
+    if (!act) return;
+    if (act.tipo === "imagen") {
+      const img = imagenes.find((i) => i.id === act.id);
+      if (img) startRef.current = { tipo: "imagen", id: img.id, escala: img.escala ?? 1 };
+    } else {
+      startRef.current = { tipo: "texto", escala: escalaTexto ?? 1 };
+    }
+  };
+
+  const onResize = ({ scale }) => {
+    const s = startRef.current;
+    if (!s) return;
+    const nuevaEscala = clamp((s.escala ?? 1) * scale[0], 0.2, 4);
+    if (s.tipo === "imagen") onImagenChange?.(s.id, { escala: nuevaEscala });
+    else onTextoTransformChange?.({ escala: nuevaEscala });
+  };
+
+  const onRotateStart = () => {
+    const act = elementoActivo;
+    if (!act) return;
+    if (act.tipo === "imagen") {
+      const img = imagenes.find((i) => i.id === act.id);
+      if (img) startRef.current = { tipo: "imagen", id: img.id, rotacion: img.rotacion ?? 0 };
+    } else {
+      startRef.current = { tipo: "texto", rotacion: rotacionTexto ?? 0 };
+    }
+  };
+
+  const onRotate = ({ beforeRotate }) => {
+    const s = startRef.current;
+    if (!s) return;
+    const nuevaRotacion = (s.rotacion ?? 0) + (beforeRotate ?? 0);
+    if (s.tipo === "imagen") onImagenChange?.(s.id, { rotacion: nuevaRotacion });
+    else onTextoTransformChange?.({ rotacion: nuevaRotacion });
+  };
+
+  // Máscara con la silueta del producto: recorta la capa de color, las imágenes
+  // y el texto para que nada se salga de la prenda (así se ve "estampado").
   const mascara = {
     WebkitMaskImage: `url(${base})`,
     WebkitMaskSize: "100% 100%",
@@ -136,43 +210,51 @@ function PrendaMockup({
         />
       )}
 
-      {/* 3. Diseño generado por IA o subido, recortado a la silueta y colocado
-             en el área imprimible (con rotación y escala). El fondo blanco ya
-             se volvió transparente, así que se dibuja con sus colores reales
-             sin mezclarse con el color de la prenda. */}
-      {disenoAMostrar && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
-          style={mascara}
-        >
-          <img
-            src={disenoAMostrar}
-            alt="Diseño aplicado"
-            draggable={false}
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: `${overlay.top * 100}%`,
-              width: `${overlay.width * 100}%`,
-              transform: `translateX(-50%) rotate(${rotacion}deg) scale(${escala})`,
-              transformOrigin: "top center",
-            }}
-          />
-        </div>
-      )}
+      {/* 3. Imágenes insertadas (subidas o generadas por IA), recortadas a la
+             silueta. Con react-moveable se pueden arrastrar, redimensionar y
+             rotar libremente (modo editor tipo Canva). */}
+      <div className="absolute inset-0" style={mascara} onPointerDown={limpiarSeleccion}>
+        {imagenes.map((imagen) => {
+          const esActiva = imagen.id === imagenActivaId;
+          return (
+            <div
+              key={imagen.id}
+              ref={esActiva ? setTarget : undefined}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                seleccionarImagen(imagen.id);
+              }}
+              style={{
+                position: "absolute",
+                left: `${imagen.x}%`,
+                top: `${imagen.y}%`,
+                width: `${ANCHO_IMAGEN_BASE * 100}%`,
+                transform: `translate(-50%, -50%) rotate(${imagen.rotacion ?? 0}deg) scale(${imagen.escala ?? 1})`,
+                transformOrigin: "center center",
+                cursor: "move",
+                touchAction: "none",
+              }}
+            >
+              <div
+                className={
+                  esActiva
+                    ? "rounded-sm"
+                    : "rounded-sm outline outline-1 outline-transparent transition hover:outline-cyan-300 dark:hover:outline-cyan-600"
+                }
+              >
+                <ImagenDiseno url={imagen.url} alt="Imagen insertada" />
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-      {/* 4. Texto opcional: se puede arrastrar a cualquier parte de la prenda */}
+      {/* 4. Texto opcional: también se puede arrastrar, redimensionar y rotar */}
       {texto.trim() && (
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={mascara}
-        >
+        <div className="pointer-events-none absolute inset-0" style={mascara}>
           <p
-            onPointerDown={iniciarArrastreTexto}
-            onPointerMove={moverTexto}
-            onPointerUp={terminarArrastreTexto}
-            onPointerCancel={terminarArrastreTexto}
+            ref={textoActivo ? setTarget : undefined}
+            onPointerDown={seleccionarTexto}
             className="pointer-events-auto"
             style={{
               position: "absolute",
@@ -187,12 +269,35 @@ function PrendaMockup({
               cursor: "move",
               touchAction: "none",
               userSelect: "none",
-              transform: `translate(-50%, -50%) rotate(${rotacion}deg) scale(${escala})`,
+              transform: `translate(-50%, -50%) rotate(${rotacionTexto ?? 0}deg) scale(${escalaTexto ?? 1})`,
             }}
           >
             {texto}
           </p>
         </div>
+      )}
+
+      {/* Control de editor libre (react-moveable): handles de arrastre, esquinas
+          de redimensionado y asa de rotación sobre el elemento seleccionado. */}
+      {interactivo && target && (
+        <Moveable
+          target={target}
+          container={contenedorRef.current}
+          draggable
+          resizable
+          rotatable
+          keepRatio
+          throttleDrag={0}
+          throttleResize={0}
+          throttleRotate={0}
+          origin={false}
+          onDragStart={onDragStart}
+          onDrag={onDrag}
+          onResizeStart={onResizeStart}
+          onResize={onResize}
+          onRotateStart={onRotateStart}
+          onRotate={onRotate}
+        />
       )}
     </div>
   );

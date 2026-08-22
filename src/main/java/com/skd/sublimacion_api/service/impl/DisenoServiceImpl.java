@@ -12,6 +12,7 @@ import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.service.DisenoService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -37,6 +39,7 @@ import java.util.concurrent.TimeoutException;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DisenoServiceImpl implements DisenoService {
 
     private final DisenoRepository disenoRepository;
@@ -59,11 +62,10 @@ public class DisenoServiceImpl implements DisenoService {
     @Value("${supabase.storage.bucket}")
     private String supabaseBucket;
 
-    // Modelo de texto->imagen. flux-1-schnell es la versión rápida (menor
-    // calidad); flux-1.1-pro genera mucho más detalle a cambio de más tiempo y
-    // más Neurons por imagen. Si quieres volver a la versión rápida/barata,
-    // cambia esta constante por "@cf/black-forest-labs/flux-1-schnell".
-    private static final String MODELO = "@cf/black-forest-labs/flux-1.1-pro";
+    // Modelo de texto->imagen. flux-1-schnell es la versión rápida y estable
+    // disponible en el catálogo actual de Cloudflare Workers AI (el antiguo
+    // flux-1.1-pro ya no existe y devuelve "No route for that URI").
+    private static final String MODELO = "@cf/black-forest-labs/flux-1-schnell";
     private static final String MODELO_CON_REFERENCIA = "@cf/black-forest-labs/flux-2-klein-9b";
     private static final int MAX_LADO_IMAGEN_REFERENCIA = 512;
 
@@ -192,21 +194,32 @@ public class DisenoServiceImpl implements DisenoService {
             respuesta = client.post()
                     .uri(url)
                     .header("Authorization", "Bearer " + cloudflareApiToken)
+                    .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(Map.of("prompt", promptFinal))
                     .retrieve()
                     .bodyToMono(Map.class)
                     .timeout(TIMEOUT_CLOUDFLARE)
                     .block();
+        } catch (WebClientResponseException ex) {
+            // Cloudflare respondió con un error HTTP (4xx/5xx): mostramos el detalle real.
+            String detalle = ex.getResponseBodyAsString();
+            log.error("Cloudflare respondió {} al generar imagen: {}", ex.getStatusCode().value(), detalle);
+            throw new BadRequestException(
+                    "Cloudflare rechazó la solicitud (" + ex.getStatusCode().value() + "): " + detalle);
         } catch (RuntimeException ex) {
             if (ex.getCause() instanceof TimeoutException) {
                 throw new BadRequestException(
                         "Cloudflare tardó demasiado en responder. Intenta de nuevo en unos segundos.");
             }
-            throw new BadRequestException("Cloudflare no pudo generar la imagen. Intenta de nuevo.");
+            log.error("Error inesperado al llamar a Cloudflare", ex);
+            throw new BadRequestException(
+                    "Cloudflare no pudo generar la imagen: " + ex.getMessage());
         }
 
         if (respuesta == null || Boolean.FALSE.equals(respuesta.get("success"))) {
-            throw new BadRequestException("Cloudflare no pudo generar la imagen. Intenta de nuevo.");
+            String errores = respuesta == null ? "sin respuesta" : String.valueOf(respuesta.get("errors"));
+            log.error("Cloudflare devolvió success=false. errors={}", errores);
+            throw new BadRequestException("Cloudflare no pudo generar la imagen. Detalle: " + errores);
         }
 
         Map<String, Object> result = (Map<String, Object>) respuesta.get("result");
@@ -256,16 +269,25 @@ public class DisenoServiceImpl implements DisenoService {
                     .bodyToMono(Map.class)
                     .timeout(TIMEOUT_CLOUDFLARE)
                     .block();
+        } catch (WebClientResponseException ex) {
+            String detalle = ex.getResponseBodyAsString();
+            log.error("Cloudflare respondió {} al generar imagen con referencia: {}", ex.getStatusCode().value(), detalle);
+            throw new BadRequestException(
+                    "Cloudflare rechazó la solicitud (" + ex.getStatusCode().value() + "): " + detalle);
         } catch (RuntimeException ex) {
             if (ex.getCause() instanceof TimeoutException) {
                 throw new BadRequestException(
                         "Cloudflare tardó demasiado en responder. Intenta de nuevo en unos segundos.");
             }
-            throw new BadRequestException("Cloudflare no pudo generar la imagen. Intenta de nuevo.");
+            log.error("Error inesperado al llamar a Cloudflare (referencia)", ex);
+            throw new BadRequestException(
+                    "Cloudflare no pudo generar la imagen: " + ex.getMessage());
         }
 
         if (respuesta == null || Boolean.FALSE.equals(respuesta.get("success"))) {
-            throw new BadRequestException("Cloudflare no pudo generar la imagen. Intenta de nuevo.");
+            String errores = respuesta == null ? "sin respuesta" : String.valueOf(respuesta.get("errors"));
+            log.error("Cloudflare devolvió success=false (referencia). errors={}", errores);
+            throw new BadRequestException("Cloudflare no pudo generar la imagen. Detalle: " + errores);
         }
 
         Map<String, Object> result = (Map<String, Object>) respuesta.get("result");

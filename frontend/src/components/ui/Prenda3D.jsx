@@ -1,10 +1,14 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { componerTextura, componerTexturaSolida } from "../../utils/texturaPrenda";
+import {
+  componerTexturaSolida,
+  componerTexturaDiseno,
+  crearShapeCamiseta,
+} from "../../utils/texturaPrenda";
 
 const FACTOR_ROTACION = 0.01;
 
-// La camiseta es una lámina curvada; el mug es un cilindro sólido.
+// La camiseta es una prenda extruida (con grosor); el mug es un cilindro sólido.
 const FORMAS = {
   camiseta: "plana",
   mug: "cilindro",
@@ -16,14 +20,19 @@ const DIMENSIONES = {
   mug: { radioSuperior: 1.1, radioInferior: 1.1, altura: 2.0 },
 };
 
+// Grosor y bisel de la camiseta extruida (para que se vea como tela real).
+const GROSOR_CAMISETA = 0.18;
+const BISEL_CAMISETA = 0.06;
+// El decal (diseños/texto) va justo delante de la cara frontal de la prenda.
+const DECAL_Z = GROSOR_CAMISETA / 2 + BISEL_CAMISETA + 0.02;
+
 // Mitad de la altura total de cada prenda (para ubicar la sombra).
 function mediaAlturaDe(tipo) {
   if (tipo === "camiseta") return DIMENSIONES.camiseta.alto / 2;
   return DIMENSIONES.mug.altura / 2;
 }
 
-// Datos para envolver el diseño en cada cilindro: la circunferencia y la altura
-// de la zona imprimible y qué fracción de esa circunferencia ocupa el diseño.
+// Datos para envolver el diseño en cada cilindro.
 function configDisenoCilindro(tipo) {
   const { radioSuperior, altura } = DIMENSIONES[tipo];
   return {
@@ -35,29 +44,14 @@ function configDisenoCilindro(tipo) {
 
 // Acabado del material según la prenda (cerámica o tela).
 const ACABADOS = {
-  camiseta: { roughness: 0.6, metalness: 0 },
-  mug: { roughness: 0.4, metalness: 0.05 },
+  camiseta: { roughness: 0.85, metalness: 0 },
+  mug: { roughness: 0.35, metalness: 0.05 },
 };
 
 // Qué fracción de la circunferencia ocupa el diseño en cada cilindro.
 const ANCHO_DISENO_CILINDRO = {
   mug: 0.3,
 };
-
-// Curvatura de la lámina de la camiseta para que no parezca un papel plano.
-const PROFUNDIDAD_CURVA = 0.16;
-
-function crearPlanoCurvo(ancho, alto, segmentos, profundidad) {
-  const geo = new THREE.PlaneGeometry(ancho, alto, segmentos, segmentos);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const t = x / (ancho / 2);
-    pos.setZ(i, -profundidad * t * t);
-  }
-  geo.computeVertexNormals();
-  return geo;
-}
 
 function crearTexturaSombra() {
   const size = 256;
@@ -74,24 +68,62 @@ function crearTexturaSombra() {
   return new THREE.CanvasTexture(canvas);
 }
 
+// Textura procedural de tela (trama de hilos + ruido) usada como bump map para
+// que la prenda tenga relieve de algodón al iluminarse.
+function crearTexturaTela() {
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#808080";
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.strokeStyle = "rgba(0,0,0,0.28)";
+  ctx.lineWidth = 1;
+  const paso = 8;
+  for (let i = 0; i <= size; i += paso) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, size);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, i);
+    ctx.lineTo(size, i);
+    ctx.stroke();
+  }
+
+  const imageData = ctx.getImageData(0, 0, size, size);
+  const { data } = imageData;
+  for (let i = 0; i < data.length; i += 4) {
+    const n = (Math.random() * 2 - 1) * 22;
+    const v = Math.max(0, Math.min(255, data[i] + n));
+    data[i] = data[i + 1] = data[i + 2] = v;
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  const textura = new THREE.CanvasTexture(canvas);
+  textura.wrapS = textura.wrapT = THREE.RepeatWrapping;
+  return textura;
+}
+
 function Prenda3D({
   tipo,
   color,
   disenoUrl,
+  imagenes = null,
   texto = "",
   colorTexto = "#111111",
   tamanoTexto = 32,
   posicionTexto = { x: 50, y: 50 },
-  rotacion = 0,
-  escala = 1,
 }) {
   const canvasRef = useRef(null);
+  // Material al que se le asigna la textura (cuerpo del mug o decal de la camiseta).
   const materialRef = useRef(null);
-  const materialFrontalRef = useRef(null);
-  const materialTraseroRef = useRef(null);
+  // Material de color sólido (asa del mug o cuerpo de la camiseta).
   const materialColorRef = useRef(null);
   const texturaRef = useRef(null);
-  const texturaTraseraRef = useRef(null);
 
   // Escena de three.js: se monta una sola vez. El componente se monta con una
   // key por tipo de prenda, así que la geometría es fija durante toda su vida.
@@ -119,21 +151,16 @@ function Prenda3D({
     const key = new THREE.DirectionalLight(0xffffff, 1.6);
     key.position.set(2.5, 3.5, 4);
     scene.add(key);
-    const rim = new THREE.DirectionalLight(0xffffff, 0.9);
+    const rim = new THREE.DirectionalLight(0xffffff, 1.0);
     rim.position.set(-2, 1.5, -3);
     scene.add(rim);
 
-    const acabado = ACABADOS[tipo] ?? ACABADOS.camiseta;
-    const fabricaMaterial = () =>
-      new THREE.MeshStandardMaterial({
-        transparent: true,
-        side: THREE.FrontSide,
-        ...acabado,
-      });
+    const tela = crearTexturaTela();
 
     const esCilindro = FORMAS[tipo] === "cilindro";
+    const acabado = ACABADOS[tipo] ?? ACABADOS.camiseta;
     const prenda = new THREE.Group();
-    const recursos = [];
+    const recursos = [tela];
 
     if (esCilindro) {
       const { radioSuperior, radioInferior, altura } = DIMENSIONES[tipo];
@@ -148,7 +175,7 @@ function Prenda3D({
       );
       recursos.push(geometry);
 
-      const material = fabricaMaterial();
+      const material = new THREE.MeshStandardMaterial({ ...acabado });
       materialRef.current = material;
       recursos.push(material);
 
@@ -181,7 +208,7 @@ function Prenda3D({
       // Asa para el mug (un aro que asoma por el costado).
       if (tipo === "mug") {
         const materialAsa = new THREE.MeshStandardMaterial({
-          color,
+          color: 0xffffff,
           roughness: 0.4,
           metalness: 0.05,
         });
@@ -196,27 +223,48 @@ function Prenda3D({
         prenda.add(asa);
       }
     } else {
-      // Camiseta: lámina curvada con cara delantera (diseño) y trasera (lisa).
-      const { ancho, alto } = DIMENSIONES[tipo];
-      const geometry = crearPlanoCurvo(ancho, alto, 48, PROFUNDIDAD_CURVA);
+      // Camiseta "buzo": forma extruida con grosor real y bisel redondeado,
+      // más un decal frontal con los diseños y el texto.
+      const shape = crearShapeCamiseta();
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: GROSOR_CAMISETA,
+        bevelEnabled: true,
+        bevelThickness: BISEL_CAMISETA,
+        bevelSize: BISEL_CAMISETA,
+        bevelSegments: 4,
+        curveSegments: 32,
+      });
+      geometry.center();
       recursos.push(geometry);
 
-      const materialFrontal = fabricaMaterial();
-      materialFrontalRef.current = materialFrontal;
-      recursos.push(materialFrontal);
+      const materialCuerpo = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        ...acabado,
+        bumpMap: tela,
+        bumpScale: 0.03,
+      });
+      materialColorRef.current = materialCuerpo;
+      recursos.push(materialCuerpo);
 
-      const materialTrasero = fabricaMaterial();
-      materialTraseroRef.current = materialTrasero;
-      recursos.push(materialTrasero);
+      const cuerpo = new THREE.Mesh(geometry, materialCuerpo);
+      prenda.add(cuerpo);
 
-      const frente = new THREE.Mesh(geometry, materialFrontal);
-      frente.position.z = 0.02;
-      const reverso = new THREE.Mesh(geometry, materialTrasero);
-      reverso.rotation.y = Math.PI;
-      reverso.position.z = -0.02;
+      // Decal frontal (diseños + texto), transparente, delante de la cara frontal.
+      const decalGeometry = new THREE.PlaneGeometry(2.6, 2.6);
+      recursos.push(decalGeometry);
 
-      prenda.add(frente);
-      prenda.add(reverso);
+      const materialDecal = new THREE.MeshStandardMaterial({
+        transparent: true,
+        roughness: 0.6,
+        metalness: 0,
+        depthWrite: false,
+      });
+      materialRef.current = materialDecal;
+      recursos.push(materialDecal);
+
+      const decal = new THREE.Mesh(decalGeometry, materialDecal);
+      decal.position.z = DECAL_Z;
+      prenda.add(decal);
     }
 
     scene.add(prenda);
@@ -238,36 +286,52 @@ function Prenda3D({
     scene.add(sombra);
     recursos.push(sombra.geometry, sombra.material, sombraTextura);
 
-    // Rotación manual (arrastre) sin límite de grados (360° completos).
+    // Rotación manual (arrastre) en X e Y, y zoom con la rueda.
     let arrastrando = false;
     let ultimaX = 0;
+    let ultimaY = 0;
 
     const onMouseDown = (e) => {
       arrastrando = true;
       ultimaX = e.clientX;
+      ultimaY = e.clientY;
       canvas.style.cursor = "grabbing";
     };
     const onMouseMove = (e) => {
       if (!arrastrando) return;
       const dx = e.clientX - ultimaX;
+      const dy = e.clientY - ultimaY;
       ultimaX = e.clientX;
+      ultimaY = e.clientY;
       prenda.rotation.y += dx * FACTOR_ROTACION;
+      prenda.rotation.x += dy * FACTOR_ROTACION * 0.6;
+      prenda.rotation.x = Math.max(-0.9, Math.min(0.9, prenda.rotation.x));
     };
     const onMouseUp = () => {
       arrastrando = false;
       canvas.style.cursor = "grab";
+    };
+    const onWheel = (e) => {
+      e.preventDefault();
+      const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1;
+      camera.position.z = Math.max(2.6, Math.min(9, camera.position.z * factor));
     };
 
     const onTouchStart = (e) => {
       if (!e.touches.length) return;
       arrastrando = true;
       ultimaX = e.touches[0].clientX;
+      ultimaY = e.touches[0].clientY;
     };
     const onTouchMove = (e) => {
       if (!arrastrando || !e.touches.length) return;
       const dx = e.touches[0].clientX - ultimaX;
+      const dy = e.touches[0].clientY - ultimaY;
       ultimaX = e.touches[0].clientX;
+      ultimaY = e.touches[0].clientY;
       prenda.rotation.y += dx * FACTOR_ROTACION;
+      prenda.rotation.x += dy * FACTOR_ROTACION * 0.6;
+      prenda.rotation.x = Math.max(-0.9, Math.min(0.9, prenda.rotation.x));
     };
     const onTouchEnd = () => {
       arrastrando = false;
@@ -276,6 +340,7 @@ function Prenda3D({
     canvas.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
     canvas.addEventListener("touchmove", onTouchMove, { passive: false });
     canvas.addEventListener("touchend", onTouchEnd);
@@ -305,16 +370,12 @@ function Prenda3D({
       canvas.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("touchstart", onTouchStart);
       canvas.removeEventListener("touchmove", onTouchMove);
       canvas.removeEventListener("touchend", onTouchEnd);
       recursos.forEach((r) => r.dispose());
-      // Al desmontar queremos desechar la ÚLTIMA textura aplicada (guardada en
-      // el ref), no la del render inicial; por eso se lee el ref en el cleanup.
-      /* eslint-disable react-hooks/exhaustive-deps */
       if (texturaRef.current) texturaRef.current.dispose();
-      if (texturaTraseraRef.current) texturaTraseraRef.current.dispose();
-      /* eslint-enable react-hooks/exhaustive-deps */
       renderer.dispose();
     };
     // La escena se monta una sola vez: la geometría depende de `tipo`, pero el
@@ -335,10 +396,10 @@ function Prenda3D({
             tamano: tamanoTexto,
             x: posicionTexto.x,
             y: posicionTexto.y,
-            rotacion,
-            escala,
           }
         : null;
+
+    const disenosArray = imagenes && imagenes.length ? imagenes : null;
 
     const aplicar = (material, textura, ref) => {
       if (!material || material.map === textura) return;
@@ -349,44 +410,38 @@ function Prenda3D({
       if (anterior) anterior.dispose();
     };
 
-    let frontal;
-    let trasera = null;
-
+    let trabajo;
     if (esCilindro) {
       const config = configDisenoCilindro(tipo);
-      frontal = componerTexturaSolida(color, disenoUrl, {
+      trabajo = componerTexturaSolida(color, disenoUrl, {
         ...config,
         texto: textoConfig,
+        disenos: disenosArray,
       });
     } else {
-      frontal = componerTextura(tipo, color, disenoUrl, {
-        recortar: true,
-        texto: textoConfig,
-      });
-      trasera = componerTextura(tipo, color, null);
+      const disenosDecal =
+        disenosArray ??
+        (disenoUrl
+          ? [{ url: disenoUrl, x: 50, y: 45, escala: 1, rotacion: 0 }]
+          : null);
+      trabajo = componerTexturaDiseno(disenosDecal, textoConfig);
     }
 
-    Promise.all([frontal, trasera])
-      .then(([texFrontal, texTrasera]) => {
+    trabajo
+      .then((textura) => {
         if (cancelado) {
-          texFrontal.dispose();
-          if (texTrasera) texTrasera.dispose();
+          textura.dispose();
           return;
         }
-        if (esCilindro) {
-          aplicar(materialRef.current, texFrontal, texturaRef);
-          if (materialColorRef.current) materialColorRef.current.color.set(color);
-        } else {
-          aplicar(materialFrontalRef.current, texFrontal, texturaRef);
-          aplicar(materialTraseroRef.current, texTrasera, texturaTraseraRef);
-        }
+        aplicar(materialRef.current, textura, texturaRef);
+        if (materialColorRef.current) materialColorRef.current.color.set(color);
       })
       .catch(() => {});
 
     return () => {
       cancelado = true;
     };
-  }, [tipo, color, disenoUrl, texto, colorTexto, tamanoTexto, posicionTexto, rotacion, escala]);
+  }, [tipo, color, disenoUrl, imagenes, texto, colorTexto, tamanoTexto, posicionTexto]);
 
   return (
     <canvas
