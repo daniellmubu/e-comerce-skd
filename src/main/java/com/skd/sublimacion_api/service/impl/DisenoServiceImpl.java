@@ -3,6 +3,7 @@ package com.skd.sublimacion_api.service.impl;
 import com.skd.sublimacion_api.dto.diseno.DisenoRequest;
 import com.skd.sublimacion_api.dto.diseno.DisenoResponse;
 import com.skd.sublimacion_api.entity.Diseno;
+import com.skd.sublimacion_api.entity.OrigenDiseno;
 import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.exeption.BadRequestException;
@@ -11,6 +12,7 @@ import com.skd.sublimacion_api.repository.DisenoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.service.DisenoService;
+import com.skd.sublimacion_api.service.SupabaseStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,7 +36,6 @@ import java.util.ArrayDeque;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
 @Service
@@ -46,21 +47,13 @@ public class DisenoServiceImpl implements DisenoService {
     private final UsuarioRepository usuarioRepository;
     private final ProductoRepository productoRepository;
     private final WebClient.Builder webClientBuilder;
+    private final SupabaseStorageService supabaseStorageService;
 
     @Value("${cloudflare.account.id}")
     private String cloudflareAccountId;
 
     @Value("${cloudflare.api.token}")
     private String cloudflareApiToken;
-
-    @Value("${supabase.url}")
-    private String supabaseUrl;
-
-    @Value("${supabase.service.key}")
-    private String supabaseServiceKey;
-
-    @Value("${supabase.storage.bucket}")
-    private String supabaseBucket;
 
     // Modelo de texto->imagen. flux-1-schnell es la versión rápida y estable
     // disponible en el catálogo actual de Cloudflare Workers AI (el antiguo
@@ -78,6 +71,9 @@ public class DisenoServiceImpl implements DisenoService {
     // Cuota de Cloudflare (10,000 Neurons/día) es compartida entre todos los
     // usuarios de la app; este límite evita que uno solo la agote.
     private static final int LIMITE_GENERACIONES_DIARIAS = 10;
+
+    // Tamaño máximo aceptado para las imágenes subidas por el usuario (5 MB).
+    private static final long MAX_TAMANO_IMAGEN_SUBIDA = 5L * 1024 * 1024;
 
     // Filtro básico de contenido inapropiado. No es exhaustivo: es una primera
     // barrera para bloquear los casos más obvios antes de gastar cuota de la IA.
@@ -105,7 +101,7 @@ public class DisenoServiceImpl implements DisenoService {
                 ? generarImagenConReferencia(promptFinal, request.getImagenReferencia())
                 : generarImagenConCloudflare(promptFinal);
         ImagenProcesada procesada = procesarImagen(imagenBruta);
-        String imagenUrl = subirImagenASupabase(
+        String imagenUrl = supabaseStorageService.subirImagen(
                 procesada.bytes(), procesada.extension(), procesada.contentType());
 
         Diseno diseno = Diseno.builder()
@@ -113,11 +109,50 @@ public class DisenoServiceImpl implements DisenoService {
                 .producto(producto)
                 .imagenUrl(imagenUrl)
                 .prompt(request.getPrompt())
+                .origen(OrigenDiseno.IA)
                 .build();
 
         DisenoResponse response = convertir(disenoRepository.save(diseno));
         response.setValido(procesada.valido());
         return response;
+    }
+
+    @Override
+    public DisenoResponse subir(byte[] contenido, String contentType,
+                                String nombreArchivo, Long productoId,
+                                Long usuarioId) {
+
+        if (contenido == null || contenido.length == 0) {
+            throw new BadRequestException("Debes subir una imagen.");
+        }
+
+        if (contenido.length > MAX_TAMANO_IMAGEN_SUBIDA) {
+            throw new BadRequestException(
+                    "La imagen supera el tamaño máximo permitido (5 MB).");
+        }
+
+        ExtensionImagen ext = validarTipoImagen(contentType, nombreArchivo);
+
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+
+        Producto producto = null;
+        if (productoId != null) {
+            producto = productoRepository.findById(productoId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado"));
+        }
+
+        String imagenUrl = supabaseStorageService.subirImagen(
+                contenido, ext.extension(), ext.contentType());
+
+        Diseno diseno = Diseno.builder()
+                .usuario(usuario)
+                .producto(producto)
+                .imagenUrl(imagenUrl)
+                .origen(OrigenDiseno.USUARIO)
+                .build();
+
+        return convertir(disenoRepository.save(diseno));
     }
 
     @Override
@@ -427,28 +462,7 @@ public class DisenoServiceImpl implements DisenoService {
     }
 
     private String subirImagenASupabase(byte[] imagenBytes, String extension, String contentType) {
-        String nombreArchivo = UUID.randomUUID() + extension;
-        String uploadUrl = supabaseUrl + "/storage/v1/object/" + supabaseBucket + "/" + nombreArchivo;
-
-        WebClient client = webClientBuilder.build();
-
-        try {
-            client.post()
-                    .uri(uploadUrl)
-                    .header("Authorization", "Bearer " + supabaseServiceKey)
-                    .header("apikey", supabaseServiceKey)
-                    .header("Content-Type", contentType)
-                    .bodyValue(imagenBytes)
-                    .retrieve()
-                    .toBodilessEntity()
-                    .timeout(TIMEOUT_CLOUDFLARE)
-                    .block();
-        } catch (RuntimeException ex) {
-            throw new BadRequestException(
-                    "No se pudo guardar la imagen del diseño. Intenta de nuevo.");
-        }
-
-        return supabaseUrl + "/storage/v1/object/public/" + supabaseBucket + "/" + nombreArchivo;
+        return supabaseStorageService.subirImagen(imagenBytes, extension, contentType);
     }
 
     private record ImagenProcesada(byte[] bytes, String extension, String contentType, boolean valido) {}
@@ -460,6 +474,38 @@ public class DisenoServiceImpl implements DisenoService {
                 .productoId(diseno.getProducto() != null ? diseno.getProducto().getId() : null)
                 .producto(diseno.getProducto() != null ? diseno.getProducto().getNombre() : null)
                 .imagenUrl(diseno.getImagenUrl())
+                .origen(diseno.getOrigen() != null ? diseno.getOrigen().name() : null)
                 .build();
+    }
+
+    private record ExtensionImagen(String extension, String contentType) {}
+
+    private ExtensionImagen validarTipoImagen(String contentType, String nombreArchivo) {
+
+        String tipo = contentType == null ? "" : contentType.toLowerCase();
+
+        String extension;
+        String tipoFinal;
+
+        switch (tipo) {
+            case "image/png" -> { extension = ".png"; tipoFinal = "image/png"; }
+            case "image/jpeg", "image/jpg" -> { extension = ".jpg"; tipoFinal = "image/jpeg"; }
+            case "image/webp" -> { extension = ".webp"; tipoFinal = "image/webp"; }
+            default -> {
+                String nombre = nombreArchivo == null ? "" : nombreArchivo.toLowerCase();
+                if (nombre.endsWith(".png")) {
+                    extension = ".png"; tipoFinal = "image/png";
+                } else if (nombre.endsWith(".jpg") || nombre.endsWith(".jpeg")) {
+                    extension = ".jpg"; tipoFinal = "image/jpeg";
+                } else if (nombre.endsWith(".webp")) {
+                    extension = ".webp"; tipoFinal = "image/webp";
+                } else {
+                    throw new BadRequestException(
+                            "El archivo debe ser una imagen PNG, JPG o WEBP.");
+                }
+            }
+        }
+
+        return new ExtensionImagen(extension, tipoFinal);
     }
 }

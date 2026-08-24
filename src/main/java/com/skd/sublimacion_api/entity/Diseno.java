@@ -47,6 +47,10 @@ public class Diseno {
     @Column(columnDefinition = "TEXT")
     private String prompt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private OrigenDiseno origen;
+
     @Builder.Default @Column(nullable = false)
     private Boolean usado = false;
 

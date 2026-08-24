@@ -14,6 +14,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import java.util.Arrays;
 import com.skd.sublimacion_api.entity.Rol;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -26,6 +27,16 @@ public class GlobalExceptionHandler {
             HttpStatus.NOT_FOUND,
             "Not Found",
             ex.getMessage());
+    }
+
+    // Errores de negocio (validaciones, reglas, etc.)
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<?> handleBadRequest(BadRequestException ex) {
+
+        return buildError(
+                HttpStatus.BAD_REQUEST,
+                "Bad Request",
+                ex.getMessage());
     }
 
     // Acceso no autorizado al recurso (403)
@@ -82,10 +93,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(error);
     }
 
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<?> handleMaxUploadSizeExceeded(
+            MaxUploadSizeExceededException ex) {
+
+        return buildError(
+                HttpStatus.BAD_REQUEST,
+                "Bad Request",
+                "La imagen supera el tamaño máximo permitido (5 MB).");
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<?> handleHttpMessageNotReadable(
             HttpMessageNotReadableException ex) {
-
         if (ex.getMessage() != null &&
                 ex.getMessage().contains("Rol")) {
 
