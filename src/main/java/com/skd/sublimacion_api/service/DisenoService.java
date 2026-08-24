@@ -7,5 +7,7 @@ import java.util.List;
 
 public interface DisenoService {
     DisenoResponse generar(DisenoRequest request, Long usuarioId);
+    DisenoResponse subir(byte[] contenido, String contentType, String nombreArchivo,
+                         Long productoId, Long usuarioId);
     List<DisenoResponse> listarPorUsuario(Long usuarioId);
 }
