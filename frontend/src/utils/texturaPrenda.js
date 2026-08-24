@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import procesarDiseno from "./quitarFondoBlanco";
 
 // Contorno de la camiseta (tipo "buzo") en unidades del mundo (caja de 2.6 x
 // 2.6). Se usa tanto para la geometría extruida (grosor real con bisel) como
@@ -26,6 +27,22 @@ const CAMISETA = {
 // Ancho base de cada imagen insertada (fracción del contenedor), igual que en
 // PrendaMockup, para que la vista 3D coincida con el mockup 2D.
 const ANCHO_IMAGEN_BASE = 0.38;
+
+// El editor 2D coloca el diseño en un contenedor CUADRADO (x/y = % del cuadrado),
+// mientras que la textura 3D del torso solo cubre la zona de la camiseta dentro
+// de ese cuadrado. Este rectángulo describe el torso dentro del cuadrado 2D
+// (fracciones) para re-mapear posición y tamaño del diseño y que el estampado se
+// vea igual de grande y en el mismo sitio que en el editor.
+//
+// Valores medidos sobre camiseta-base.png (recorte al cuadrado central) y el
+// modelo tshirt.gltf normalizado: el torso mide ~63.5% del ancho y ~96% del alto
+// de la camiseta completa.
+const AREA_IMPRIMIBLE_TORSO = {
+  x0: 0.302, // borde izquierdo del torso (fracción del cuadrado)
+  y0: 0.181, // borde superior del torso (fracción del cuadrado)
+  ancho: 0.398, // ancho del torso (fracción del cuadrado)
+  alto: 0.636, // alto del torso (fracción del cuadrado)
+};
 
 function cargarImagen(src, crossOrigin) {
   return new Promise((resolve, reject) => {
@@ -79,58 +96,130 @@ function dibujarContornoCamiseta(ctx, tamano) {
   });
 }
 
-// Dibuja el texto del personalizador en el canvas.
-function dibujarTexto(ctx, texto, w, h) {
+// Convierte una coordenada del editor 2D (x/y en % del contenedor cuadrado) al
+// rectángulo de impresión dentro del lienzo de la textura. Devuelve el centro
+// (cx/cy) en px y los factores de escala fx/fy para ancho y alto del contenido.
+function mapearPorArea(x, y, tamano, area) {
+  if (!area) {
+    return { cx: (x / 100) * tamano, cy: (y / 100) * tamano, fx: 1, fy: 1 };
+  }
+  const fx = 1 / area.ancho;
+  const fy = 1 / area.alto;
+  return {
+    cx: (x / 100 - area.x0) * fx * tamano,
+    cy: (y / 100 - area.y0) * fy * tamano,
+    fx,
+    fy,
+  };
+}
+
+// Dibuja el texto del personalizador en el canvas. Aplica la misma cadena de
+// transformaciones (trasladar → rotar → escalar) que el editor 2D y la imagen
+// final guardada, para que las tres vistas coincidan. `area` re-mapea las
+// coordenadas al rectángulo imprimible del torso (solo camiseta frente/espalda).
+function dibujarTexto(ctx, texto, w, h, area = null) {
   if (!texto || !texto.contenido || !texto.contenido.trim()) return;
 
-  const x = (texto.x / 100) * w;
-  const y = (texto.y / 100) * h;
+  const { cx, cy, fx } = mapearPorArea(texto.x, texto.y, w, area);
 
   ctx.save();
-  ctx.translate(x, y);
+  ctx.translate(cx, cy);
+  ctx.rotate(((texto.rotacion ?? 0) * Math.PI) / 180);
+  ctx.scale(texto.escala ?? 1, texto.escala ?? 1);
   ctx.fillStyle = texto.color || "#111111";
-  ctx.font = `600 ${Math.round((texto.tamano || 32) * (w / 500))}px sans-serif`;
+  ctx.font = `600 ${Math.round((texto.tamano || 32) * (w / 500) * fx)}px ${
+    texto.fuente || "sans-serif"
+  }`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(texto.contenido, 0, 0);
   ctx.restore();
 }
 
-// Textura "decal" para el frente de la camiseta: dibuja los diseños y el texto
-// sobre un canvas transparente y luego recorta todo a la silueta de la prenda.
-export async function componerTexturaDiseno(disenos, texto, { tamano = 512 } = {}) {
+// Carga un diseño igual que se ve en el editor 2D: con el fondo blanco
+// conectado a las esquinas vuelto transparente (procesarDiseno). Sin esto, en
+// 3D se veía la caja blanca alrededor del diseño mientras el editor no.
+async function cargarDiseno(url) {
+  if (!url) return null;
+  try {
+    // procesarDiseno nunca rechaza: devuelve { ok:false, dataUrl:url } si no
+    // aplica (o falló), así que siempre hay URL utilizable.
+    const procesada = await procesarDiseno(url);
+    return await cargarImagen(procesada?.dataUrl ?? url, "anonymous");
+  } catch {
+    return null;
+  }
+}
+
+// Textura completa para la prenda: rellena con el color elegido y dibuja
+// encima los diseños y el texto (sin tintarlos). Al ser opaca evita el problema
+// de los píxeles transparentes (RGB negro) que oscurecían la prenda al
+// multiplicarse con material.color.
+//
+// espejoX/espejoY compensan modelos cuyos UVs están invertidos respecto a los
+// ejes del mundo (detectado por correlación posición↔UV en Prenda3D): se dibuja
+// todo el contenido espejado para que en el modelo se vea derecho y en la misma
+// posición que en el editor 2D.
+export async function componerTexturaCamiseta({
+  color = "#ffffff",
+  disenos = [],
+  texto = null,
+  tamano = 1024,
+  recortarSilueta = false,
+  espejoX = false,
+  espejoY = false,
+  fondoTransparente = false,
+  mapearTorso = false,
+  anchoBase = ANCHO_IMAGEN_BASE,
+}) {
   const canvas = document.createElement("canvas");
   canvas.width = tamano;
   canvas.height = tamano;
   const ctx = canvas.getContext("2d");
 
+  // 1. Color sólido base de toda la prenda. En capas de proyección
+  //    (manga + costado) se omite para dejar el fondo transparente.
+  if (!fondoTransparente) {
+    ctx.fillStyle = color || "#ffffff";
+    ctx.fillRect(0, 0, tamano, tamano);
+  }
+
+  // 2. Diseños + texto, opcionalmente recortados a la silueta del torso.
+  ctx.save();
+  if (recortarSilueta) {
+    dibujarContornoCamiseta(ctx, tamano);
+    ctx.clip();
+  }
+
+  ctx.save();
+  if (espejoX || espejoY) {
+    ctx.translate(espejoX ? tamano : 0, espejoY ? tamano : 0);
+    ctx.scale(espejoX ? -1 : 1, espejoY ? -1 : 1);
+  }
+
+  const area = mapearTorso ? AREA_IMPRIMIBLE_TORSO : null;
+
   for (const d of disenos ?? []) {
-    let img;
-    try {
-      img = await cargarImagen(d.url, "anonymous");
-    } catch {
-      img = null;
-    }
+    const img = await cargarDiseno(d.url);
     if (!img) continue;
 
-    const baseW = tamano * ANCHO_IMAGEN_BASE * (d.escala ?? 1);
-    const baseH = baseW * (img.naturalHeight / img.naturalWidth);
-    const cx = (d.x / 100) * tamano;
-    const cy = (d.y / 100) * tamano;
+    const baseW = tamano * anchoBase * (d.escalaX ?? d.escala ?? 1);
+    const baseH =
+      baseW *
+      (img.naturalHeight / img.naturalWidth) *
+      (d.escalaY ?? d.escala ?? 1);
+    const { cx, cy, fx, fy } = mapearPorArea(d.x, d.y, tamano, area);
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(((d.rotacion ?? 0) * Math.PI) / 180);
-    ctx.drawImage(img, -baseW / 2, -baseH / 2, baseW, baseH);
+    ctx.drawImage(img, (-baseW * fx) / 2, (-baseH * fy) / 2, baseW * fx, baseH * fy);
     ctx.restore();
   }
 
-  dibujarTexto(ctx, texto, tamano, tamano);
-
-  // Recorta a la silueta de la camiseta para que el diseño no se salga.
-  ctx.globalCompositeOperation = "destination-in";
-  dibujarContornoCamiseta(ctx, tamano);
-  ctx.fill();
+  dibujarTexto(ctx, texto, tamano, tamano, area);
+  ctx.restore();
+  ctx.restore();
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;
@@ -155,19 +244,14 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
 
   // 2. Diseños, pre-distorsionados para compensar el envolver del cilindro.
   const dibujarUnDiseno = async (d, anchoFraccionPropio) => {
-    let diseno;
-    try {
-      diseno = await cargarImagen(d.url, "anonymous");
-    } catch {
-      diseno = null;
-    }
+    const diseno = await cargarDiseno(d.url);
     if (!diseno) return;
 
     const aspect = diseno.naturalHeight / diseno.naturalWidth;
-    const anchoFisico = anchoFraccionPropio * circunferencia;
-    const altoFisico = anchoFisico * aspect;
+    const anchoFisico = anchoFraccionPropio * (d.escalaX ?? d.escala ?? 1) * circunferencia;
+    const altoFisico = anchoFisico * aspect * (d.escalaY ?? d.escala ?? 1);
 
-    const dw = anchoFraccionPropio * texW;
+    const dw = anchoFisico / circunferencia * texW;
     const dh = (altoFisico / altura) * texH;
     const cx = (d.x / 100) * texW;
     const cy = (d.y / 100) * texH;
@@ -181,7 +265,9 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
 
   if (disenos && disenos.length) {
     for (const d of disenos) {
-      await dibujarUnDiseno(d, ANCHO_IMAGEN_BASE * (d.escala ?? 1));
+      // La escala del usuario se aplica dentro de dibujarUnDiseno; aquí solo
+      // pasa el ancho base para no multiplicarla dos veces.
+      await dibujarUnDiseno(d, ANCHO_IMAGEN_BASE);
     }
   } else if (disenoUrl) {
     await dibujarUnDiseno(

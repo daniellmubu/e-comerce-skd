@@ -10,6 +10,9 @@ import {
   FaPalette,
   FaTrash,
   FaExpand,
+  FaCompress,
+  FaMinus,
+  FaPlus,
   FaTimes,
 } from "react-icons/fa";
 import { Shirt, Coffee } from "lucide-react";
@@ -19,9 +22,21 @@ import { useCart } from "../context/CartContext";
 import { guardarPersonalizacion } from "../services/personalizacionService";
 import { generarDiseno } from "../services/disenoService";
 import { getErrorMessage } from "../services/api";
-import PrendaMockup, { ANCHO_IMAGEN_BASE } from "../components/ui/PrendaMockup";
+import PrendaMockup, {
+  ANCHO_IMAGEN_BASE,
+  ESCALA_MIN,
+  ESCALA_MAX,
+} from "../components/ui/PrendaMockup";
 import Prenda3D from "../components/ui/Prenda3D";
 import { removeBackground } from "@imgly/background-removal";
+import procesarDiseno from "../utils/quitarFondoBlanco";
+import {
+  FUENTES_TEXTO,
+  FUENTE_TEXTO_DEFECTO,
+  CATEGORIAS_FUENTE,
+  buscarFuente,
+  cargarFuenteParaCanvas,
+} from "../utils/fuentesTexto";
 
 const COSTO_PERSONALIZACION = 5000;
 
@@ -35,6 +50,26 @@ const FACTOR_LIENZO = TAMANO_LIENZO / 500;
 const TIPO_POR_CATEGORIA = {
   Camisetas: "camiseta",
   Mugs: "mug",
+};
+
+// Superficies donde se puede ubicar un estampado en la camiseta. Cada imagen
+// guarda su posición libre {x, y} (%) DENTRO de la superficie elegida.
+const CARAS_CAMISETA = [
+  { id: "frente", label: "Frente" },
+  { id: "espalda", label: "Espalda" },
+  { id: "mangaIzquierda", label: "Manga izq." },
+  { id: "mangaDerecha", label: "Manga der." },
+];
+
+// Ubicaciones del pocillo: de frente y desde atrás (donde se ve el asa).
+const CARAS_MUG = [
+  { id: "frente", label: "Frente" },
+  { id: "atras", label: "Atrás" },
+];
+
+const CARAS_POR_TIPO = {
+  camiseta: CARAS_CAMISETA,
+  mug: CARAS_MUG,
 };
 
 // Paleta amplia de colores preseleccionables para pintar el diseño/objeto.
@@ -95,9 +130,11 @@ function Personalizador() {
   );
 
   // Lista de imágenes insertadas (subidas o generadas por IA). Cada una guarda
-  // su posición (%), rotación (grados) y escala para poder moverla y redimensionarla.
-  const [imagenes, setImagenes] = useState([]); // { id, url, x, y, escala, rotacion }
+  // la cara/superficie de la prenda, su posición (%), rotación (grados) y
+  // escala para poder arrastrarla y redimensionarla libremente.
+  const [imagenes, setImagenes] = useState([]); // { id, url, cara, x, y, escala, rotacion }
   const [imagenActivaId, setImagenActivaId] = useState(null);
+  const [caraActiva, setCaraActiva] = useState("frente");
 
   const [prompt, setPrompt] = useState("");
   const [estiloIA, setEstiloIA] = useState(null); // "caricatura" | "minimalista" | "retro" | "lineas" | null
@@ -105,6 +142,8 @@ function Personalizador() {
   const [colorSeleccionado, setColorSeleccionado] = useState(null); // hex
   const [textoDiseno, setTextoDiseno] = useState("");
   const [colorTexto, setColorTexto] = useState("#111111");
+  const [fuenteTexto, setFuenteTexto] = useState(FUENTE_TEXTO_DEFECTO);
+  const [filtroFuente, setFiltroFuente] = useState("todas");
   const [tamanoTexto, setTamanoTexto] = useState(32);
   const [posicionTexto, setPosicionTexto] = useState({ x: 50, y: 50 });
   const [rotacionTexto, setRotacionTexto] = useState(0);
@@ -114,15 +153,37 @@ function Personalizador() {
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [procesandoImagen, setProcesandoImagen] = useState(false);
+  // Recorte inteligente de fondo al subir imágenes (@imgly): activado por
+  // defecto; el usuario puede apagarlo para subir la imagen tal cual, con su
+  // fondo original.
+  const [recorteInteligente, setRecorteInteligente] = useState(true);
   const [vista3DAbierta, setVista3DAbierta] = useState(false);
+  // Zoom del lienzo de edición (0.5x - 3x) y modo pantalla completa del mismo.
+  const [zoomLienzo, setZoomLienzo] = useState(1);
+  const [lienzoMaximizado, setLienzoMaximizado] = useState(false);
 
   const imagenActiva = imagenes.find((img) => img.id === imagenActivaId) ?? null;
+
+  const caraDe = (img) => img.cara ?? "frente";
+  // Imágenes de la cara activa (las que se editan en el mockup grande).
+  const imagenesEnCaraActiva = imagenes.filter(
+    (img) => caraDe(img) === caraActiva
+  );
 
   const hayDiseno = Boolean(
     imagenes.length || colorSeleccionado || textoDiseno.trim()
   );
 
   const total = useMemo(() => precioBase + COSTO_PERSONALIZACION, [precioBase]);
+
+  // Fuentes del menú, filtradas por la categoría elegida.
+  const fuentesVisibles = useMemo(
+    () =>
+      filtroFuente === "todas"
+        ? FUENTES_TEXTO
+        : FUENTES_TEXTO.filter((f) => f.categoria === filtroFuente),
+    [filtroFuente]
+  );
 
   const agregarImagen = (url) => {
     const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -132,9 +193,11 @@ function Personalizador() {
     const nueva = {
       id,
       url,
+      cara: caraActiva,
       x: 50 + offset,
       y: 45 + offset,
-      escala: 1,
+      escalaX: 1,
+      escalaY: 1,
       rotacion: 0,
     };
     setImagenes((prev) => [...prev, nueva]);
@@ -183,10 +246,17 @@ function Personalizador() {
     // Procesa todas las imágenes seleccionadas, una por una.
     for (const archivo of archivos) {
       try {
-        // Quita el fondo automáticamente (persona, animal, objeto) para dejar
-        // solo el sujeto. La primera vez descarga el modelo en el navegador.
-        const blob = await removeBackground(archivo);
-        const dataUrl = await blobToDataURL(blob);
+        let dataUrl;
+        if (recorteInteligente) {
+          // Quita el fondo automáticamente (persona, animal, objeto) para
+          // dejar solo el sujeto. La primera vez descarga el modelo en el
+          // navegador.
+          const blob = await removeBackground(archivo);
+          dataUrl = await blobToDataURL(blob);
+        } else {
+          // Recorte apagado: la imagen se sube tal cual, con su fondo.
+          dataUrl = await blobToDataURL(archivo);
+        }
         agregarImagen(dataUrl);
       } catch {
         // Si el recorte falla (sin conexión, navegador sin soporte, etc.),
@@ -257,17 +327,21 @@ function Personalizador() {
     setColorSeleccionado(null);
     setTextoDiseno("");
     setColorTexto("#111111");
+    setFuenteTexto(FUENTE_TEXTO_DEFECTO);
     setTamanoTexto(32);
     setPosicionTexto({ x: 50, y: 50 });
     setRotacionTexto(0);
     setEscalaTexto(1);
     setPrompt("");
+    setCaraActiva("frente");
     if (fileInputRef.current) fileInputRef.current.value = "";
     setMensaje(null);
   };
 
   // Aplana todas las imágenes y el texto en una sola imagen PNG (con fondo
   // transparente) para guardarla como la imagen final de la personalización.
+  // La posición de cada elemento es libre ({x, y} en %), la misma que usa el
+  // editor de "Ajuste fino" con react-moveable.
   const componerImagenFinal = async () => {
     if (!imagenes.length && !textoDiseno.trim()) return null;
 
@@ -276,23 +350,35 @@ function Personalizador() {
     canvas.height = TAMANO_LIENZO;
     const ctx = canvas.getContext("2d");
 
-    for (const imagen of imagenes) {
-      const el = await cargarImagenElemento(imagen.url);
-      if (!el) continue;
+      for (const imagen of imagenes) {
+        // Mismo procesamiento que el editor 2D y la textura 3D: sin esto, la
+        // imagen guardada conservaría el fondo blanco que en pantalla no se ve.
+        const procesada = await procesarDiseno(imagen.url);
+        const el = await cargarImagenElemento(procesada?.dataUrl ?? imagen.url);
+        if (!el) continue;
 
-      const baseW = TAMANO_LIENZO * ANCHO_IMAGEN_BASE * (imagen.escala ?? 1);
-      const baseH = baseW * (el.naturalHeight / el.naturalWidth);
-      const cx = (imagen.x / 100) * TAMANO_LIENZO;
-      const cy = (imagen.y / 100) * TAMANO_LIENZO;
+        const baseW =
+          TAMANO_LIENZO *
+          ANCHO_IMAGEN_BASE *
+          (imagen.escalaX ?? imagen.escala ?? 1);
+        const baseH =
+          baseW *
+          (el.naturalHeight / el.naturalWidth) *
+          (imagen.escalaY ?? imagen.escala ?? 1);
+        const cx = (imagen.x / 100) * TAMANO_LIENZO;
+        const cy = (imagen.y / 100) * TAMANO_LIENZO;
 
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(((imagen.rotacion ?? 0) * Math.PI) / 180);
-      ctx.drawImage(el, -baseW / 2, -baseH / 2, baseW, baseH);
-      ctx.restore();
-    }
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(((imagen.rotacion ?? 0) * Math.PI) / 180);
+        ctx.drawImage(el, -baseW / 2, -baseH / 2, baseW, baseH);
+        ctx.restore();
+      }
 
     if (textoDiseno.trim()) {
+      // Asegura que la fuente web esté descargada antes de dibujar; si no,
+      // el canvas caería al fallback y la imagen guardada no coincidiría.
+      await cargarFuenteParaCanvas(fuenteTexto);
       ctx.save();
       ctx.translate(
         (posicionTexto.x / 100) * TAMANO_LIENZO,
@@ -301,7 +387,7 @@ function Personalizador() {
       ctx.rotate(((rotacionTexto ?? 0) * Math.PI) / 180);
       ctx.scale(escalaTexto ?? 1, escalaTexto ?? 1);
       ctx.fillStyle = colorTexto;
-      ctx.font = `600 ${Math.round(tamanoTexto * FACTOR_LIENZO)}px sans-serif`;
+      ctx.font = `600 ${Math.round(tamanoTexto * FACTOR_LIENZO)}px ${fuenteTexto}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(textoDiseno, 0, 0);
@@ -350,7 +436,7 @@ function Personalizador() {
           imagenes.length ? `Imágenes insertadas: ${imagenes.length}` : null,
           colorSeleccionado ? `Color elegido: ${colorSeleccionado}` : null,
           textoDiseno.trim()
-            ? `Texto: "${textoDiseno.trim()}" (${colorTexto}, ${tamanoTexto}px, posición ${Math.round(posicionTexto.x)}%,${Math.round(posicionTexto.y)}%)`
+            ? `Texto: "${textoDiseno.trim()}" (${colorTexto}, ${tamanoTexto}px, fuente ${buscarFuente(fuenteTexto)?.nombre ?? "Clásica"}, posición ${Math.round(posicionTexto.x)}%,${Math.round(posicionTexto.y)}%)`
             : null,
         ]
           .filter(Boolean)
@@ -377,6 +463,78 @@ function Personalizador() {
     }
   };
 
+  // Lienzo de edición: se reutiliza en el panel central y en el modo
+  // maximizado (pantalla completa del editor 2D).
+  const lienzoMockup = (
+    <PrendaMockup
+      tipo={selectedProduct}
+      cara={caraActiva}
+      color={colorSeleccionado}
+      imagenes={imagenesEnCaraActiva}
+      imagenActivaId={imagenActivaId}
+      onImagenChange={actualizarImagen}
+      onSeleccionarImagen={seleccionarImagen}
+      texto={caraActiva === "frente" ? textoDiseno : ""}
+      colorTexto={colorTexto}
+      fuenteTexto={fuenteTexto}
+      tamanoTexto={tamanoTexto}
+      posicionTexto={posicionTexto}
+      onPosicionTextoChange={setPosicionTexto}
+      rotacionTexto={rotacionTexto}
+      escalaTexto={escalaTexto}
+      onTextoTransformChange={handleTextoTransform}
+      textoActivo={textoActivo && caraActiva === "frente"}
+      onSeleccionarTexto={seleccionarTexto}
+    />
+  );
+
+  // Controles de zoom (+/-) y maximizar/minimizar del lienzo.
+  const controlZoom = (
+    <div className="flex items-center gap-1 rounded-xl border border-gray-300 bg-white p-1 shadow-sm dark:border-slate-600 dark:bg-slate-900">
+      <button
+        type="button"
+        onClick={() =>
+          setZoomLienzo((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))
+        }
+        aria-label="Alejar el lienzo"
+        className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800"
+      >
+        <FaMinus className="text-xs" />
+      </button>
+      <span className="w-12 text-center text-xs font-semibold text-gray-600 dark:text-slate-300">
+        {Math.round(zoomLienzo * 100)}%
+      </span>
+      <button
+        type="button"
+        onClick={() =>
+          setZoomLienzo((z) => Math.min(3, Math.round((z + 0.25) * 100) / 100))
+        }
+        aria-label="Acercar el lienzo"
+        className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800"
+      >
+        <FaPlus className="text-xs" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setLienzoMaximizado((m) => !m)}
+        aria-label={
+          lienzoMaximizado ? "Minimizar el lienzo" : "Maximizar el lienzo"
+        }
+        title={
+          lienzoMaximizado ? "Minimizar el lienzo" : "Maximizar el lienzo"
+        }
+        className="ml-1 flex h-7 w-7 items-center justify-center rounded-lg border-l border-gray-200 pl-1 text-gray-600 transition hover:bg-gray-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+      >
+        {lienzoMaximizado ? <FaCompress /> : <FaExpand />}
+      </button>
+    </div>
+  );
+
+  const carasProducto = CARAS_POR_TIPO[selectedProduct] ?? CARAS_CAMISETA;
+
+  const etiquetaCaraActiva =
+    carasProducto.find((cara) => cara.id === caraActiva)?.label ?? "";
+
   return (
     <>
       <section className="min-h-screen bg-gray-50 px-6 py-10 dark:bg-slate-950">
@@ -399,7 +557,10 @@ function Personalizador() {
           <div className="grid max-w-md grid-cols-2 gap-4">
             <button
               type="button"
-              onClick={() => setSelectedProduct("camiseta")}
+              onClick={() => {
+                setSelectedProduct("camiseta");
+                setCaraActiva("frente");
+              }}
               className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-5 transition ${
                 selectedProduct === "camiseta"
                   ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-200 dark:ring-cyan-500/40"
@@ -411,7 +572,10 @@ function Personalizador() {
             </button>
             <button
               type="button"
-              onClick={() => setSelectedProduct("mug")}
+              onClick={() => {
+                setSelectedProduct("mug");
+                setCaraActiva("frente");
+              }}
               className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-5 transition ${
                 selectedProduct === "mug"
                   ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-200 dark:ring-cyan-500/40"
@@ -473,10 +637,59 @@ function Personalizador() {
 
             {herramienta === "imagen" ? (
               <>
+                {/* Ubicación del estampado. La posición dentro de cada
+                    ubicación es libre, arrastrando en el mockup grande. */}
+                <>
+                  <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
+                    Ubicación del diseño
+                  </p>
+                  <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-gray-200 p-1 dark:border-slate-700">
+                    {carasProducto.map((cara) => (
+                      <button
+                        key={cara.id}
+                        type="button"
+                        onClick={() => setCaraActiva(cara.id)}
+                        className={`rounded-lg py-2 text-xs font-semibold transition ${
+                          caraActiva === cara.id
+                            ? "bg-indigo-600 text-white dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+                            : "text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        {cara.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+
                 {/* Subir imagen (varias a la vez) */}
                 <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
                   Subir imágenes
                 </p>
+
+                {/* Interruptor: recorte inteligente de fondo al subir */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={recorteInteligente}
+                  onClick={() => setRecorteInteligente((v) => !v)}
+                  className="mb-2 flex w-full items-center justify-between gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
+                >
+                  <span>Recortar fondo inteligente</span>
+                  <span
+                    className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                      recorteInteligente
+                        ? "bg-indigo-600 dark:bg-cyan-500"
+                        : "bg-gray-300 dark:bg-slate-600"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                        recorteInteligente ? "left-[18px]" : "left-0.5"
+                      }`}
+                    />
+                  </span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -571,21 +784,32 @@ function Personalizador() {
                       Imágenes ({imagenes.length})
                     </p>
                     <div className="mb-3 flex flex-wrap gap-2">
-                      {imagenes.map((img) => (
-                        <button
-                          key={img.id}
-                          type="button"
-                          onClick={() => setImagenActivaId(img.id)}
-                          title="Seleccionar imagen"
-                          className={`flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border-2 bg-gray-50 transition dark:bg-slate-800 ${
-                            img.id === imagenActivaId
-                              ? "border-indigo-500 dark:border-cyan-400"
-                              : "border-gray-200 hover:border-indigo-300 dark:border-slate-700"
-                          }`}
-                        >
-                          <img src={img.url} alt="Miniatura" className="max-h-full max-w-full object-contain" />
-                        </button>
-                      ))}
+                      {imagenes.map((img) => {
+                        const etiquetaCara = carasProducto.find(
+                          (cara) => cara.id === caraDe(img)
+                        )?.label;
+                        return (
+                          <button
+                            key={img.id}
+                            type="button"
+                            onClick={() => {
+                              setImagenActivaId(img.id);
+                              setCaraActiva(caraDe(img));
+                            }}
+                            title={`Ubicación: ${etiquetaCara ?? "Frente"}`}
+                            className={`flex h-16 w-14 flex-col items-center justify-center overflow-hidden rounded-lg border-2 bg-gray-50 transition dark:bg-slate-800 ${
+                              img.id === imagenActivaId
+                                ? "border-indigo-500 dark:border-cyan-400"
+                                : "border-gray-200 hover:border-indigo-300 dark:border-slate-700"
+                            }`}
+                          >
+                            <img src={img.url} alt="Miniatura" className="max-h-10 max-w-full object-contain" />
+                            <span className="w-full truncate px-0.5 text-center text-[9px] text-gray-400 dark:text-slate-500">
+                              {etiquetaCara ?? "Frente"}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
 
                     {imagenActiva && (
@@ -594,22 +818,60 @@ function Personalizador() {
                           Imagen seleccionada
                         </p>
 
+                        <>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                            Ubicación
+                          </label>
+                          <div className="grid grid-cols-2 gap-1">
+                            {carasProducto.map((cara) => (
+                              <button
+                                key={cara.id}
+                                type="button"
+                                onClick={() => {
+                                  actualizarImagen(imagenActiva.id, { cara: cara.id });
+                                  setCaraActiva(cara.id);
+                                }}
+                                className={`rounded-lg border py-1.5 text-[10px] font-semibold transition ${
+                                  caraDe(imagenActiva) === cara.id
+                                    ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
+                                    : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400"
+                                }`}
+                              >
+                                {cara.label}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+
                         <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
-                          Tamaño: {Math.round((imagenActiva.escala ?? 1) * 100)}%
+                          Tamaño:{" "}
+                          {Math.round(
+                            (imagenActiva.escalaX ?? imagenActiva.escala ?? 1) *
+                              100
+                          )}
+                          %
                         </label>
                         <input
                           type="range"
-                          min={0.2}
-                          max={3}
+                          min={ESCALA_MIN}
+                          max={ESCALA_MAX}
                           step={0.05}
-                          value={imagenActiva.escala ?? 1}
-                          onChange={(e) =>
-                            actualizarImagen(imagenActiva.id, {
-                              escala: Number(e.target.value),
-                            })
+                          value={
+                            imagenActiva.escalaX ?? imagenActiva.escala ?? 1
                           }
+                          onChange={(e) => {
+                            const valor = Number(e.target.value);
+                            actualizarImagen(imagenActiva.id, {
+                              escalaX: valor,
+                              escalaY: valor,
+                            });
+                          }}
                           className="w-full accent-indigo-600 dark:accent-cyan-500"
                         />
+                        <p className="text-[10px] text-gray-400 dark:text-slate-500">
+                          Para estirar el ancho o alto por separado, usa los
+                          puntos del marco en el lienzo.
+                        </p>
 
                         <div className="flex gap-2">
                           <button
@@ -687,6 +949,87 @@ function Personalizador() {
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 placeholder:text-gray-400 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
                 />
 
+                {/* Selector interactivo de tipografía */}
+                <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Fuente ({fuentesVisibles.length})
+                </label>
+
+                {/* Filtros por categoría */}
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {CATEGORIAS_FUENTE.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setFiltroFuente(cat.id)}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                        filtroFuente === cat.id
+                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
+                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400 dark:hover:border-cyan-500/50"
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tarjetas: cada una se dibuja con su propia tipografía para
+                    reconocerla de un vistazo; hover con elevación y borde. */}
+                <div className="grid max-h-48 grid-cols-2 gap-1.5 overflow-y-auto rounded-xl border border-gray-100 p-1.5 dark:border-slate-800">
+                  {fuentesVisibles.map((fuente) => {
+                    const activa = fuenteTexto === fuente.css;
+                    return (
+                      <button
+                        key={fuente.id}
+                        type="button"
+                        onClick={() => setFuenteTexto(fuente.css)}
+                        title={`Aplicar ${fuente.nombre}`}
+                        aria-pressed={activa}
+                        style={{ fontFamily: fuente.css }}
+                        className={`flex flex-col items-center justify-center rounded-lg border px-1 py-2 transition duration-150 hover:-translate-y-0.5 hover:shadow-md ${
+                          activa
+                            ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:ring-cyan-500/40"
+                            : "border-gray-200 bg-white hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-cyan-500/50"
+                        }`}
+                      >
+                        <span
+                          className={`truncate text-lg leading-tight ${
+                            activa
+                              ? "text-indigo-700 dark:text-cyan-300"
+                              : "text-gray-700 dark:text-slate-200"
+                          }`}
+                        >
+                          Aa
+                        </span>
+                        <span
+                          className={`w-full truncate text-center text-[9px] ${
+                            activa
+                              ? "font-semibold text-indigo-600 dark:text-cyan-400"
+                              : "text-gray-400 dark:text-slate-500"
+                          }`}
+                        >
+                          {fuente.nombre}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Vista previa en vivo del texto con la fuente y color elegidos */}
+                <div className="mt-2 flex min-h-[44px] items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50 p-2 dark:border-slate-700 dark:bg-slate-950">
+                  {textoDiseno.trim() ? (
+                    <span
+                      className="truncate text-xl leading-tight"
+                      style={{ fontFamily: fuenteTexto, color: colorTexto }}
+                    >
+                      {textoDiseno}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400 dark:text-slate-500">
+                      Escribe un texto para ver la vista previa
+                    </span>
+                  )}
+                </div>
+
                 <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
                   Color del texto
                 </label>
@@ -745,49 +1088,50 @@ function Personalizador() {
             )}
           </div>
 
-          {/* Zona de diseño (mockup del producto seleccionado) */}
-          <div className="relative flex min-h-[420px] flex-1 items-center justify-center rounded-2xl border border-gray-200 bg-gray-100 dark:border-slate-800 dark:bg-slate-900">
-            {hayDiseno && (
-              <button
-                type="button"
-                onClick={handleQuitarDiseno}
-                aria-label="Quitar diseño"
-                className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-sm transition hover:border-red-300 hover:text-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:text-red-400"
-              >
-                <FaTrash /> Quitar diseño
-              </button>
-            )}
+          {/* Zona de diseño: mockup editable (arrastrar, redimensionar y
+              rotar con react-moveable) de la ubicación activa, con zoom y
+              modo maximizado. Se oculta mientras está maximizado. */}
+          {!lienzoMaximizado && (
+            <div className="relative flex min-h-[540px] flex-1 flex-col rounded-2xl border border-gray-200 bg-gray-200 p-6 dark:border-slate-700 dark:bg-slate-800">
+              {hayDiseno && (
+                <button
+                  type="button"
+                  onClick={handleQuitarDiseno}
+                  aria-label="Quitar diseño"
+                  className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-sm transition hover:border-red-300 hover:text-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:text-red-400"
+                >
+                  <FaTrash /> Quitar diseño
+                </button>
+              )}
 
-            <div className="w-full max-w-[500px] p-2">
-              <PrendaMockup
-                tipo={selectedProduct}
-                color={colorSeleccionado}
-                imagenes={imagenes}
-                imagenActivaId={imagenActivaId}
-                onImagenChange={actualizarImagen}
-                onSeleccionarImagen={seleccionarImagen}
-                texto={textoDiseno}
-                colorTexto={colorTexto}
-                tamanoTexto={tamanoTexto}
-                posicionTexto={posicionTexto}
-                onPosicionTextoChange={setPosicionTexto}
-                rotacionTexto={rotacionTexto}
-                escalaTexto={escalaTexto}
-                onTextoTransformChange={handleTextoTransform}
-                textoActivo={textoActivo}
-                onSeleccionarTexto={seleccionarTexto}
-              />
+              <div className="absolute left-4 top-4 z-10">{controlZoom}</div>
+
+              <div className="flex flex-1 items-center justify-center overflow-auto rounded-xl">
+                <div
+                  className="min-w-[280px]"
+                  style={{ width: `${zoomLienzo * 100}%` }}
+                >
+                  {lienzoMockup}
+                </div>
+              </div>
+
+              <p className="pt-3 text-center text-xs text-gray-400 dark:text-slate-500">
+                Editando: {etiquetaCaraActiva}
+                {caraActiva.startsWith("manga") && " (incluye el costado)"}
+                {" · "}arrastra para mover, esquinas para escalar y rotar ·
+                usa − / + para acercar o alejar el lienzo
+              </p>
             </div>
-          </div>
+          )}
 
-          {/* Vista previa */}
+          {/* Vista previa 3D (rotable, con zoom) + acceso a pantalla completa */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 lg:w-[300px] lg:shrink-0">
             <h2 className="mb-4 text-sm font-semibold text-gray-500 dark:text-slate-400">
-              Vista previa
+              Vista previa 3D
             </h2>
 
             <div className="mb-4 flex items-center justify-center overflow-hidden rounded-xl bg-gray-100 p-4 dark:bg-slate-800">
-              <div className="relative h-64 w-full" style={{ aspectRatio: "220 / 260" }}>
+              <div className="relative h-80 w-full" style={{ aspectRatio: "220 / 260" }}>
                 <Prenda3D
                   key={selectedProduct}
                   tipo={selectedProduct}
@@ -795,8 +1139,11 @@ function Personalizador() {
                   imagenes={imagenes}
                   texto={textoDiseno}
                   colorTexto={colorTexto}
+                  fuenteTexto={fuenteTexto}
                   tamanoTexto={tamanoTexto}
                   posicionTexto={posicionTexto}
+                  rotacionTexto={rotacionTexto}
+                  escalaTexto={escalaTexto}
                 />
               </div>
             </div>
@@ -858,6 +1205,37 @@ function Personalizador() {
       </div>
       </section>
 
+      {/* Lienzo maximizado: pantalla completa del editor 2D */}
+      {lienzoMaximizado && (
+        <div className="fixed inset-0 z-40 flex flex-col bg-slate-950/95 backdrop-blur">
+          <div className="flex items-center justify-between px-6 py-4">
+            <h2 className="text-lg font-bold text-white">
+              Editando: {selectedProduct === "camiseta" ? etiquetaCaraActiva : `Mug · ${etiquetaCaraActiva}`}
+            </h2>
+            <div className="flex items-center gap-3">
+              {controlZoom}
+              <button
+                type="button"
+                onClick={() => setLienzoMaximizado(false)}
+                aria-label="Minimizar el lienzo"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white"
+              >
+                <FaTimes />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-1 items-center justify-center overflow-auto px-6 pb-6">
+            <div
+              className="min-w-[320px]"
+              style={{ width: `${zoomLienzo * 100}%` }}
+            >
+              {lienzoMockup}
+            </div>
+          </div>
+        </div>
+      )}
+
       {vista3DAbierta && (
         <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur">
           <div className="flex items-center justify-between px-6 py-4">
@@ -881,8 +1259,11 @@ function Personalizador() {
                 imagenes={imagenes}
                 texto={textoDiseno}
                 colorTexto={colorTexto}
+                fuenteTexto={fuenteTexto}
                 tamanoTexto={tamanoTexto}
                 posicionTexto={posicionTexto}
+                rotacionTexto={rotacionTexto}
+                escalaTexto={escalaTexto}
               />
             </div>
           </div>

@@ -5,7 +5,7 @@ function colorDistancia(r1, g1, b1, r2, g2, b2) {
   return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
 }
 
-export default async function procesarDiseno(url) {
+async function procesarDisenoInterno(url) {
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.src = url;
@@ -75,4 +75,29 @@ export default async function procesarDiseno(url) {
 
   ctx.putImageData(imageData, 0, 0);
   return { ok: true, dataUrl: canvas.toDataURL("image/png") };
+}
+
+// Caché por URL: el procesamiento (lectura de píxeles + inundación) es caro y
+// se repite en cada redibujado del editor 2D y de la textura 3D. Guardamos la
+// promesa para que varias llamadas simultáneas compartan el mismo resultado.
+const cacheProcesadas = new Map();
+const CACHE_MAXIMO = 60;
+
+export default function procesarDiseno(url) {
+  if (!url) return Promise.resolve({ ok: false, dataUrl: url });
+
+  const existente = cacheProcesadas.get(url);
+  if (existente) return existente;
+
+  const promesa = procesarDisenoInterno(url).catch(() => ({
+    ok: false,
+    dataUrl: url,
+  }));
+  cacheProcesadas.set(url, promesa);
+
+  // Evita crecer sin límite en sesiones largas.
+  if (cacheProcesadas.size > CACHE_MAXIMO) {
+    cacheProcesadas.delete(cacheProcesadas.keys().next().value);
+  }
+  return promesa;
 }

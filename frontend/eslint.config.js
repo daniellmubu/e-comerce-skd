@@ -18,4 +18,16 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // El visor 3D muta objetos imperativos de three.js (materiales, mapas de
+    // textura) dentro de efectos sobre un objeto preparado con useMemo. Ese
+    // patrón es el estándar en @react-three/fiber y choca con las reglas
+    // estrictas de inmutabilidad/refs de react-hooks, que no aplican a
+    // recursos externos al estado de React.
+    files: ['src/components/ui/Prenda3D.jsx'],
+    rules: {
+      'react-hooks/immutability': 'off',
+      'react-hooks/refs': 'off',
+    },
+  },
 ])

@@ -15,6 +15,7 @@ import MisCupones from "../pages/MisCupones";
 import MisFavoritos from "../pages/MisFavoritos";
 import DetalleProducto from "../pages/DetalleProducto";
 import SeguimientoPedido from "../pages/SeguimientoPedido";
+import Creditos from "../pages/Creditos";
 import RutaProtegida from "./RutaProtegida";
 
 function AppRoutes() {
@@ -35,6 +36,7 @@ function AppRoutes() {
       />
       <Route path="/generador" element={<Generador />} />
       <Route path="/personalizador" element={<Personalizador />} />
+      <Route path="/creditos" element={<Creditos />} />
       <Route
         path="/carrito"
         element={
