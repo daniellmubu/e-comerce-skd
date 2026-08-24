@@ -13,6 +13,8 @@ import CheckoutResultado from "../pages/CheckoutResultado";
 import MisPedidos from "../pages/MisPedidos";
 import MisCupones from "../pages/MisCupones";
 import MisFavoritos from "../pages/MisFavoritos";
+import SolicitarDiseno from "../pages/SolicitarDiseno";
+import PanelDisenador from "../pages/PanelDisenador";
 import DetalleProducto from "../pages/DetalleProducto";
 import SeguimientoPedido from "../pages/SeguimientoPedido";
 import Creditos from "../pages/Creditos";
@@ -82,6 +84,22 @@ function AppRoutes() {
         element={
           <RutaProtegida>
             <MisFavoritos />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/solicitar-diseno"
+        element={
+          <RutaProtegida>
+            <SolicitarDiseno />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/disenador"
+        element={
+          <RutaProtegida>
+            <PanelDisenador />
           </RutaProtegida>
         }
       />

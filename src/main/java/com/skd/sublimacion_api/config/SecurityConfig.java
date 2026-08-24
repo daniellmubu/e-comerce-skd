@@ -44,11 +44,12 @@ public class SecurityConfig {
                         // El enum Rol solo define admin y cliente (en minúsculas). getAuthorities()
                         // genera "ROLE_admin" / "ROLE_cliente", por eso se usa hasRole("admin")
                         // (en minúsculas) para proteger el panel administrativo.
+                        // Las solicitudes de diseño las atienden tanto el admin como el rol
+                        // disenador (regla específica antes de la de /api/admin/**).
+                        .requestMatchers("/api/admin/solicitudes-diseno/**").hasAnyRole("disenador", "admin")
                         .requestMatchers("/api/admin/**").hasRole("admin")
-                        // Pendiente: el rol DISENADOR no existe aun en el enum Rol, por lo que
-                        // esta regla no otorga acceso a nadie. Se ajustara cuando exista el
-                        // modulo de disenador (feature/generador-ia o ia-carrito-integracion).
-                        .requestMatchers("/api/disenador/**").hasAnyRole("DISENADOR", "ADMIN")
+                        // Endpoints del diseñador (por si el equipo lo separa en un módulo propio).
+                        .requestMatchers("/api/disenador/**").hasAnyRole("disenador", "admin")
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

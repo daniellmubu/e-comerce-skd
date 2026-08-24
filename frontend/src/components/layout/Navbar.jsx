@@ -55,6 +55,14 @@ function Navbar() {
           <Link to="/personalizador" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
             Diseña con IA
           </Link>
+          <Link to="/solicitar-diseno" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
+            Diseño asistido
+          </Link>
+          {(usuario?.rol === "admin" || usuario?.rol === "disenador") && (
+            <Link to="/disenador" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
+              Panel diseñador
+            </Link>
+          )}
         </div>
 
         <div className="ml-auto flex items-center gap-3">
