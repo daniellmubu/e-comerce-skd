@@ -1,8 +1,10 @@
 package com.skd.sublimacion_api.config;
 
 import com.skd.sublimacion_api.entity.Pedido;
+import com.skd.sublimacion_api.entity.SolicitudDiseno;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.repository.PedidoRepository;
+import com.skd.sublimacion_api.repository.SolicitudDisenoRepository;
 import com.skd.sublimacion_api.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.Ordered;
@@ -27,6 +29,7 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
     private final PedidoRepository pedidoRepository;
+    private final SolicitudDisenoRepository solicitudDisenoRepository;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -85,22 +88,39 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
 
         String destino = accessor.getDestination();
 
-        if (destino == null || !destino.matches("^/topic/pedidos/\\d+$")) {
+        if (destino == null) {
             return;
         }
 
-        Long pedidoId = Long.parseLong(destino.substring(destino.lastIndexOf('/') + 1));
+        Usuario usuario = usuarioAutenticado(accessor);
 
+        if (destino.matches("^/topic/pedidos/\\d+$")) {
+            Long pedidoId = Long.parseLong(destino.substring(destino.lastIndexOf('/') + 1));
+            Pedido pedido = pedidoRepository.findById(pedidoId)
+                    .orElseThrow(() -> new AccessDeniedException("El pedido no existe"));
+
+            if (!pedido.getUsuario().getId().equals(usuario.getId())) {
+                throw new AccessDeniedException("No tienes permiso para suscribirte a este pedido");
+            }
+            return;
+        }
+
+        if (destino.matches("^/topic/solicitudes/\\d+$")) {
+            Long solicitudId = Long.parseLong(destino.substring(destino.lastIndexOf('/') + 1));
+            SolicitudDiseno solicitud = solicitudDisenoRepository.findById(solicitudId)
+                    .orElseThrow(() -> new AccessDeniedException("La solicitud no existe"));
+
+            if (!solicitud.getUsuario().getId().equals(usuario.getId())) {
+                throw new AccessDeniedException("No tienes permiso para suscribirte a esta solicitud");
+            }
+        }
+    }
+
+    private Usuario usuarioAutenticado(StompHeaderAccessor accessor) {
         if (!(accessor.getUser() instanceof UsernamePasswordAuthenticationToken auth)
                 || !(auth.getPrincipal() instanceof Usuario usuario)) {
             throw new AccessDeniedException("Sesión no autenticada");
         }
-
-        Pedido pedido = pedidoRepository.findById(pedidoId)
-                .orElseThrow(() -> new AccessDeniedException("El pedido no existe"));
-
-        if (!pedido.getUsuario().getId().equals(usuario.getId())) {
-            throw new AccessDeniedException("No tienes permiso para suscribirte a este pedido");
-        }
+        return usuario;
     }
 }
