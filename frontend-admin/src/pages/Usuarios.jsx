@@ -46,6 +46,7 @@ const FILTROS_INICIALES = {
 
 const ROL_VARIANT = {
   admin: "violet",
+  disenador: "amber",
   cliente: "cyan",
 };
 
@@ -240,6 +241,7 @@ function Usuarios() {
           placeholder="Todos los roles"
           options={[
             { value: "admin", label: "Admin" },
+            { value: "disenador", label: "Diseñador" },
             { value: "cliente", label: "Cliente" },
           ]}
           value={filtros.rol}
@@ -455,6 +457,7 @@ function Usuarios() {
               label="Rol"
               options={[
                 { value: "cliente", label: "Cliente" },
+                { value: "disenador", label: "Diseñador" },
                 { value: "admin", label: "Administrador" },
               ]}
               value={form.rol}
@@ -476,7 +479,7 @@ function Usuarios() {
           {editando && esMiPerfil(editando) && (
             <p className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
               Cuidado: estás editando tu propio usuario. Cambiar tu rol a
-              "cliente" te quitaría el acceso al panel.
+              "cliente" o "diseñador" te quitaría el acceso al panel.
             </p>
           )}
 

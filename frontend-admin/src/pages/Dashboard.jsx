@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  FaUsers,
+  FaCalendarAlt,
+  FaCalendarDay,
+  FaCalendarWeek,
+  FaChartBar,
+  FaClock,
+  FaTrophy,
+  FaShoppingBag,
   FaBoxOpen,
   FaClipboardList,
-  FaDollarSign,
-  FaTrophy,
-  FaClock,
-  FaCheckCircle,
-  FaTimesCircle,
-  FaReceipt,
-  FaChartBar,
-  FaShoppingBag,
 } from "react-icons/fa";
 
 import Badge from "../components/Badge";
@@ -19,10 +17,9 @@ import BarChart from "../components/BarChart";
 import Loading from "../components/Loading";
 import { getErrorMessage } from "../api/axios";
 import {
+  obtenerVentas,
   obtenerResumen,
   obtenerProductosMasVendidos,
-  obtenerVentasPorPeriodo,
-  obtenerResumenEstadisticas,
 } from "../api/dashboardApi";
 import { listarPedidos } from "../api/pedidosApi";
 import { formatPrice, formatFecha, capitalizar } from "../utils/formato";
@@ -35,25 +32,59 @@ const ESTADO_VARIANT = {
   cancelado: "red",
 };
 
-const TARJETAS_PRINCIPALES = [
-  { key: "totalUsuarios", label: "Usuarios", icon: FaUsers, enlace: "/usuarios" },
-  { key: "totalProductos", label: "Productos", icon: FaBoxOpen, enlace: "/productos" },
-  { key: "totalPedidos", label: "Pedidos", icon: FaShoppingBag, enlace: "/pedidos" },
-  { key: "ventasTotales", label: "Ventas totales", icon: FaDollarSign, moneda: true },
+const PERIODOS = [
+  { id: "anual", label: "Anual", icon: FaCalendarAlt },
+  { id: "mensual", label: "Mensual", icon: FaCalendarDay },
+  { id: "semanal", label: "Semanal", icon: FaCalendarWeek },
 ];
 
-const TARJETAS_ESTADO = [
-  { key: "pedidosPendientes", label: "Pendientes", icon: FaClock, variant: "amber" },
-  { key: "pedidosCompletados", label: "Completados", icon: FaCheckCircle, variant: "green" },
-  { key: "pedidosCancelados", label: "Cancelados", icon: FaTimesCircle, variant: "red" },
+const TITULOS_GRAFICO = {
+  anual: "Ventas anuales",
+  mensual: "Ventas mensuales",
+  semanal: "Ventas semanales",
+};
+
+const TARJETAS_VENTAS = [
+  {
+    key: "ventasAnioActual",
+    label: "Ventas anuales",
+    icon: FaCalendarAlt,
+    color: "from-indigo-600 to-violet-600",
+  },
+  {
+    key: "ventasMesActual",
+    label: "Ventas mensuales",
+    icon: FaCalendarDay,
+    color: "from-cyan-500 to-blue-600",
+  },
+  {
+    key: "ventasSemanaActual",
+    label: "Ventas semanales",
+    icon: FaCalendarWeek,
+    color: "from-amber-500 to-orange-600",
+  },
 ];
+
+function formatearEtiqueta(periodo, tipo) {
+  if (!periodo) return "";
+  if (tipo === "anual") return String(periodo);
+  if (tipo === "semanal") {
+    const semana = String(periodo).split("-").pop();
+    return `S${semana}`;
+  }
+  const [anio, mes] = String(periodo).split("-");
+  const nombreMes = new Date(Number(anio), Number(mes) - 1, 1).toLocaleDateString("es-CO", {
+    month: "short",
+  });
+  return `${nombreMes} ${String(anio).slice(2)}`;
+}
 
 function Dashboard() {
+  const [ventas, setVentas] = useState(null);
   const [resumen, setResumen] = useState(null);
-  const [estadisticas, setEstadisticas] = useState(null);
-  const [ventasPeriodo, setVentasPeriodo] = useState([]);
-  const [topProductos, setTopProductos] = useState([]);
-  const [pedidosRecientes, setPedidosRecientes] = useState([]);
+  const [topProducto, setTopProducto] = useState(null);
+  const [pendientes, setPendientes] = useState([]);
+  const [periodoActivo, setPeriodoActivo] = useState("anual");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -61,20 +92,21 @@ function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [datosResumen, datosEstadisticas, datosVentas, datosTop, datosPedidos] =
-        await Promise.all([
-          obtenerResumen(),
-          obtenerResumenEstadisticas(),
-          obtenerVentasPorPeriodo(),
-          obtenerProductosMasVendidos(5),
-          listarPedidos({ size: 5, sort: "id,desc" }),
-        ]);
+      const [datosVentas, datosResumen, datosTop, datosPedidos] = await Promise.all([
+        obtenerVentas(),
+        obtenerResumen(),
+        obtenerProductosMasVendidos(1),
+        listarPedidos({ size: 50, sort: "id,desc" }),
+      ]);
 
+      setVentas(datosVentas);
       setResumen(datosResumen);
-      setEstadisticas(datosEstadisticas);
-      setVentasPeriodo(datosVentas);
-      setTopProductos(datosTop);
-      setPedidosRecientes(datosPedidos?.content ?? []);
+      setTopProducto(datosTop?.[0] ?? null);
+
+      const pendientesFiltrados = (datosPedidos?.content ?? []).filter(
+        (p) => p.estado === "recibido" || p.estado === "disenando"
+      );
+      setPendientes(pendientesFiltrados.slice(0, 5));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -86,8 +118,9 @@ function Dashboard() {
     cargar();
   }, [cargar]);
 
-  const datosGrafico = ventasPeriodo.map((v) => ({
-    label: v.periodo,
+  const serieActiva = ventas?.[periodoActivo] ?? [];
+  const datosGrafico = serieActiva.map((v) => ({
+    label: formatearEtiqueta(v.periodo, periodoActivo),
     valor: Number(v.total ?? 0),
   }));
 
@@ -110,121 +143,83 @@ function Dashboard() {
         </div>
       ) : (
         <>
-          {/* Tarjetas principales */}
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {TARJETAS_PRINCIPALES.map(({ key, label, icon: Icon, moneda, enlace }) => {
-              const contenido = (
-                <>
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-xl text-white dark:bg-gradient-to-br dark:from-cyan-500 dark:to-violet-600">
-                      <Icon />
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500 dark:text-slate-400">
-                        {label}
-                      </p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                        {moneda
-                          ? formatPrice(resumen?.[key])
-                          : Number(resumen?.[key] ?? 0).toLocaleString("es-CO")}
-                      </p>
-                    </div>
-                  </div>
-                </>
-              );
-
-              return enlace ? (
-                <Link
-                  key={key}
-                  to={enlace}
-                  className="rounded-2xl border border-gray-200 bg-white p-6 transition hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-cyan-400/50"
-                >
-                  {contenido}
-                </Link>
-              ) : (
-                <div
-                  key={key}
-                  className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60"
-                >
-                  {contenido}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Tarjetas de estado + ticket promedio */}
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {TARJETAS_ESTADO.map(({ key, label, icon: Icon, variant }) => (
+          {/* Ventas anuales, mensuales y semanales (balance del periodo actual) */}
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            {TARJETAS_VENTAS.map(({ key, label, icon: Icon, color }) => (
               <div
                 key={key}
-                className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900/60"
+                className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60"
               >
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-slate-400">
-                    {label}
-                  </p>
-                  <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
-                    {Number(resumen?.[key] ?? 0).toLocaleString("es-CO")}
-                  </p>
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${color} text-xl text-white`}
+                  >
+                    <Icon />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-slate-400">{label}</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {formatPrice(ventas?.[key])}
+                    </p>
+                  </div>
                 </div>
-                <Badge variant={variant}>
-                  <Icon />
-                </Badge>
               </div>
             ))}
-
-            <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900/60">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-slate-400">
-                  Ticket promedio
-                </p>
-                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
-                  {formatPrice(estadisticas?.ticketPromedio)}
-                </p>
-              </div>
-              <Badge variant="violet">
-                <FaReceipt />
-              </Badge>
-            </div>
           </div>
 
-          {/* Gráfico de ventas por periodo */}
+          {/* Gráfico de ventas con balance anual / mensual / semanal */}
           <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60">
-            <div className="mb-6 flex items-center gap-2">
-              <FaChartBar className="text-indigo-500 dark:text-cyan-400" />
-              <h2 className="font-semibold text-gray-900 dark:text-white">
-                Ventas por mes
-              </h2>
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FaChartBar className="text-indigo-500 dark:text-cyan-400" />
+                <h2 className="font-semibold text-gray-900 dark:text-white">
+                  {TITULOS_GRAFICO[periodoActivo]}
+                </h2>
+              </div>
+              <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-slate-800 dark:bg-slate-800/60">
+                {PERIODOS.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setPeriodoActivo(id)}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                      periodoActivo === id
+                        ? "bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-cyan-400"
+                        : "text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-white"
+                    }`}
+                  >
+                    <Icon />
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <BarChart datos={datosGrafico} alto={220} />
+            <BarChart datos={datosGrafico} alto={240} />
           </div>
 
-          {/* Pedidos recientes + productos más vendidos */}
+          {/* Pedidos pendientes + producto más vendido */}
           <div className="grid gap-6 xl:grid-cols-2">
-            {/* Pedidos recientes */}
+            {/* Pedidos pendientes */}
             <div className="rounded-2xl border border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900/60">
               <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-slate-800">
                 <div className="flex items-center gap-2">
-                  <FaShoppingBag className="text-indigo-500 dark:text-cyan-400" />
+                  <FaClock className="text-amber-500" />
                   <h2 className="font-semibold text-gray-900 dark:text-white">
-                    Pedidos recientes
+                    Pedidos pendientes
                   </h2>
                 </div>
-                <Link
-                  to="/pedidos"
-                  className="text-sm text-indigo-600 hover:underline dark:text-cyan-400"
-                >
-                  Ver todos
-                </Link>
+                <Badge variant="amber">
+                  {Number(resumen?.pedidosPendientes ?? 0).toLocaleString("es-CO")}
+                </Badge>
               </div>
 
-              {pedidosRecientes.length === 0 ? (
+              {pendientes.length === 0 ? (
                 <p className="px-6 py-12 text-center text-sm text-gray-500 dark:text-slate-400">
-                  No hay pedidos registrados.
+                  No hay pedidos pendientes.
                 </p>
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-slate-800">
-                  {pedidosRecientes.map((pedido) => (
+                  {pendientes.map((pedido) => (
                     <div
                       key={pedido.id}
                       className="flex items-center justify-between gap-3 px-6 py-4"
@@ -249,46 +244,66 @@ function Dashboard() {
                   ))}
                 </div>
               )}
+
+              <div className="border-t border-gray-100 px-6 py-3 dark:border-slate-800">
+                <Link
+                  to="/pedidos"
+                  className="text-sm text-indigo-600 hover:underline dark:text-cyan-400"
+                >
+                  Ver todos los pedidos
+                </Link>
+              </div>
             </div>
 
-            {/* Productos más vendidos */}
+            {/* Producto más vendido */}
             <div className="rounded-2xl border border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900/60">
               <div className="flex items-center gap-2 border-b border-gray-200 px-6 py-4 dark:border-slate-800">
                 <FaTrophy className="text-amber-500" />
                 <h2 className="font-semibold text-gray-900 dark:text-white">
-                  Productos más vendidos
+                  Producto más vendido
                 </h2>
               </div>
 
-              {topProductos.length === 0 ? (
-                <p className="px-6 py-12 text-center text-sm text-gray-500 dark:text-slate-400">
-                  Aún no hay ventas registradas.
-                </p>
+              {!topProducto ? (
+                <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+                  <FaBoxOpen className="text-4xl text-gray-300 dark:text-slate-600" />
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    Aún no hay ventas registradas.
+                  </p>
+                </div>
               ) : (
-                <div className="divide-y divide-gray-100 dark:divide-slate-800">
-                  {topProductos.map((item, index) => (
-                    <div
-                      key={item.productoId}
-                      className="flex items-center justify-between gap-3 px-6 py-4"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-sm font-bold text-indigo-600 dark:bg-cyan-500/10 dark:text-cyan-300">
-                          {index + 1}
-                        </span>
-                        <p className="truncate font-semibold text-gray-900 dark:text-white">
-                          {item.producto}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-gray-900 dark:text-white">
-                          {formatPrice(item.ingresoTotal)}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-slate-400">
-                          {item.unidadesVendidas} uds
-                        </p>
-                      </div>
+                <div className="flex flex-col items-center gap-4 px-6 py-8 text-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-2xl text-white shadow-lg shadow-amber-500/20">
+                    <FaTrophy />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="flex items-center justify-center gap-2 text-xs font-medium uppercase tracking-wide text-amber-500">
+                      <FaShoppingBag />
+                      #1 más vendido
+                    </p>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                      {topProducto.producto}
+                    </h3>
+                  </div>
+                  <div className="flex w-full max-w-sm items-center justify-center gap-6 rounded-2xl border border-gray-100 bg-gray-50 px-6 py-4 dark:border-slate-800 dark:bg-slate-800/40">
+                    <div className="text-center">
+                      <p className="text-sm text-gray-500 dark:text-slate-400">Unidades</p>
+                      <p className="text-xl font-bold text-gray-900 dark:text-white">
+                        {Number(topProducto.unidadesVendidas ?? 0).toLocaleString("es-CO")}
+                      </p>
                     </div>
-                  ))}
+                    <div className="h-10 w-px bg-gray-200 dark:bg-slate-700" />
+                    <div className="text-center">
+                      <p className="text-sm text-gray-500 dark:text-slate-400">Ingresos</p>
+                      <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                        {formatPrice(topProducto.ingresoTotal)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-slate-500">
+                    <FaClipboardList />
+                    Más vendido según unidades vendidas
+                  </div>
                 </div>
               )}
             </div>

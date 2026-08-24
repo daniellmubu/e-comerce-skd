@@ -18,9 +18,9 @@ function BarChart({ datos = [], alto = 220 }) {
 
   return (
     <div className="flex items-end gap-2" style={{ height: alto }}>
-      {datos.map((d) => (
+      {datos.map((d, index) => (
         <div
-          key={d.label}
+          key={`${d.label}-${index}`}
           className="group flex h-full flex-1 flex-col justify-end"
         >
           <div

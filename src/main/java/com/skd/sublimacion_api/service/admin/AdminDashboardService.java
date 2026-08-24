@@ -1,5 +1,6 @@
 package com.skd.sublimacion_api.service.admin;
 
+import com.skd.sublimacion_api.dto.dashboard.DashboardVentasResponse;
 import com.skd.sublimacion_api.dto.dashboard.ProductoMasVendidoResponse;
 import com.skd.sublimacion_api.dto.dashboard.ResumenDashboardResponse;
 import com.skd.sublimacion_api.dto.dashboard.VentaPeriodoResponse;
@@ -13,4 +14,6 @@ public interface AdminDashboardService {
     List<ProductoMasVendidoResponse> productosMasVendidos(int limite);
 
     List<VentaPeriodoResponse> ventasPorPeriodo();
+
+    DashboardVentasResponse ventas();
 }

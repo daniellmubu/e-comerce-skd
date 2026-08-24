@@ -45,7 +45,7 @@ export async function desbloquearUsuario(id) {
   await api.patch(`/admin/usuarios/${id}/desbloquear`);
 }
 
-// Body: { rol: "admin" | "cliente" }
+// Body: { rol: "admin" | "disenador" | "cliente" }
 export async function cambiarRolUsuario(id, rol) {
   await api.patch(`/admin/usuarios/${id}/rol`, { rol });
 }

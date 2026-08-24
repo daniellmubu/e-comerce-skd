@@ -1,6 +1,7 @@
 package com.skd.sublimacion_api.service.admin;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,4 +29,6 @@ public interface AdminProductoService {
     void restaurar(Long id);
 
     void eliminar(Long id);
+
+    int ajustarPrecioPorPorcentaje(List<Long> ids, BigDecimal porcentaje);
 }

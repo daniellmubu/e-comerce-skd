@@ -1,5 +1,6 @@
 package com.skd.sublimacion_api.controller.admin;
 
+import com.skd.sublimacion_api.dto.dashboard.DashboardVentasResponse;
 import com.skd.sublimacion_api.dto.dashboard.ProductoMasVendidoResponse;
 import com.skd.sublimacion_api.dto.dashboard.ResumenDashboardResponse;
 import com.skd.sublimacion_api.dto.dashboard.VentaPeriodoResponse;
@@ -66,5 +67,17 @@ public class AdminDashboardController {
     @GetMapping("/ventas-por-periodo")
     public List<VentaPeriodoResponse> ventasPorPeriodo() {
         return adminDashboardService.ventasPorPeriodo();
+    }
+
+    @Operation(
+        summary = "Ventas por periodos",
+        description = "Ventas agrupadas por año, mes y semana, más los totales del periodo actual."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Datos obtenidos correctamente")
+    })
+    @GetMapping("/ventas")
+    public DashboardVentasResponse ventas() {
+        return adminDashboardService.ventas();
     }
 }

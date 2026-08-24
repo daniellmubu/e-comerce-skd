@@ -44,3 +44,14 @@ export async function eliminarProducto(id) {
 export async function restaurarProducto(id) {
   await api.patch(`/admin/productos/${id}/restaurar`);
 }
+
+// Ajusta el precio de varios productos aplicando un porcentaje.
+// Body: { ids: number[], porcentaje: number }
+// Respuesta: { actualizados: number, porcentaje: number }
+export async function ajustarPrecios(ids, porcentaje) {
+  const { data } = await api.patch("/admin/productos/precios", {
+    ids,
+    porcentaje,
+  });
+  return data;
+}

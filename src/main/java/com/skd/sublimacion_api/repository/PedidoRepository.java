@@ -33,6 +33,20 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
            "GROUP BY FUNCTION('to_char', p.creadoEn, 'YYYY-MM') ORDER BY periodo")
     List<Object[]> ventasPorPeriodo();
 
+    @Query("SELECT FUNCTION('to_char', p.creadoEn, 'YYYY') AS anio, SUM(p.total) AS total " +
+           "FROM Pedido p WHERE p.estado <> 'cancelado' " +
+           "GROUP BY FUNCTION('to_char', p.creadoEn, 'YYYY') ORDER BY anio")
+    List<Object[]> ventasPorAnio();
+
+    @Query("SELECT FUNCTION('to_char', p.creadoEn, 'IYYY-IW') AS semana, SUM(p.total) AS total " +
+           "FROM Pedido p WHERE p.estado <> 'cancelado' " +
+           "GROUP BY FUNCTION('to_char', p.creadoEn, 'IYYY-IW') ORDER BY semana")
+    List<Object[]> ventasPorSemana();
+
+    @Query("SELECT COALESCE(SUM(p.total), 0) FROM Pedido p " +
+           "WHERE p.estado <> 'cancelado' AND p.creadoEn >= :desde")
+    BigDecimal sumVentasDesde(LocalDateTime desde);
+
     @Query("SELECT FUNCTION('to_char', p.creadoEn, 'YYYY-MM-DD') AS dia, COALESCE(SUM(p.total), 0) " +
            "FROM Pedido p JOIN Pago pag ON pag.pedido = p " +
            "WHERE pag.estado = 'aprobado' AND p.creadoEn >= :desde AND p.creadoEn < :hastaExclusivo " +

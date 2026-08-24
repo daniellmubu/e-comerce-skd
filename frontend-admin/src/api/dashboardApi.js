@@ -23,6 +23,14 @@ export async function obtenerVentasPorPeriodo() {
   return data;
 }
 
+// Ventas por periodos: { anual: [{ periodo: "2026", total }], mensual: [...],
+//   semanal: [{ periodo: "2026-34", total }], ventasAnioActual, ventasMesActual,
+//   ventasSemanaActual }
+export async function obtenerVentas() {
+  const { data } = await api.get("/admin/dashboard/ventas");
+  return data;
+}
+
 // ---- Estadísticas (GET /api/admin/estadisticas, solo pagos aprobados) ----
 
 // Resumen de estadísticas: { ingresosTotales, totalPedidos, ticketPromedio }

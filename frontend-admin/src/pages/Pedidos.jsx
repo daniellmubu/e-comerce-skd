@@ -5,6 +5,7 @@ import {
   FaSave,
   FaSearch,
   FaPalette,
+  FaImage,
 } from "react-icons/fa";
 
 import Badge from "../components/Badge";
@@ -52,6 +53,8 @@ function Pedidos() {
   const [nuevoEstado, setNuevoEstado] = useState("");
   const [guardandoEstado, setGuardandoEstado] = useState(false);
   const [detalleError, setDetalleError] = useState(null);
+  // URL del diseño a ampliar en la vista previa
+  const [imagenEnVista, setImagenEnVista] = useState(null);
 
   const cargar = useCallback(
     async (pagina = page, tamanio = size, filtros = filtrosAplicados) => {
@@ -319,9 +322,27 @@ function Pedidos() {
                 {detalle.items?.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between gap-3 px-4 py-3"
+                    className="flex items-center gap-3 px-4 py-3"
                   >
-                    <div className="min-w-0">
+                    {item.imagenDisenoUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => setImagenEnVista(item.imagenDisenoUrl)}
+                        title="Ver diseño"
+                        className="shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-white transition hover:opacity-80 dark:border-slate-700 dark:bg-slate-800"
+                      >
+                        <img
+                          src={item.imagenDisenoUrl}
+                          alt={`Diseño de ${item.producto}`}
+                          className="h-14 w-14 object-contain"
+                        />
+                      </button>
+                    ) : (
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-dashed border-gray-300 text-gray-300 dark:border-slate-700 dark:text-slate-600">
+                        <FaImage />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-gray-900 dark:text-white">
                         {item.producto}
                       </p>
@@ -330,7 +351,7 @@ function Pedidos() {
                       </p>
                       {item.imagenDisenoUrl && (
                         <p className="mt-1 flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400">
-                          <FaPalette /> Con diseño personalizado
+                          <FaPalette /> Diseño personalizado
                         </p>
                       )}
                     </div>
@@ -398,6 +419,29 @@ function Pedidos() {
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      {/* Modal vista previa de diseño */}
+      <Modal
+        isOpen={!!imagenEnVista}
+        onClose={() => setImagenEnVista(null)}
+        title="Diseño del pedido"
+        size="xl"
+        footer={
+          <Button variant="outline" onClick={() => setImagenEnVista(null)}>
+            Cerrar
+          </Button>
+        }
+      >
+        {imagenEnVista && (
+          <div className="flex justify-center">
+            <img
+              src={imagenEnVista}
+              alt="Diseño del pedido"
+              className="max-h-[70vh] w-auto rounded-xl border border-gray-200 bg-white object-contain dark:border-slate-700 dark:bg-slate-800"
+            />
+          </div>
+        )}
       </Modal>
     </div>
   );

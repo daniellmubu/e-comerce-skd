@@ -1,5 +1,6 @@
 package com.skd.sublimacion_api.service.impl.admin;
 
+import com.skd.sublimacion_api.dto.dashboard.DashboardVentasResponse;
 import com.skd.sublimacion_api.dto.dashboard.ProductoMasVendidoResponse;
 import com.skd.sublimacion_api.dto.dashboard.ResumenDashboardResponse;
 import com.skd.sublimacion_api.dto.dashboard.VentaPeriodoResponse;
@@ -13,6 +14,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -68,8 +71,26 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
 
     @Override
     public List<VentaPeriodoResponse> ventasPorPeriodo() {
+        return mapearPeriodos(pedidoRepository.ventasPorPeriodo());
+    }
 
-        List<Object[]> filas = pedidoRepository.ventasPorPeriodo();
+    @Override
+    public DashboardVentasResponse ventas() {
+
+        LocalDate hoy = LocalDate.now();
+
+        return DashboardVentasResponse.builder()
+                .anual(mapearPeriodos(pedidoRepository.ventasPorAnio()))
+                .mensual(mapearPeriodos(pedidoRepository.ventasPorPeriodo()))
+                .semanal(mapearPeriodos(pedidoRepository.ventasPorSemana()))
+                .ventasAnioActual(pedidoRepository.sumVentasDesde(hoy.withDayOfYear(1).atStartOfDay()))
+                .ventasMesActual(pedidoRepository.sumVentasDesde(hoy.withDayOfMonth(1).atStartOfDay()))
+                .ventasSemanaActual(pedidoRepository.sumVentasDesde(
+                        hoy.with(DayOfWeek.MONDAY).atStartOfDay()))
+                .build();
+    }
+
+    private List<VentaPeriodoResponse> mapearPeriodos(List<Object[]> filas) {
 
         List<VentaPeriodoResponse> resultado = new ArrayList<>();
 

@@ -9,10 +9,13 @@ import com.skd.sublimacion_api.service.admin.AdminProductoService;
 import lombok.RequiredArgsConstructor;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.data.jpa.domain.Specification;
 
@@ -109,6 +112,47 @@ public class AdminProductoServiceImpl implements AdminProductoService {
                 producto.setActivo(true);
 
                 productoRepository.save(producto);
+        }
+
+        @Override
+        @Transactional
+        public int ajustarPrecioPorPorcentaje(List<Long> ids, BigDecimal porcentaje) {
+
+                if (ids == null || ids.isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "Debe seleccionar al menos un producto");
+                }
+
+                if (porcentaje == null) {
+                        throw new IllegalArgumentException(
+                                "El porcentaje es obligatorio");
+                }
+
+                if (porcentaje.compareTo(BigDecimal.valueOf(-100)) < 0) {
+                        throw new IllegalArgumentException(
+                                "El porcentaje no puede ser menor a -100");
+                }
+
+                List<Producto> productos = productoRepository.findAllById(ids);
+
+                if (productos.isEmpty()) {
+                        throw new ResourceNotFoundException(
+                                "No se encontraron productos con los ids seleccionados");
+                }
+
+                BigDecimal factor = BigDecimal.ONE
+                        .add(porcentaje.divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP));
+
+                for (Producto producto : productos) {
+                        BigDecimal nuevoPrecio = producto.getPrecio()
+                                .multiply(factor)
+                                .setScale(2, RoundingMode.HALF_UP);
+                        producto.setPrecio(nuevoPrecio);
+                }
+
+                productoRepository.saveAll(productos);
+
+                return productos.size();
         }
 
         private Producto buscarProducto(Long id) {

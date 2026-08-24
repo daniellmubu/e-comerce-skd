@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   FaPlus,
   FaEdit,
@@ -6,6 +6,8 @@ import {
   FaUndo,
   FaSearch,
   FaBoxOpen,
+  FaPercent,
+  FaCheckSquare,
 } from "react-icons/fa";
 
 import Badge from "../components/Badge";
@@ -24,6 +26,7 @@ import {
   actualizarProducto,
   eliminarProducto,
   restaurarProducto,
+  ajustarPrecios,
 } from "../api/productosApi";
 import { listarCategorias } from "../api/categoriasApi";
 import { formatPrice } from "../utils/formato";
@@ -45,6 +48,19 @@ const FILTROS_INICIALES = {
   precioMin: "",
   precioMax: "",
 };
+
+// Construye los parámetros de consulta para listarProductos.
+function construirParams(filtros, pagina, tamanio) {
+  return {
+    page: pagina,
+    size: tamanio,
+    nombre: filtros.search.trim() || undefined,
+    categoriaId: filtros.categoriaId || undefined,
+    activo: filtros.activo === "" ? undefined : filtros.activo === "true",
+    precioMin: filtros.precioMin || undefined,
+    precioMax: filtros.precioMax || undefined,
+  };
+}
 
 function Productos() {
   const [data, setData] = useState(null);
@@ -70,6 +86,15 @@ function Productos() {
   const [eliminando, setEliminando] = useState(null);
   const [eliminandoLoading, setEliminandoLoading] = useState(false);
 
+  // Ajuste de precios en lote
+  const [seleccionados, setSeleccionados] = useState(new Set());
+  const [modalPrecioAbierto, setModalPrecioAbierto] = useState(false);
+  const [porcentaje, setPorcentaje] = useState("");
+  const [guardandoPrecio, setGuardandoPrecio] = useState(false);
+  const [errorPrecio, setErrorPrecio] = useState(null);
+  const [mensajePrecio, setMensajePrecio] = useState(null);
+  const checkSeleccionRef = useRef(null);
+
   // Carga las categorías para el select del formulario y del filtro.
   const cargarCategorias = useCallback(async () => {
     try {
@@ -85,15 +110,9 @@ function Productos() {
       setLoading(true);
       setError(null);
       try {
-        const resultado = await listarProductos({
-          page: pagina,
-          size: tamanio,
-          nombre: filtrosActuales.search.trim() || undefined,
-          categoriaId: filtrosActuales.categoriaId || undefined,
-          activo: filtrosActuales.activo === "" ? undefined : filtrosActuales.activo === "true",
-          precioMin: filtrosActuales.precioMin || undefined,
-          precioMax: filtrosActuales.precioMax || undefined,
-        });
+        const resultado = await listarProductos(
+          construirParams(filtrosActuales, pagina, tamanio)
+        );
         setData(resultado);
       } catch (err) {
         setError(getErrorMessage(err));
@@ -115,12 +134,14 @@ function Productos() {
   const aplicarFiltros = () => {
     setFiltrosAplicados(filtros);
     setPage(0);
+    limpiarSeleccion();
   };
 
   const limpiarFiltros = () => {
     setFiltros(FILTROS_INICIALES);
     setFiltrosAplicados(FILTROS_INICIALES);
     setPage(0);
+    limpiarSeleccion();
   };
 
   const abrirCrear = () => {
@@ -223,6 +244,113 @@ function Productos() {
   };
 
   const productos = data?.content ?? [];
+
+  // ---- Selección múltiple para ajuste de precios ----
+  const todosPaginaSeleccionados =
+    productos.length > 0 && productos.every((p) => seleccionados.has(p.id));
+  const algunosPaginaSeleccionados = productos.some((p) =>
+    seleccionados.has(p.id)
+  );
+
+  useEffect(() => {
+    if (checkSeleccionRef.current) {
+      checkSeleccionRef.current.indeterminate =
+        algunosPaginaSeleccionados && !todosPaginaSeleccionados;
+    }
+  }, [algunosPaginaSeleccionados, todosPaginaSeleccionados]);
+
+  const toggleSeleccion = (id) => {
+    setSeleccionados((prev) => {
+      const nuevo = new Set(prev);
+      if (nuevo.has(id)) {
+        nuevo.delete(id);
+      } else {
+        nuevo.add(id);
+      }
+      return nuevo;
+    });
+  };
+
+  const toggleSeleccionTodosPagina = () => {
+    const idsPagina = productos.map((p) => p.id);
+    setSeleccionados((prev) => {
+      const nuevo = new Set(prev);
+      if (idsPagina.every((id) => nuevo.has(id))) {
+        idsPagina.forEach((id) => nuevo.delete(id));
+      } else {
+        idsPagina.forEach((id) => nuevo.add(id));
+      }
+      return nuevo;
+    });
+  };
+
+  const limpiarSeleccion = () => setSeleccionados(new Set());
+
+  const seleccionarTodosResultados = async () => {
+    try {
+      const total = data?.totalElements ?? 0;
+      if (total === 0) return;
+      const resultado = await listarProductos(
+        construirParams(filtrosAplicados, 0, total)
+      );
+      setSeleccionados(new Set((resultado?.content ?? []).map((p) => p.id)));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  const abrirAjustePrecios = () => {
+    setPorcentaje("");
+    setErrorPrecio(null);
+    setMensajePrecio(null);
+    setModalPrecioAbierto(true);
+  };
+
+  const confirmarAjustePrecios = async () => {
+    const valor = Number(porcentaje);
+    if (porcentaje === "" || Number.isNaN(valor)) {
+      setErrorPrecio("Ingresa un porcentaje válido");
+      return;
+    }
+    if (valor < -100) {
+      setErrorPrecio("El porcentaje no puede ser menor a -100");
+      return;
+    }
+    const ids = Array.from(seleccionados);
+    if (ids.length === 0) {
+      setErrorPrecio("Selecciona al menos un producto");
+      return;
+    }
+    setGuardandoPrecio(true);
+    setErrorPrecio(null);
+    setMensajePrecio(null);
+    try {
+      const resultado = await ajustarPrecios(ids, valor);
+      setMensajePrecio(
+        `Se actualizó el precio de ${resultado.actualizados} producto${
+          resultado.actualizados === 1 ? "" : "s"
+        }.`
+      );
+      setSeleccionados(new Set());
+      cargar();
+    } catch (err) {
+      setErrorPrecio(getErrorMessage(err));
+    } finally {
+      setGuardandoPrecio(false);
+    }
+  };
+
+  const productosSeleccionados = productos.filter((p) =>
+    seleccionados.has(p.id)
+  );
+  const productoEjemplo = productosSeleccionados[0];
+  const ejemploNuevoPrecio = (() => {
+    if (!productoEjemplo || porcentaje === "") return null;
+    const valor = Number(porcentaje);
+    if (Number.isNaN(valor)) return null;
+    return productoEjemplo.precio * (1 + valor / 100);
+  })();
+
   const opcionesCategorias = categorias.map((c) => ({
     value: c.id,
     label: c.nombre,
@@ -240,9 +368,20 @@ function Productos() {
             Gestiona el catálogo de productos.
           </p>
         </div>
-        <Button onClick={abrirCrear} leftIcon={<FaPlus />}>
-          Nuevo producto
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={abrirAjustePrecios}
+            disabled={seleccionados.size === 0}
+            leftIcon={<FaPercent />}
+          >
+            Ajustar precios
+            {seleccionados.size > 0 ? ` (${seleccionados.size})` : ""}
+          </Button>
+          <Button onClick={abrirCrear} leftIcon={<FaPlus />}>
+            Nuevo producto
+          </Button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -293,6 +432,29 @@ function Productos() {
         </div>
       </div>
 
+      {/* Barra de selección masiva */}
+      {seleccionados.size > 0 && (
+        <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/30 dark:bg-indigo-500/10 sm:flex-row sm:items-center">
+          <p className="flex items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+            <FaCheckSquare />
+            {seleccionados.size} producto{seleccionados.size === 1 ? "" : "s"}{" "}
+            seleccionado{seleccionados.size === 1 ? "" : "s"}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={seleccionarTodosResultados}
+            >
+              Seleccionar todos los {data?.totalElements ?? 0} resultados
+            </Button>
+            <Button variant="outline" size="sm" onClick={limpiarSeleccion}>
+              Limpiar selección
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Contenido */}
       {loading ? (
         <div className="flex justify-center py-20">
@@ -321,6 +483,16 @@ function Productos() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-slate-800 dark:text-slate-400">
                 <tr>
+                  <th className="px-6 py-4">
+                    <input
+                      ref={checkSeleccionRef}
+                      type="checkbox"
+                      checked={todosPaginaSeleccionados}
+                      onChange={toggleSeleccionTodosPagina}
+                      aria-label="Seleccionar todos los productos de la página"
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:ring-offset-slate-900"
+                    />
+                  </th>
                   <th className="px-6 py-4">ID</th>
                   <th className="px-6 py-4">Producto</th>
                   <th className="hidden px-6 py-4 md:table-cell">Categoría</th>
@@ -338,6 +510,15 @@ function Productos() {
                       !producto.activo ? "opacity-60" : ""
                     }`}
                   >
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={seleccionados.has(producto.id)}
+                        onChange={() => toggleSeleccion(producto.id)}
+                        aria-label={`Seleccionar ${producto.nombre}`}
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:ring-offset-slate-900"
+                      />
+                    </td>
                     <td className="px-6 py-4 text-gray-500 dark:text-slate-400">
                       #{producto.id}
                     </td>
@@ -410,15 +591,86 @@ function Productos() {
               totalPages={data.totalPages}
               totalElements={data.totalElements}
               pageSize={data.size}
-              onPageChange={setPage}
+              onPageChange={(nuevaPagina) => {
+                setPage(nuevaPagina);
+                limpiarSeleccion();
+              }}
               onPageSizeChange={(nuevoSize) => {
                 setSize(nuevoSize);
                 setPage(0);
+                limpiarSeleccion();
               }}
             />
           </div>
         </div>
       )}
+
+      {/* Modal ajuste de precios por porcentaje */}
+      <Modal
+        isOpen={modalPrecioAbierto}
+        onClose={() => setModalPrecioAbierto(false)}
+        title="Ajustar precios por porcentaje"
+        size="md"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setModalPrecioAbierto(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              loading={guardandoPrecio}
+              onClick={confirmarAjustePrecios}
+              leftIcon={<FaPercent />}
+            >
+              Aplicar
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+            Se aplicará el ajuste a{" "}
+            <span className="font-semibold">
+              {seleccionados.size} producto{seleccionados.size === 1 ? "" : "s"}
+            </span>{" "}
+            seleccionado{seleccionados.size === 1 ? "" : "s"}.
+          </div>
+
+          <Input
+            label="Porcentaje (%)"
+            type="number"
+            step="0.01"
+            placeholder="Ej. 10 para subir, -5 para bajar"
+            value={porcentaje}
+            onChange={(e) => setPorcentaje(e.target.value)}
+          />
+
+          {productoEjemplo && ejemploNuevoPrecio !== null && (
+            <p className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              Ejemplo: <span className="font-semibold">{productoEjemplo.nombre}</span>{" "}
+              pasará de {formatPrice(productoEjemplo.precio)} a{" "}
+              <span className="font-semibold">
+                {formatPrice(ejemploNuevoPrecio)}
+              </span>
+              .
+            </p>
+          )}
+
+          {errorPrecio && (
+            <p className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+              {errorPrecio}
+            </p>
+          )}
+
+          {mensajePrecio && (
+            <p className="rounded-xl border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-600 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-400">
+              {mensajePrecio}
+            </p>
+          )}
+        </div>
+      </Modal>
 
       {/* Modal crear/editar */}
       <Modal

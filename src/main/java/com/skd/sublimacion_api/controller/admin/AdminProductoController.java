@@ -1,10 +1,12 @@
 package com.skd.sublimacion_api.controller.admin;
 
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
+import com.skd.sublimacion_api.dto.producto.ProductoAjustePrecioRequest;
 import com.skd.sublimacion_api.service.admin.AdminProductoService;
 import lombok.RequiredArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -160,6 +162,30 @@ public class AdminProductoController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void restaurar(@PathVariable Long id) {
         adminProductoService.restaurar(id);
+    }
+
+
+    @Operation(
+        summary = "Ajustar precio por porcentaje",
+        description = "Actualiza el precio de múltiples productos aplicando un porcentaje. " +
+                "Usa un valor positivo para aumentar y negativo para disminuir."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Precios actualizados correctamente"),
+            @ApiResponse(responseCode = "400", description = "Datos inválidos")
+    })
+    @PatchMapping("/precios")
+    public Map<String, Object> ajustarPrecios(
+            @Valid @RequestBody ProductoAjustePrecioRequest request) {
+
+        int actualizados = adminProductoService.ajustarPrecioPorPorcentaje(
+                request.getIds(),
+                request.getPorcentaje());
+
+        return Map.of(
+                "actualizados", actualizados,
+                "porcentaje", request.getPorcentaje()
+        );
     }
 
 }
