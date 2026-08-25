@@ -14,8 +14,13 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.*;
 
 import com.skd.sublimacion_api.dto.producto.ProductoRequest;
+import com.skd.sublimacion_api.exeption.BadRequestException;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -186,6 +191,39 @@ public class AdminProductoController {
                 "actualizados", actualizados,
                 "porcentaje", request.getPorcentaje()
         );
+    }
+
+
+    @Operation(
+        summary = "Subir imagen de producto",
+        description = "Sube la imagen del producto y la establece como imagen principal."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Imagen subida correctamente"),
+            @ApiResponse(responseCode = "400", description = "No se envió una imagen válida"),
+            @ApiResponse(responseCode = "404", description = "Producto no encontrado")
+    })
+    @PostMapping(value = "/{id}/imagen", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ProductoResponse subirImagen(
+            @PathVariable Long id,
+            @RequestParam(value = "file", required = false) MultipartFile file) {
+
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Debes subir una imagen.");
+        }
+
+        byte[] contenido;
+        try {
+            contenido = file.getBytes();
+        } catch (IOException ex) {
+            throw new BadRequestException("No se pudo leer la imagen subida.");
+        }
+
+        return adminProductoService.subirImagen(
+                id,
+                contenido,
+                file.getContentType(),
+                file.getOriginalFilename());
     }
 
 }

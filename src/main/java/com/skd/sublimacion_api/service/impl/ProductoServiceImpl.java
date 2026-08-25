@@ -1,7 +1,9 @@
 package com.skd.sublimacion_api.service.impl;
 
+import com.skd.sublimacion_api.entity.ImagenProducto;
 import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.repository.FavoritoRepository;
+import com.skd.sublimacion_api.repository.ImagenProductoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.repository.ResenaRepository;
 import com.skd.sublimacion_api.service.ProductoService;
@@ -36,6 +38,7 @@ public class ProductoServiceImpl implements ProductoService {
     private final CategoriaRepository categoriaRepository;
     private final ResenaRepository resenaRepository;
     private final FavoritoRepository favoritoRepository;
+    private final ImagenProductoRepository imagenProductoRepository;
 
     @Override
     public List<ProductoResponse> listar(Long usuarioId) {
@@ -251,6 +254,17 @@ public class ProductoServiceImpl implements ProductoService {
             Producto producto,
             ResumenResenas resumen) {
 
+        List<ImagenProducto> imagenes =
+                imagenProductoRepository.findByProductoId(producto.getId());
+        String imagenUrl = null;
+        if (!imagenes.isEmpty()) {
+            imagenUrl = imagenes.stream()
+                    .filter(i -> Boolean.TRUE.equals(i.getEsPrincipal()))
+                    .findFirst()
+                    .orElse(imagenes.get(0))
+                    .getUrl();
+        }
+
         return ProductoResponse.builder()
                 .id(producto.getId())
                 .nombre(producto.getNombre())
@@ -266,6 +280,7 @@ public class ProductoServiceImpl implements ProductoService {
                         resumen.conteos.getOrDefault(producto.getId(), 0L))
                 .esFavorito(
                         resumen.favoritos().contains(producto.getId()))
+                .imagenUrl(imagenUrl)
                 .build();
     }
 }

@@ -55,3 +55,16 @@ export async function ajustarPrecios(ids, porcentaje) {
   });
   return data;
 }
+
+// Sube la imagen del producto (multipart/form-data) y la establece
+// como imagen principal. Respuesta: ProductoResponse actualizado.
+// Nota: se anula el Content-Type para que el navegador lo establezca
+// con el boundary adecuado (la instancia axios trae application/json).
+export async function subirImagenProducto(id, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post(`/admin/productos/${id}/imagen`, formData, {
+    headers: { "Content-Type": undefined },
+  });
+  return data;
+}

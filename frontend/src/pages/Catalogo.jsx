@@ -258,7 +258,7 @@ function Catalogo() {
                     </button>
 
                     <img
-                      src={meta.image}
+                      src={product.imagenUrl || meta.image}
                       alt={product.nombre}
                       loading="lazy"
                       className="h-64 object-contain transition duration-500 group-hover:scale-110"

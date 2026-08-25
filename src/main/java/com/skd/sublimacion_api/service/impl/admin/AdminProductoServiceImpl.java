@@ -1,9 +1,12 @@
 package com.skd.sublimacion_api.service.impl.admin;
 
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
+import com.skd.sublimacion_api.entity.ImagenProducto;
 import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.repository.CategoriaRepository;
+import com.skd.sublimacion_api.repository.ImagenProductoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
+import com.skd.sublimacion_api.service.SupabaseStorageService;
 import com.skd.sublimacion_api.service.admin.AdminProductoService;
 
 import lombok.RequiredArgsConstructor;
@@ -11,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Locale;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,6 +40,8 @@ public class AdminProductoServiceImpl implements AdminProductoService {
         private final ProductoRepository productoRepository;
         private final ProductoMapper productoMapper;
         private final CategoriaRepository categoriaRepository;
+        private final ImagenProductoRepository imagenRepository;
+        private final SupabaseStorageService supabaseStorageService;
 
         @Override
         public Page<ProductoResponse> listar(
@@ -153,6 +159,54 @@ public class AdminProductoServiceImpl implements AdminProductoService {
                 productoRepository.saveAll(productos);
 
                 return productos.size();
+        }
+
+        @Override
+        @Transactional
+        public ProductoResponse subirImagen(Long productoId, byte[] imagenBytes, String contentType, String nombreOriginal) {
+
+                Producto producto = buscarProducto(productoId);
+
+                String extension = extensionDe(nombreOriginal, contentType);
+                String url = supabaseStorageService.subirImagen(imagenBytes, extension, contentType);
+
+                List<ImagenProducto> existentes = imagenRepository.findByProductoId(productoId);
+                ImagenProducto imagen;
+                if (existentes.isEmpty()) {
+                        imagen = ImagenProducto.builder()
+                                .producto(producto)
+                                .url(url)
+                                .esPrincipal(true)
+                                .build();
+                } else {
+                        imagen = existentes.get(0);
+                        imagen.setUrl(url);
+                        imagen.setEsPrincipal(true);
+                }
+
+                imagenRepository.save(imagen);
+
+                return productoMapper.toResponse(producto);
+        }
+
+        private String extensionDe(String nombreOriginal, String contentType) {
+
+                if (nombreOriginal != null) {
+                        int idx = nombreOriginal.lastIndexOf('.');
+                        if (idx >= 0 && idx < nombreOriginal.length() - 1) {
+                                return nombreOriginal.substring(idx);
+                        }
+                }
+
+                if (contentType != null) {
+                        String tipo = contentType.toLowerCase(Locale.ROOT);
+                        if (tipo.contains("png")) return ".png";
+                        if (tipo.contains("webp")) return ".webp";
+                        if (tipo.contains("gif")) return ".gif";
+                        if (tipo.contains("jpeg") || tipo.contains("jpg")) return ".jpg";
+                }
+
+                return ".jpg";
         }
 
         private Producto buscarProducto(Long id) {

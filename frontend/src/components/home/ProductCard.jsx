@@ -32,7 +32,7 @@ function ProductCard({ producto }) {
       {/* Imagen */}
       <div className="relative overflow-hidden rounded-xl">
         <img
-          src={producto.imagen}
+          src={producto.imagenUrl || producto.imagen}
           alt={producto.nombre}
           className="
             h-64

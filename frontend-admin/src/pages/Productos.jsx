@@ -8,6 +8,8 @@ import {
   FaBoxOpen,
   FaPercent,
   FaCheckSquare,
+  FaImage,
+  FaUpload,
 } from "react-icons/fa";
 
 import Badge from "../components/Badge";
@@ -27,6 +29,7 @@ import {
   eliminarProducto,
   restaurarProducto,
   ajustarPrecios,
+  subirImagenProducto,
 } from "../api/productosApi";
 import { listarCategorias } from "../api/categoriasApi";
 import { formatPrice } from "../utils/formato";
@@ -95,6 +98,23 @@ function Productos() {
   const [mensajePrecio, setMensajePrecio] = useState(null);
   const checkSeleccionRef = useRef(null);
 
+  // Imagen del producto
+  const [imagenFile, setImagenFile] = useState(null);
+  const [imagenPreview, setImagenPreview] = useState("");
+  const [subiendoImagen, setSubiendoImagen] = useState(false);
+
+  const manejarImagenSeleccion = (e) => {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    setImagenFile(archivo);
+    setImagenPreview(URL.createObjectURL(archivo));
+  };
+
+  const limpiarImagen = () => {
+    setImagenFile(null);
+    setImagenPreview("");
+  };
+
   // Carga las categorías para el select del formulario y del filtro.
   const cargarCategorias = useCallback(async () => {
     try {
@@ -148,6 +168,8 @@ function Productos() {
     setEditando(null);
     setForm(FORM_VACIO);
     setFormError(null);
+    setImagenFile(null);
+    setImagenPreview("");
     setModalAbierto(true);
   };
 
@@ -166,6 +188,8 @@ function Productos() {
       masVendido: producto.masVendido ?? false,
       categoriaId: categoria?.id ?? "",
     });
+    setImagenFile(null);
+    setImagenPreview(producto.imagenUrl || "");
     setFormError(null);
     setModalAbierto(true);
   };
@@ -205,16 +229,25 @@ function Productos() {
     setGuardando(true);
     setFormError(null);
     try {
+      let productoId = editando?.id;
       if (editando) {
         await actualizarProducto(editando.id, payload);
       } else {
-        await crearProducto(payload);
+        const creado = await crearProducto(payload);
+        productoId = creado?.id ?? productoId;
+      }
+      if (imagenFile && productoId) {
+        setSubiendoImagen(true);
+        await subirImagenProducto(productoId, imagenFile);
       }
       setModalAbierto(false);
+      setImagenFile(null);
+      setImagenPreview("");
       cargar();
     } catch (err) {
       setFormError(getErrorMessage(err));
     } finally {
+      setSubiendoImagen(false);
       setGuardando(false);
     }
   };
@@ -522,15 +555,30 @@ function Productos() {
                     <td className="px-6 py-4 text-gray-500 dark:text-slate-400">
                       #{producto.id}
                     </td>
-                    <td className="max-w-xs px-6 py-4">
-                      <p className="truncate font-semibold text-gray-900 dark:text-white">
-                        {producto.nombre}
-                      </p>
-                      {producto.masVendido && (
-                        <Badge variant="amber" className="mt-1">
-                          Más vendido
-                        </Badge>
-                      )}
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        {producto.imagenUrl ? (
+                          <img
+                            src={producto.imagenUrl}
+                            alt={producto.nombre}
+                            className="h-12 w-12 shrink-0 rounded-lg border border-gray-200 bg-white object-contain dark:border-slate-700 dark:bg-slate-800"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-300 dark:border-slate-700 dark:text-slate-600">
+                            <FaImage />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-gray-900 dark:text-white">
+                            {producto.nombre}
+                          </p>
+                          {producto.masVendido && (
+                            <Badge variant="amber" className="mt-1">
+                              Más vendido
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="hidden px-6 py-4 text-gray-500 dark:text-slate-400 md:table-cell">
                       {producto.categoria || "—"}
@@ -707,6 +755,45 @@ function Productos() {
             value={form.descripcion}
             onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
           />
+
+          {/* Imagen del producto */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-600 dark:text-slate-300">
+              Imagen del producto
+            </label>
+            <div className="flex items-center gap-4">
+              {imagenPreview ? (
+                <img
+                  src={imagenPreview}
+                  alt="Vista previa"
+                  className="h-20 w-20 shrink-0 rounded-xl border border-gray-200 bg-white object-contain dark:border-slate-700 dark:bg-slate-800"
+                />
+              ) : (
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-dashed border-gray-300 text-gray-300 dark:border-slate-700 dark:text-slate-600">
+                  <FaImage className="h-6 w-6" />
+                </div>
+              )}
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-400">
+                <FaUpload />
+                {imagenFile ? imagenFile.name : "Subir imagen"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={manejarImagenSeleccion}
+                />
+              </label>
+              {imagenFile && (
+                <Button variant="outline" size="sm" onClick={limpiarImagen}>
+                  Quitar
+                </Button>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+              La imagen se sube automáticamente al guardar el producto.
+            </p>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-3">
             <Input
               label="Precio (COP)"

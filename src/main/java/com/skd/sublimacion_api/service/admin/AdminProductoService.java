@@ -31,4 +31,6 @@ public interface AdminProductoService {
     void eliminar(Long id);
 
     int ajustarPrecioPorPorcentaje(List<Long> ids, BigDecimal porcentaje);
+
+    ProductoResponse subirImagen(Long productoId, byte[] imagenBytes, String contentType, String nombreOriginal);
 }

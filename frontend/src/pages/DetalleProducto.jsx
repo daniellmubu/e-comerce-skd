@@ -126,7 +126,7 @@ function DetalleProducto() {
               className={`flex h-96 items-center justify-center rounded-3xl bg-gradient-to-br ${meta.color}`}
             >
               <img
-                src={meta.image}
+                src={producto.imagenUrl || meta.image}
                 alt={producto.nombre}
                 className="h-72 object-contain"
               />

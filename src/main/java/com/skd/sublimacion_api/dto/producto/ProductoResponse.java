@@ -32,4 +32,6 @@ public class ProductoResponse {
 
     private Boolean esFavorito;
 
+    private String imagenUrl;
+
 }
