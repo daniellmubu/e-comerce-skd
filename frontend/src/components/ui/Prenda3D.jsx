@@ -263,8 +263,10 @@ function proyectarUvFrontal(geo, desdeAtras = false) {
 //    primitivas en un Group y los Mesh hijos llegan sin nombre,
 //  - el lado de cada manga (izquierda/derecha) y el panel frontal/trasero se
 //    deducen de la posición del mesh (X y Z respectivamente),
-//  - cuatro superficies imprimibles como CAPAS DE PROYECCIÓN independientes
-//    (frente, espalda, manga izquierda + costado y manga derecha + costado):
+//   - cuatro superficies imprimibles como CAPAS DE PROYECCIÓN independientes
+//    (frente, espalda, manga izquierda y manga derecha): los diseños de manga
+//    proyectan sobre TODA la silueta lateral (manga + costado + torso) para
+//    que puedan desbordar de la manga sin cortarse en una costura,
 //    los triángulos de cada cara se extraen a una geometría fusionada con UVs
 //    planares generadas desde el mundo, de modo que la textura dibujada desde
 //    las coordenadas (%) del editor 2D cae exactamente donde debe en el
@@ -322,9 +324,6 @@ function prepararModeloCamiseta(escenaOriginal) {
   // Clasificación por geometría única (el export duplica primitivas con los
   // mismos accessors; así no se procesan ni extraen varias veces).
   const geosProcesadas = new Map();
-  const rangoXcuerpo = { min: Infinity, max: -Infinity };
-  // Fracción exterior del torso que se suma a cada manga como costado.
-  const BANDA_LATERAL = 0.32;
 
   clon.traverse((objeto) => {
     if (!objeto.isMesh) return;
@@ -344,8 +343,6 @@ function prepararModeloCamiseta(escenaOriginal) {
     } else {
       const frontal = esPanelFrontal(cajaMesh);
       objeto.material = frontal ? matCuerpoFrente : matCuerpoLiso;
-      rangoXcuerpo.min = Math.min(rangoXcuerpo.min, cajaMesh.min.x);
-      rangoXcuerpo.max = Math.max(rangoXcuerpo.max, cajaMesh.max.x);
     }
 
     if (!geosProcesadas.has(objeto.geometry)) {
@@ -358,13 +355,15 @@ function prepararModeloCamiseta(escenaOriginal) {
   });
 
   // Extracción de triángulos ANTES de desplazar el modelo al origen.
-  // - mangas: triángulos del material Sleeve del lado pedido + banda lateral
-  //   del torso (el "costado" visible de perfil),
+  // - mangas: triángulos del material Sleeve del lado pedido + TODO el torso.
+  //   La proyección lateral (u = profundidad Z, v = altura Y) es continua, así
+  //   el diseño puede desbordar de la manga hacia el costado y el torso sin
+  //   cortarse en una costura invisible; los paneles frontal y trasero ocupan
+  //   rangos de Z disjuntos, así que no se pintan espejados entre sí,
   // - frente/espalda: triángulos del torso separados por el plano medio Z.
   clon.updateMatrixWorld(true);
-  const extraerPartes = ({ mangaLado = 0, banda = false, triangulo = null }) => {
+  const extraerPartes = ({ mangaLado = 0, todo = false, triangulo = null }) => {
     const partes = [];
-    const anchoCuerpo = rangoXcuerpo.max - rangoXcuerpo.min;
     for (const info of geosProcesadas.values()) {
       if (info.esManga) {
         if (mangaLado !== 0 && info.lado === mangaLado) {
@@ -372,26 +371,14 @@ function prepararModeloCamiseta(escenaOriginal) {
         }
         continue;
       }
-      if (!triangulo) continue;
-
-      let umbral = null;
-      if (banda) {
-        umbral =
-          mangaLado > 0
-            ? rangoXcuerpo.max - BANDA_LATERAL * anchoCuerpo
-            : rangoXcuerpo.min + BANDA_LATERAL * anchoCuerpo;
-      }
-      partes.push(
-        extraerTriangulos(info.mesh, (c) =>
-          banda ? (mangaLado > 0 ? c.x >= umbral : c.x <= umbral) : triangulo(c)
-        )
-      );
+      if (!todo && !triangulo) continue;
+      partes.push(extraerTriangulos(info.mesh, todo ? null : triangulo));
     }
     return combinarGeometrias(partes);
   };
 
-  const geoCapaIzq = extraerPartes({ mangaLado: -1, banda: true });
-  const geoCapaDer = extraerPartes({ mangaLado: 1, banda: true });
+  const geoCapaIzq = extraerPartes({ mangaLado: -1, todo: true });
+  const geoCapaDer = extraerPartes({ mangaLado: 1, todo: true });
   const geoFrente = extraerPartes({ triangulo: (c) => c.z >= centroZ });
   const geoEspalda = extraerPartes({ triangulo: (c) => c.z < centroZ });
 

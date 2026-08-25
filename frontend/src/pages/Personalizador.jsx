@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaUpload,
@@ -15,6 +15,7 @@ import {
   FaPlus,
   FaTimes,
   FaExclamationTriangle,
+  FaImages,
 } from "react-icons/fa";
 import { Shirt, Coffee } from "lucide-react";
 
@@ -22,6 +23,7 @@ import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { guardarPersonalizacion } from "../services/personalizacionService";
 import { generarDiseno, subirDiseno } from "../services/disenoService";
+import { listarPlantillas } from "../services/plantillaService";
 import { getErrorMessage } from "../services/api";
 import PrendaMockup, {
   ANCHO_IMAGEN_BASE,
@@ -90,6 +92,18 @@ function formatPrice(value) {
     currency: "COP",
     maximumFractionDigits: 0,
   });
+}
+
+// Identificador único para cada imagen insertada (helper de módulo: Date.now
+// y Math.random no pueden llamarse dentro del render del componente).
+function crearIdImagen() {
+  return `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// Pequeño desplazamiento aleatorio (%) para que al agregar varias imágenes no
+// queden exactamente apiladas y sea más fácil separarlas.
+function desplazamientoAleatorio() {
+  return Math.round((Math.random() - 0.5) * 16);
 }
 
 function blobToDataURL(blob) {
@@ -181,7 +195,7 @@ function Personalizador() {
   const [rotacionTexto, setRotacionTexto] = useState(0);
   const [escalaTexto, setEscalaTexto] = useState(1);
   const [textoActivo, setTextoActivo] = useState(false);
-  const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "color" | "texto"
+  const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "plantillas" | "texto" | "color"
   const [guardando, setGuardando] = useState(false);
   // Guardado del diseño compuesto en "Mis diseños" (endpoint /disenos/subir).
   const [guardandoDiseno, setGuardandoDiseno] = useState(false);
@@ -195,6 +209,14 @@ function Personalizador() {
   // Zoom del lienzo de edición (0.5x - 3x) y modo pantalla completa del mismo.
   const [zoomLienzo, setZoomLienzo] = useState(1);
   const [lienzoMaximizado, setLienzoMaximizado] = useState(false);
+
+  // Galería de plantillas prediseñadas: se carga la primera vez que se abre
+  // la pestaña y se filtra en cliente por categoría y compatibilidad.
+  const [plantillas, setPlantillas] = useState([]);
+  const [cargandoPlantillas, setCargandoPlantillas] = useState(false);
+  const [errorPlantillas, setErrorPlantillas] = useState(null);
+  const [categoriaPlantilla, setCategoriaPlantilla] = useState("todas");
+  const plantillasCargadasRef = useRef(false);
 
   const imagenActiva = imagenes.find((img) => img.id === imagenActivaId) ?? null;
 
@@ -229,11 +251,63 @@ function Personalizador() {
     [filtroFuente]
   );
 
+  // --- Galería de plantillas prediseñadas ---
+
+  // Carga única y diferida: solo se pide al backend la primera vez que se
+  // abre la pestaña (o al reintentar tras un error).
+  const cargarGaleriaPlantillas = async () => {
+    setCargandoPlantillas(true);
+    setErrorPlantillas(null);
+    try {
+      const datos = await listarPlantillas();
+      setPlantillas(datos);
+      plantillasCargadasRef.current = true;
+    } catch (err) {
+      setErrorPlantillas(getErrorMessage(err));
+    } finally {
+      setCargandoPlantillas(false);
+    }
+  };
+
+  useEffect(() => {
+    if (herramienta !== "plantillas") return;
+    if (!plantillasCargadasRef.current) cargarGaleriaPlantillas();
+  }, [herramienta]);
+
+  // Tabs de categoría derivadas de los datos (se adapta a lo que haya en BD).
+  const categoriasPlantillas = useMemo(
+    () => [...new Set(plantillas.map((p) => p.categoria))],
+    [plantillas]
+  );
+
+  // Plantillas visibles: categoría elegida + compatibles con el producto
+  // actual ("ambos" siempre aplica; el resto se oculta al cambiar de producto).
+  const plantillasVisibles = useMemo(
+    () =>
+      plantillas.filter(
+        (p) =>
+          (categoriaPlantilla === "todas" ||
+            p.categoria === categoriaPlantilla) &&
+          (p.productoTipoCompatible === selectedProduct ||
+            p.productoTipoCompatible === "ambos")
+      ),
+    [plantillas, categoriaPlantilla, selectedProduct]
+  );
+
+  // Aplica la plantilla como imagen de diseño en la cara activa: mismo
+  // camino que subir una imagen, así queda seleccionada, arrastrable y
+  // redimensionable con el editor normal.
+  const aplicarPlantilla = (plantilla) => {
+    agregarImagen(plantilla.imagenUrl);
+    setMensaje({
+      tipo: "ok",
+      texto: `Plantilla "${plantilla.nombre}" agregada. Muévela y ajústala a tu gusto.`,
+    });
+  };
+
   const agregarImagen = async (url) => {
-    const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    // Pequeño desplazamiento aleatorio para que al agregar varias no queden
-    // exactamente apiladas y sea más fácil separarlas.
-    const offset = Math.round((Math.random() - 0.5) * 16);
+    const id = crearIdImagen();
+    const offset = desplazamientoAleatorio();
 
     // Dimensiones originales de la imagen, para poder estimar el DPI al
     // escalarla y avisar si quedará pixelada al imprimir.
@@ -739,7 +813,7 @@ function Personalizador() {
               Herramientas
             </h2>
 
-            {/* Tira de pestañas: imagen / texto / color */}
+            {/* Tira de pestañas: imagen / plantillas / texto / color */}
             <div className="mb-4 flex items-center gap-1 rounded-xl border border-gray-200 p-1 dark:border-slate-700">
               <button
                 type="button"
@@ -752,6 +826,19 @@ function Personalizador() {
                 }`}
               >
                 <FaUpload className="text-sm" />
+              </button>
+              <button
+                type="button"
+                aria-label="Herramienta de plantillas"
+                title="Plantillas"
+                onClick={() => setHerramienta("plantillas")}
+                className={`flex flex-1 items-center justify-center rounded-lg py-2 transition ${
+                  herramienta === "plantillas"
+                    ? "bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200"
+                    : "text-gray-400 hover:bg-gray-100 dark:text-slate-500 dark:hover:bg-slate-800"
+                }`}
+              >
+                <FaImages className="text-sm" />
               </button>
               <button
                 type="button"
@@ -1057,6 +1144,91 @@ function Personalizador() {
                       </div>
                     )}
                   </>
+                )}
+              </>
+            ) : herramienta === "plantillas" ? (
+              <>
+                {/* Galería de plantillas prediseñadas: arrancar de un diseño
+                    ya hecho en vez de empezar en blanco. */}
+                <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Plantillas para {selectedProduct === "camiseta" ? "camiseta" : "mug"}
+                </p>
+
+                {/* Tabs de categoría (derivadas de las plantillas cargadas) */}
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {["todas", ...categoriasPlantillas].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setCategoriaPlantilla(cat)}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                        categoriaPlantilla === cat
+                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
+                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400 dark:hover:border-cyan-500/50"
+                      }`}
+                    >
+                      {cat === "todas" ? "Todas" : cat}
+                    </button>
+                  ))}
+                </div>
+
+                {cargandoPlantillas ? (
+                  <div className="flex flex-col items-center gap-2 py-10 text-xs text-gray-400 dark:text-slate-500">
+                    <FaSpinner className="animate-spin text-lg" />
+                    Cargando plantillas...
+                  </div>
+                ) : errorPlantillas ? (
+                  <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-gray-300 py-8 px-3 text-center dark:border-slate-700">
+                    <FaExclamationTriangle className="text-lg text-red-400" />
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      No fue posible cargar las plantillas: {errorPlantillas}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={cargarGaleriaPlantillas}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : plantillasVisibles.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-gray-300 py-8 px-3 text-center dark:border-slate-700">
+                    <FaImages className="text-lg text-gray-300 dark:text-slate-600" />
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      No hay plantillas para esta categoría y producto todavía.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid max-h-72 grid-cols-2 gap-1.5 overflow-y-auto rounded-xl border border-gray-100 p-1.5 dark:border-slate-800">
+                    {plantillasVisibles.map((plantilla) => (
+                      <button
+                        key={plantilla.id}
+                        type="button"
+                        onClick={() => aplicarPlantilla(plantilla)}
+                        title={`Aplicar "${plantilla.nombre}"`}
+                        className="group flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white transition duration-150 hover:-translate-y-0.5 hover:border-indigo-400 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-cyan-500/50"
+                      >
+                        <span className="flex h-20 w-full items-center justify-center overflow-hidden bg-gray-50 p-1 dark:bg-slate-950">
+                          <img
+                            src={plantilla.imagenUrl}
+                            alt={plantilla.nombre}
+                            loading="lazy"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </span>
+                        <span className="truncate px-1 py-1 text-center text-[10px] font-medium text-gray-500 transition group-hover:text-indigo-600 dark:text-slate-400 dark:group-hover:text-cyan-300">
+                          {plantilla.nombre}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {plantillasVisibles.length > 0 && (
+                  <p className="mt-2 text-[10px] leading-snug text-gray-400 dark:text-slate-500">
+                    Toca una plantilla para agregarla al lienzo; luego muévela,
+                    redimenciónala o cámbiale la ubicación como cualquier imagen.
+                  </p>
                 )}
               </>
             ) : herramienta === "color" ? (
