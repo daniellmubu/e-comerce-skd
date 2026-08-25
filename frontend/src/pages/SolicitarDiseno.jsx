@@ -8,6 +8,7 @@ import {
   FaClipboardList,
   FaUpload,
   FaTimes,
+  FaShoppingCart,
 } from "react-icons/fa";
 
 import { listarProductos } from "../services/productService";
@@ -17,6 +18,9 @@ import {
   aprobarSolicitud,
   solicitarCambios,
 } from "../services/solicitudDisenoService";
+import { obtenerOCrearCarrito } from "../services/carritoService";
+import { agregarDisenoAlCarrito } from "../services/disenoService";
+import { useTopicRealtime } from "../hooks/useTopicRealtime";
 import { getErrorMessage } from "../services/api";
 import Loading from "../components/ui/Loading";
 
@@ -63,6 +67,7 @@ function SolicitarDiseno() {
   const [errorSolicitudes, setErrorSolicitudes] = useState(null);
 
   const [accionandoId, setAccionandoId] = useState(null);
+  const [agregandoId, setAgregandoId] = useState(null);
   const [cambiosAbiertosId, setCambiosAbiertosId] = useState(null);
   const [motivo, setMotivo] = useState("");
 
@@ -94,6 +99,31 @@ function SolicitarDiseno() {
         setErrorSolicitudes(null);
       })
       .catch((err) => setErrorSolicitudes(getErrorMessage(err)));
+  };
+
+  // Notificaciones en vivo: se recarga la lista cuando cambia el estado de
+  // alguna solicitud (ej: el diseñador envía una propuesta).
+  const topicsSolicitudes = solicitudes.map((s) => `/topic/solicitudes/${s.id}`);
+  useTopicRealtime(topicsSolicitudes, recargarSolicitudes);
+
+  const handleAgregarAlCarrito = async (s) => {
+    if (!s.disenoId || !s.productoId) return;
+    setAgregandoId(s.id);
+    setMensaje(null);
+    try {
+      const carrito = await obtenerOCrearCarrito();
+      await agregarDisenoAlCarrito({
+        carritoId: carrito.id,
+        productoId: s.productoId,
+        disenoId: s.disenoId,
+        cantidad: 1,
+      });
+      setMensaje({ tipo: "ok", texto: "Diseño agregado al carrito." });
+    } catch (err) {
+      setMensaje({ tipo: "error", texto: getErrorMessage(err) });
+    } finally {
+      setAgregandoId(null);
+    }
   };
 
   const handleCrear = async (e) => {
@@ -484,10 +514,24 @@ function SolicitarDiseno() {
                   )}
 
                   {s.estado === "LISTA_PARA_PRODUCCION" && (
-                    <div className="flex items-center gap-2 border-t border-gray-200 p-5 text-sm font-medium text-emerald-600 dark:border-slate-800 dark:text-emerald-400">
-                      <FaCheckCircle />
-                      Diseño aprobado y listo para producción. Lo encontrarás en
-                      tus diseños.
+                    <div className="flex flex-col gap-3 border-t border-gray-200 p-5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                        <FaCheckCircle />
+                        Aprobado y listo para producción.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAgregarAlCarrito(s)}
+                        disabled={agregandoId === s.id || !s.disenoId}
+                        className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {agregandoId === s.id ? (
+                          <FaSpinner className="animate-spin" />
+                        ) : (
+                          <FaShoppingCart />
+                        )}
+                        Agregar al carrito
+                      </button>
                     </div>
                   )}
                 </div>
