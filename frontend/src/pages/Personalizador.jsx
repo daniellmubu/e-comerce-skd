@@ -14,13 +14,14 @@ import {
   FaMinus,
   FaPlus,
   FaTimes,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import { Shirt, Coffee } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { guardarPersonalizacion } from "../services/personalizacionService";
-import { generarDiseno } from "../services/disenoService";
+import { generarDiseno, subirDiseno } from "../services/disenoService";
 import { getErrorMessage } from "../services/api";
 import PrendaMockup, {
   ANCHO_IMAGEN_BASE,
@@ -111,6 +112,36 @@ function cargarImagenElemento(url) {
   });
 }
 
+// Convierte un dataURL (PNG/JPEG) en un File, listo para subir con FormData.
+function dataUrlToFile(dataUrl, nombre) {
+  const coma = dataUrl.indexOf(",");
+  const meta = dataUrl.slice(0, coma);
+  const base64 = dataUrl.slice(coma + 1);
+  const mime = meta.match(/:(.*?);/)?.[1] || "image/png";
+  const binario = atob(base64);
+  const bytes = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  return new File([bytes], nombre, { type: mime });
+}
+
+// Ancho real (pulgadas) que representa el lienzo al imprimir. Sirve para
+// estimar el DPI efectivo de cada imagen una vez escalada.
+const PRINT_WIDTH_INCHES = 12;
+const DPI_MINIMO = 150;
+
+function calcularDpi(naturalWidth, anchoRenderizadoPx) {
+  if (!naturalWidth || !anchoRenderizadoPx) return 0;
+  const pulgadas = (anchoRenderizadoPx / TAMANO_LIENZO) * PRINT_WIDTH_INCHES;
+  return pulgadas > 0 ? naturalWidth / pulgadas : 0;
+}
+
+// DPI efectivo de una imagen ya colocada en el lienzo, con su escala actual.
+function dpiDeImagen(img) {
+  const ancho =
+    TAMANO_LIENZO * ANCHO_IMAGEN_BASE * (img.escalaX ?? img.escala ?? 1);
+  return calcularDpi(img.naturalWidth, ancho);
+}
+
 function Personalizador() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -151,6 +182,7 @@ function Personalizador() {
   const [textoActivo, setTextoActivo] = useState(false);
   const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "color" | "texto"
   const [guardando, setGuardando] = useState(false);
+  const [guardandoDiseno, setGuardandoDiseno] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [procesandoImagen, setProcesandoImagen] = useState(false);
   // Recorte inteligente de fondo al subir imágenes (@imgly): activado por
@@ -163,6 +195,16 @@ function Personalizador() {
   const [lienzoMaximizado, setLienzoMaximizado] = useState(false);
 
   const imagenActiva = imagenes.find((img) => img.id === imagenActivaId) ?? null;
+
+  // DPI estimado de la imagen seleccionada (para avisar si quedará pixelada).
+  const dpiImagenActiva = imagenActiva ? dpiDeImagen(imagenActiva) : 0;
+  const imagenActivaBajaCalidad =
+    imagenActiva != null &&
+    imagenActiva.naturalWidth > 0 &&
+    dpiImagenActiva < DPI_MINIMO;
+  const hayImagenesBajaCalidad = imagenes.some(
+    (img) => img.naturalWidth > 0 && dpiDeImagen(img) < DPI_MINIMO
+  );
 
   const caraDe = (img) => img.cara ?? "frente";
   // Imágenes de la cara activa (las que se editan en el mockup grande).
@@ -185,11 +227,26 @@ function Personalizador() {
     [filtroFuente]
   );
 
-  const agregarImagen = (url) => {
+  const agregarImagen = async (url) => {
     const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     // Pequeño desplazamiento aleatorio para que al agregar varias no queden
     // exactamente apiladas y sea más fácil separarlas.
     const offset = Math.round((Math.random() - 0.5) * 16);
+
+    // Dimensiones originales de la imagen, para poder estimar el DPI al
+    // escalarla y avisar si quedará pixelada al imprimir.
+    let naturalWidth = 0;
+    let naturalHeight = 0;
+    try {
+      const el = await cargarImagenElemento(url);
+      if (el) {
+        naturalWidth = el.naturalWidth;
+        naturalHeight = el.naturalHeight;
+      }
+    } catch {
+      // Sin dimensiones: se trata como desconocidas y no se muestra aviso.
+    }
+
     const nueva = {
       id,
       url,
@@ -199,6 +256,8 @@ function Personalizador() {
       escalaX: 1,
       escalaY: 1,
       rotacion: 0,
+      naturalWidth,
+      naturalHeight,
     };
     setImagenes((prev) => [...prev, nueva]);
     setImagenActivaId(id);
@@ -402,7 +461,31 @@ function Personalizador() {
       setMensaje({ tipo: "error", texto: "Sube una imagen o genera un diseño con IA primero." });
       return;
     }
-    setMensaje({ tipo: "ok", texto: "Diseño guardado en esta sesión." });
+    if (!usuario) {
+      navigate("/login");
+      return;
+    }
+    if (!productoOrigen) {
+      setMensaje({ tipo: "error", texto: "Elige un producto desde el catálogo antes de guardar." });
+      return;
+    }
+
+    setGuardandoDiseno(true);
+    setMensaje(null);
+    try {
+      const dataUrl = await componerImagenFinal();
+      if (!dataUrl) {
+        setMensaje({ tipo: "error", texto: "No se pudo generar la imagen del diseño." });
+        return;
+      }
+      const file = dataUrlToFile(dataUrl, "diseno.png");
+      await subirDiseno({ file, productoId: productoOrigen.id });
+      setMensaje({ tipo: "ok", texto: "Diseño guardado. Lo encontrarás en tu dashboard." });
+    } catch (err) {
+      setMensaje({ tipo: "error", texto: getErrorMessage(err) });
+    } finally {
+      setGuardandoDiseno(false);
+    }
   };
 
   const handleAgregarAlCarrito = async () => {
@@ -780,8 +863,16 @@ function Personalizador() {
                   <>
                     <div className="my-5 border-t border-gray-200 dark:border-slate-800" />
 
-                    <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
+                    <p className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-slate-300">
                       Imágenes ({imagenes.length})
+                      {hayImagenesBajaCalidad && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
+                          title={`Algunas imágenes están por debajo de ${DPI_MINIMO} DPI para impresión`}
+                        >
+                          <FaExclamationTriangle /> baja calidad
+                        </span>
+                      )}
                     </p>
                     <div className="mb-3 flex flex-wrap gap-2">
                       {imagenes.map((img) => {
@@ -797,7 +888,7 @@ function Personalizador() {
                               setCaraActiva(caraDe(img));
                             }}
                             title={`Ubicación: ${etiquetaCara ?? "Frente"}`}
-                            className={`flex h-16 w-14 flex-col items-center justify-center overflow-hidden rounded-lg border-2 bg-gray-50 transition dark:bg-slate-800 ${
+                            className={`relative flex h-16 w-14 flex-col items-center justify-center overflow-hidden rounded-lg border-2 bg-gray-50 transition dark:bg-slate-800 ${
                               img.id === imagenActivaId
                                 ? "border-indigo-500 dark:border-cyan-400"
                                 : "border-gray-200 hover:border-indigo-300 dark:border-slate-700"
@@ -807,6 +898,10 @@ function Personalizador() {
                             <span className="w-full truncate px-0.5 text-center text-[9px] text-gray-400 dark:text-slate-500">
                               {etiquetaCara ?? "Frente"}
                             </span>
+                            {img.naturalWidth > 0 &&
+                              dpiDeImagen(img) < DPI_MINIMO && (
+                                <FaExclamationTriangle className="absolute right-0.5 top-0.5 text-[10px] text-amber-500" />
+                              )}
                           </button>
                         );
                       })}
@@ -817,6 +912,15 @@ function Personalizador() {
                         <p className="text-xs font-semibold text-gray-500 dark:text-slate-400">
                           Imagen seleccionada
                         </p>
+
+                        {imagenActivaBajaCalidad && (
+                          <p className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                            <FaExclamationTriangle className="mt-0.5 shrink-0" />
+                            Imagen pequeña para imprimir (≈
+                            {Math.round(dpiImagenActiva)} DPI, mínimo {DPI_MINIMO}).
+                            Usa una de mayor resolución o redúcela de tamaño.
+                          </p>
+                        )}
 
                         <>
                           <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
@@ -1159,9 +1263,15 @@ function Personalizador() {
             <button
               type="button"
               onClick={handleGuardarDiseno}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+              disabled={guardandoDiseno}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:border-indigo-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
             >
-              <FaSave /> Guardar diseño
+              {guardandoDiseno ? (
+                <FaSpinner className="animate-spin" />
+              ) : (
+                <FaSave />
+              )}
+              {guardandoDiseno ? "Guardando..." : "Guardar diseño"}
             </button>
 
             <button

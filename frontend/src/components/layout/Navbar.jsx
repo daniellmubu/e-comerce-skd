@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt, FaHeart } from "react-icons/fa";
+import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt, FaHeart, FaBars, FaInbox } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -11,11 +11,15 @@ function Navbar() {
   const { usuario, cerrarSesion } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [busqueda, setBusqueda] = useState("");
+  const [menuAbierto, setMenuAbierto] = useState(false);
 
   const handleLogout = () => {
     cerrarSesion();
     navigate("/");
   };
+
+  const toggleMenu = () => setMenuAbierto((v) => !v);
+  const cerrarMenu = () => setMenuAbierto(false);
 
   // El buscador superior es la puerta de entrada al catálogo: navega con
   // ?q= para que el catálogo lo recoja y filtre.
@@ -89,23 +93,54 @@ function Navbar() {
                 </span>
               </Link>
 
-              <Link
-                to="/mis-cupones"
-                aria-label="Mis cupones"
-                title="Mis cupones"
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
-              >
-                <FaTicketAlt className="text-lg" />
-              </Link>
+              {/* Menú hamburguesa: cupones, favoritos y bandeja */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={toggleMenu}
+                  aria-label="Abrir menú"
+                  aria-expanded={menuAbierto}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+                >
+                  <FaBars className="text-lg" />
+                </button>
 
-              <Link
-                to="/mis-favoritos"
-                aria-label="Mis favoritos"
-                title="Mis favoritos"
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
-              >
-                <FaHeart className="text-lg" />
-              </Link>
+                {menuAbierto && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={cerrarMenu}
+                      aria-hidden="true"
+                    />
+                    <div className="absolute right-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                      <Link
+                        to="/mis-cupones"
+                        onClick={cerrarMenu}
+                        className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        <FaTicketAlt className="text-indigo-500 dark:text-cyan-400" />
+                        Cupones
+                      </Link>
+                      <Link
+                        to="/mis-favoritos"
+                        onClick={cerrarMenu}
+                        className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        <FaHeart className="text-indigo-500 dark:text-cyan-400" />
+                        Favoritos
+                      </Link>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-gray-400 dark:text-slate-500"
+                        title="Próximamente"
+                      >
+                        <FaInbox className="text-gray-400 dark:text-slate-500" />
+                        Bandeja de entrada
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
 
               <button
                 onClick={handleLogout}
