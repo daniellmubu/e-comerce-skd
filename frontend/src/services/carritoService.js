@@ -32,11 +32,12 @@
   return respuesta.data;
   }
 
-  export async function agregarItem({ carritoId, productoId, cantidad }) {
+  export async function agregarItem({ carritoId, productoId, cantidad, varianteId = null }) {
     const { data } = await api.post("/detalle-carrito", {
       carritoId,
       productoId,
       cantidad,
+      varianteId,
     });
     return data;
   }
@@ -57,5 +58,6 @@
       carritoId: item.carritoId,
       productoId: item.productoId,
       cantidad: nuevaCantidad,
+      varianteId: item.varianteId ?? null,
     });
   }

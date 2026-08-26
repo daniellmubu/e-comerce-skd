@@ -4,7 +4,7 @@ import { FaStar, FaShoppingCart, FaMagic, FaArrowLeft } from "react-icons/fa";
 
 import camiseta from "../assets/images/products/camiseta.png";
 import mug from "../assets/images/products/mug.png";
-import { obtenerProductoPorId, listarProductos } from "../services/productService";
+import { obtenerProductoPorId, obtenerVariantesDeProducto, listarProductos } from "../services/productService";
 import { listarResenasPorProducto } from "../services/resenaService";
 import { listarCaracteristicasPorProducto } from "../services/caracteristicaService";
 import { getErrorMessage } from "../services/api";
@@ -47,44 +47,85 @@ function DetalleProducto() {
   const [resenas, setResenas] = useState([]);
   const [caracteristicas, setCaracteristicas] = useState([]);
   const [relacionados, setRelacionados] = useState([]);
+  const [variantes, setVariantes] = useState([]);
+  const [tallaSel, setTallaSel] = useState(null);
+  const [colorSel, setColorSel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    cargarDatos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let activo = true;
+
+    Promise.all([
+      obtenerProductoPorId(id),
+      listarResenasPorProducto(id).catch(() => []),
+      listarCaracteristicasPorProducto(id).catch(() => []),
+      listarProductos().catch(() => []),
+      obtenerVariantesDeProducto(id).catch(() => []),
+    ])
+      .then(
+        ([productoData, resenasData, caracteristicasData, todos, variantesData]) => {
+          if (!activo) return;
+          setProducto(productoData);
+          setResenas(resenasData);
+          setCaracteristicas(caracteristicasData);
+          setVariantes(Array.isArray(variantesData) ? variantesData : []);
+          setRelacionados(
+            todos
+              .filter((p) => p.id !== productoData.id && p.categoria === productoData.categoria)
+              .slice(0, 4)
+          );
+
+          // Auto-selección: si el producto tiene una sola talla o un solo color,
+          // queda preseleccionado para que el usuario no tenga que elegir.
+          if (Array.isArray(variantesData) && variantesData.length > 0) {
+            const tallasUnicas = [...new Set(variantesData.map((v) => v.talla))];
+            const coloresUnicos = [...new Set(variantesData.map((v) => v.color))];
+            if (tallasUnicas.length === 1) setTallaSel(tallasUnicas[0]);
+            if (coloresUnicos.length === 1) setColorSel(coloresUnicos[0]);
+          }
+
+          setLoading(false);
+        }
+      )
+      .catch((err) => {
+        if (!activo) return;
+        setError(getErrorMessage(err));
+        setLoading(false);
+      });
+
+    return () => {
+      activo = false;
+    };
   }, [id]);
-
-  async function cargarDatos() {
-    setLoading(true);
-    setError(null);
-    try {
-      const [productoData, resenasData, caracteristicasData, todos] = await Promise.all([
-        obtenerProductoPorId(id),
-        listarResenasPorProducto(id).catch(() => []),
-        listarCaracteristicasPorProducto(id).catch(() => []),
-        listarProductos().catch(() => []),
-      ]);
-
-      setProducto(productoData);
-      setResenas(resenasData);
-      setCaracteristicas(caracteristicasData);
-      setRelacionados(
-        todos
-          .filter((p) => p.id !== productoData.id && p.categoria === productoData.categoria)
-          .slice(0, 4)
-      );
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const meta = useMemo(
     () => (producto ? CATEGORY_META[producto.categoria] ?? DEFAULT_META : DEFAULT_META),
     [producto]
   );
+
+  // Variantes: tallas y colores disponibles, y la variante seleccionada.
+  const tallas = useMemo(
+    () => [...new Set(variantes.map((v) => v.talla))],
+    [variantes]
+  );
+  const colores = useMemo(() => {
+    const base = tallaSel
+      ? variantes.filter((v) => v.talla === tallaSel)
+      : variantes;
+    return [...new Set(base.map((v) => v.color))];
+  }, [variantes, tallaSel]);
+
+  const varianteSel = useMemo(
+    () =>
+      variantes.find(
+        (v) => v.talla === tallaSel && v.color === colorSel
+      ) ?? null,
+    [variantes, tallaSel, colorSel]
+  );
+
+  const precioMostrar = varianteSel ? varianteSel.precio : producto?.precio;
+  const stockMostrar = varianteSel ? varianteSel.stock : producto?.stock;
 
   const handlePersonalizar = () => {
     navigate("/personalizador", { state: producto });
@@ -162,8 +203,82 @@ function DetalleProducto() {
             </div>
 
             <p className="mt-6 text-4xl font-bold text-indigo-600 dark:text-cyan-300">
-              {formatPrice(producto.precio)}
+              {formatPrice(precioMostrar)}
             </p>
+
+            {variantes.length > 0 && (
+              <div className="mt-6 space-y-5">
+                {/* Talla */}
+                {tallas.length > 1 && (
+                  <div>
+                    <p className="mb-2 text-sm font-semibold text-gray-700 dark:text-slate-300">
+                      Talla
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {tallas.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => {
+                            setTallaSel(t);
+                            const coloresDeTalla = [
+                              ...new Set(
+                                variantes
+                                  .filter((v) => v.talla === t)
+                                  .map((v) => v.color)
+                              ),
+                            ];
+                            setColorSel(
+                              coloresDeTalla.length === 1 ? coloresDeTalla[0] : null
+                            );
+                          }}
+                          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                            tallaSel === t
+                              ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
+                              : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300"
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Color */}
+                {colores.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-sm font-semibold text-gray-700 dark:text-slate-300">
+                      Color
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {colores.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setColorSel(c)}
+                          aria-label={`Color ${c}`}
+                          title={c}
+                          className={`flex h-9 items-center justify-center rounded-full border px-3 text-xs font-medium transition ${
+                            colorSel === c
+                              ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300 dark:ring-cyan-500/40"
+                              : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300"
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-sm text-gray-500 dark:text-slate-400">
+                  {varianteSel
+                    ? `Stock disponible: ${stockMostrar}`
+                    : "Selecciona una talla y un color."}
+                </p>
+              </div>
+            )}
 
             <div className="my-8 border-t border-gray-200 dark:border-slate-800" />
 
@@ -200,12 +315,21 @@ function DetalleProducto() {
               </button>
               <button
                 type="button"
-                onClick={() => agregarProducto(producto)}
-                disabled={producto.stock === 0}
+                onClick={() =>
+                  agregarProducto(producto, {
+                    varianteId: varianteSel?.id ?? null,
+                    precio: precioMostrar,
+                  })
+                }
+                disabled={
+                  (variantes.length > 0 && !varianteSel) || stockMostrar === 0
+                }
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 px-6 py-4 font-semibold transition hover:border-indigo-400 dark:border-slate-700 dark:hover:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <FaShoppingCart />
-                {producto.stock === 0 ? "Agotado" : "Agregar al carrito"}
+                {(variantes.length > 0 && !varianteSel) || stockMostrar === 0
+                  ? "Agotado"
+                  : "Agregar al carrito"}
               </button>
             </div>
           </div>

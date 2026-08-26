@@ -6,12 +6,14 @@ import com.skd.sublimacion_api.entity.Carrito;
 import com.skd.sublimacion_api.entity.Diseno;
 import com.skd.sublimacion_api.entity.ItemCarrito;
 import com.skd.sublimacion_api.entity.Producto;
+import com.skd.sublimacion_api.entity.VarianteProducto;
 import com.skd.sublimacion_api.exeption.BadRequestException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CarritoRepository;
 import com.skd.sublimacion_api.repository.DisenoRepository;
 import com.skd.sublimacion_api.repository.ItemCarritoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
+import com.skd.sublimacion_api.repository.VarianteProductoRepository;
 import com.skd.sublimacion_api.service.ItemCarritoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
     private final CarritoRepository carritoRepository;
     private final ProductoRepository productoRepository;
     private final DisenoRepository disenoRepository;
+    private final VarianteProductoRepository varianteProductoRepository;
 
     @Override
     public ItemCarritoResponse obtenerPorId(Long id) {
@@ -60,12 +63,27 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
             }
         }
 
+        VarianteProducto variante = null;
+        if (request.getVarianteId() != null) {
+            variante = varianteProductoRepository.findById(request.getVarianteId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Variante no encontrada"));
+
+            if (!variante.getProducto().getId().equals(producto.getId())) {
+                throw new BadRequestException("La variante no pertenece a ese producto.");
+            }
+        }
+
+        BigDecimal precioUnitario = variante != null
+                ? variante.getPrecio()
+                : producto.getPrecio();
+
         ItemCarrito detalle = ItemCarrito.builder()
                 .carrito(carrito)
                 .producto(producto)
                 .diseno(diseno)
+                .variante(variante)
                 .cantidad(request.getCantidad())
-                .precioUnitario(producto.getPrecio())
+                .precioUnitario(precioUnitario)
                 .build();
 
         detalle = detalleCarritoRepository.save(detalle);
@@ -106,6 +124,9 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
                 .subtotal(subtotal)
                 .disenoId(detalle.getDiseno() != null ? detalle.getDiseno().getId() : null)
                 .imagenDisenoUrl(detalle.getDiseno() != null ? detalle.getDiseno().getImagenUrl() : null)
+                .varianteId(detalle.getVariante() != null ? detalle.getVariante().getId() : null)
+                .talla(detalle.getVariante() != null ? detalle.getVariante().getTalla() : null)
+                .color(detalle.getVariante() != null ? detalle.getVariante().getColor() : null)
                 .build();
     }
 }
