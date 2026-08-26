@@ -27,6 +27,16 @@ async function procesarDisenoInterno(url) {
   // 1. Revisa las 4 esquinas: si no son blancas, la IA probablemente
   //    generó un mockup completo en vez de solo el gráfico.
   const esquinas = [idx(0, 0), idx(width - 1, 0), idx(0, height - 1), idx(width - 1, height - 1)];
+
+  // 1a. Si las esquinas YA son transparentes, la imagen viene recortada (p. ej.
+  //     salida de removeBackground o del backend). Se devuelve tal cual para
+  //     NO tocar el canal alpha: volver a procesarla podría reintroducir un
+  //     fondo sólido (gris/blanco) alrededor del diseño.
+  const esquinasTransparentes = esquinas.every((i) => data[i + 3] < 10);
+  if (esquinasTransparentes) {
+    return { ok: true, dataUrl: url };
+  }
+
   const esquinasBlancas = esquinas.every(
     (i) => data[i] > UMBRAL_BLANCO && data[i + 1] > UMBRAL_BLANCO && data[i + 2] > UMBRAL_BLANCO
   );

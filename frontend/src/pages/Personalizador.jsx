@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaUpload,
@@ -15,6 +15,7 @@ import {
   FaPlus,
   FaTimes,
   FaExclamationTriangle,
+  FaImages,
 } from "react-icons/fa";
 import { Shirt, Coffee } from "lucide-react";
 
@@ -22,11 +23,13 @@ import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { guardarPersonalizacion } from "../services/personalizacionService";
 import { generarDiseno, subirDiseno } from "../services/disenoService";
+import { listarPlantillas } from "../services/plantillaService";
 import { getErrorMessage } from "../services/api";
 import PrendaMockup, {
   ANCHO_IMAGEN_BASE,
   ESCALA_MIN,
   ESCALA_MAX,
+  obtenerBaseMockup,
 } from "../components/ui/PrendaMockup";
 import Prenda3D from "../components/ui/Prenda3D";
 import { removeBackground } from "@imgly/background-removal";
@@ -89,6 +92,18 @@ function formatPrice(value) {
     currency: "COP",
     maximumFractionDigits: 0,
   });
+}
+
+// Identificador único para cada imagen insertada (helper de módulo: Date.now
+// y Math.random no pueden llamarse dentro del render del componente).
+function crearIdImagen() {
+  return `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// Pequeño desplazamiento aleatorio (%) para que al agregar varias imágenes no
+// queden exactamente apiladas y sea más fácil separarlas.
+function desplazamientoAleatorio() {
+  return Math.round((Math.random() - 0.5) * 16);
 }
 
 function blobToDataURL(blob) {
@@ -180,8 +195,9 @@ function Personalizador() {
   const [rotacionTexto, setRotacionTexto] = useState(0);
   const [escalaTexto, setEscalaTexto] = useState(1);
   const [textoActivo, setTextoActivo] = useState(false);
-  const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "color" | "texto"
+  const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "plantillas" | "texto" | "color"
   const [guardando, setGuardando] = useState(false);
+  // Guardado del diseño compuesto en "Mis diseños" (endpoint /disenos/subir).
   const [guardandoDiseno, setGuardandoDiseno] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [procesandoImagen, setProcesandoImagen] = useState(false);
@@ -193,6 +209,14 @@ function Personalizador() {
   // Zoom del lienzo de edición (0.5x - 3x) y modo pantalla completa del mismo.
   const [zoomLienzo, setZoomLienzo] = useState(1);
   const [lienzoMaximizado, setLienzoMaximizado] = useState(false);
+
+  // Galería de plantillas prediseñadas: se carga la primera vez que se abre
+  // la pestaña y se filtra en cliente por categoría y compatibilidad.
+  const [plantillas, setPlantillas] = useState([]);
+  const [cargandoPlantillas, setCargandoPlantillas] = useState(false);
+  const [errorPlantillas, setErrorPlantillas] = useState(null);
+  const [categoriaPlantilla, setCategoriaPlantilla] = useState("todas");
+  const plantillasCargadasRef = useRef(false);
 
   const imagenActiva = imagenes.find((img) => img.id === imagenActivaId) ?? null;
 
@@ -227,11 +251,63 @@ function Personalizador() {
     [filtroFuente]
   );
 
+  // --- Galería de plantillas prediseñadas ---
+
+  // Carga única y diferida: solo se pide al backend la primera vez que se
+  // abre la pestaña (o al reintentar tras un error).
+  const cargarGaleriaPlantillas = async () => {
+    setCargandoPlantillas(true);
+    setErrorPlantillas(null);
+    try {
+      const datos = await listarPlantillas();
+      setPlantillas(datos);
+      plantillasCargadasRef.current = true;
+    } catch (err) {
+      setErrorPlantillas(getErrorMessage(err));
+    } finally {
+      setCargandoPlantillas(false);
+    }
+  };
+
+  useEffect(() => {
+    if (herramienta !== "plantillas") return;
+    if (!plantillasCargadasRef.current) cargarGaleriaPlantillas();
+  }, [herramienta]);
+
+  // Tabs de categoría derivadas de los datos (se adapta a lo que haya en BD).
+  const categoriasPlantillas = useMemo(
+    () => [...new Set(plantillas.map((p) => p.categoria))],
+    [plantillas]
+  );
+
+  // Plantillas visibles: categoría elegida + compatibles con el producto
+  // actual ("ambos" siempre aplica; el resto se oculta al cambiar de producto).
+  const plantillasVisibles = useMemo(
+    () =>
+      plantillas.filter(
+        (p) =>
+          (categoriaPlantilla === "todas" ||
+            p.categoria === categoriaPlantilla) &&
+          (p.productoTipoCompatible === selectedProduct ||
+            p.productoTipoCompatible === "ambos")
+      ),
+    [plantillas, categoriaPlantilla, selectedProduct]
+  );
+
+  // Aplica la plantilla como imagen de diseño en la cara activa: mismo
+  // camino que subir una imagen, así queda seleccionada, arrastrable y
+  // redimensionable con el editor normal.
+  const aplicarPlantilla = (plantilla) => {
+    agregarImagen(plantilla.imagenUrl);
+    setMensaje({
+      tipo: "ok",
+      texto: `Plantilla "${plantilla.nombre}" agregada. Muévela y ajústala a tu gusto.`,
+    });
+  };
+
   const agregarImagen = async (url) => {
-    const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    // Pequeño desplazamiento aleatorio para que al agregar varias no queden
-    // exactamente apiladas y sea más fácil separarlas.
-    const offset = Math.round((Math.random() - 0.5) * 16);
+    const id = crearIdImagen();
+    const offset = desplazamientoAleatorio();
 
     // Dimensiones originales de la imagen, para poder estimar el DPI al
     // escalarla y avisar si quedará pixelada al imprimir.
@@ -397,10 +473,11 @@ function Personalizador() {
     setMensaje(null);
   };
 
-  // Aplana todas las imágenes y el texto en una sola imagen PNG (con fondo
-  // transparente) para guardarla como la imagen final de la personalización.
-  // La posición de cada elemento es libre ({x, y} en %), la misma que usa el
-  // editor de "Ajuste fino" con react-moveable.
+  // Aplana el mockup de la vista activa (producto + color) junto con las
+  // imágenes y el texto en una sola imagen PNG, idéntica a lo que se ve en el
+  // lienzo 2D: así la personalización guardada muestra la prenda de fondo y
+  // no solo el diseño suelto. La posición de cada elemento es libre ({x, y}
+  // en %), la misma que usa el editor con react-moveable.
   const componerImagenFinal = async () => {
     if (!imagenes.length && !textoDiseno.trim()) return null;
 
@@ -409,53 +486,111 @@ function Personalizador() {
     canvas.height = TAMANO_LIENZO;
     const ctx = canvas.getContext("2d");
 
-      for (const imagen of imagenes) {
-        // Mismo procesamiento que el editor 2D y la textura 3D: sin esto, la
-        // imagen guardada conservaría el fondo blanco que en pantalla no se ve.
-        const procesada = await procesarDiseno(imagen.url);
-        const el = await cargarImagenElemento(procesada?.dataUrl ?? imagen.url);
-        if (!el) continue;
+    // 1. Producto de fondo: misma imagen base y encuadre que PrendaMockup
+    //    (a alto completo del lienzo, centrada horizontalmente; si es más
+    //    ancha que el cuadrado, se recorta por los lados como en pantalla).
+    const baseImg = await cargarImagenElemento(
+      obtenerBaseMockup(selectedProduct, caraActiva)
+    );
+    let encuadreBase = null;
+    if (baseImg) {
+      const anchoBase =
+        TAMANO_LIENZO * (baseImg.naturalWidth / baseImg.naturalHeight);
+      encuadreBase = {
+        dx: (TAMANO_LIENZO - anchoBase) / 2,
+        dw: anchoBase,
+      };
+      ctx.drawImage(baseImg, encuadreBase.dx, 0, encuadreBase.dw, TAMANO_LIENZO);
+    }
 
-        const baseW =
-          TAMANO_LIENZO *
-          ANCHO_IMAGEN_BASE *
-          (imagen.escalaX ?? imagen.escala ?? 1);
-        const baseH =
-          baseW *
-          (el.naturalHeight / el.naturalWidth) *
-          (imagen.escalaY ?? imagen.escala ?? 1);
-        const cx = (imagen.x / 100) * TAMANO_LIENZO;
-        const cy = (imagen.y / 100) * TAMANO_LIENZO;
+    // 2. Color del producto: silueta rellena con el color elegido y mezclada
+    //    en "multiply" sobre la foto (igual que la capa de color del editor).
+    if (baseImg && colorSeleccionado) {
+      const capaColor = document.createElement("canvas");
+      capaColor.width = TAMANO_LIENZO;
+      capaColor.height = TAMANO_LIENZO;
+      const ctxColor = capaColor.getContext("2d");
+      ctxColor.drawImage(baseImg, encuadreBase.dx, 0, encuadreBase.dw, TAMANO_LIENZO);
+      ctxColor.globalCompositeOperation = "source-in";
+      ctxColor.fillStyle = colorSeleccionado;
+      ctxColor.fillRect(0, 0, TAMANO_LIENZO, TAMANO_LIENZO);
 
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(((imagen.rotacion ?? 0) * Math.PI) / 180);
-        ctx.drawImage(el, -baseW / 2, -baseH / 2, baseW, baseH);
-        ctx.restore();
-      }
+      ctx.globalCompositeOperation = "multiply";
+      ctx.drawImage(capaColor, 0, 0);
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    // 3. Diseños + texto en una capa aparte, para poder recortarlos con la
+    //    silueta del producto igual que en el editor (en las vistas de manga
+    //    se permite desbordar hacia el costado del torso).
+    const permitirDesborde =
+      selectedProduct === "camiseta" &&
+      (caraActiva === "mangaIzquierda" || caraActiva === "mangaDerecha");
+
+    const capaDiseno = document.createElement("canvas");
+    capaDiseno.width = TAMANO_LIENZO;
+    capaDiseno.height = TAMANO_LIENZO;
+    const ctxDiseno = capaDiseno.getContext("2d");
+
+    for (const imagen of imagenes) {
+      // Mismo procesamiento que el editor 2D y la textura 3D: sin esto, la
+      // imagen guardada conservaría el fondo blanco que en pantalla no se ve.
+      const procesada = await procesarDiseno(imagen.url);
+      const el = await cargarImagenElemento(procesada?.dataUrl ?? imagen.url);
+      if (!el) continue;
+
+      const baseW =
+        TAMANO_LIENZO *
+        ANCHO_IMAGEN_BASE *
+        (imagen.escalaX ?? imagen.escala ?? 1);
+      const baseH =
+        baseW *
+        (el.naturalHeight / el.naturalWidth) *
+        (imagen.escalaY ?? imagen.escala ?? 1);
+      const cx = (imagen.x / 100) * TAMANO_LIENZO;
+      const cy = (imagen.y / 100) * TAMANO_LIENZO;
+
+      ctxDiseno.save();
+      ctxDiseno.translate(cx, cy);
+      ctxDiseno.rotate(((imagen.rotacion ?? 0) * Math.PI) / 180);
+      ctxDiseno.drawImage(el, -baseW / 2, -baseH / 2, baseW, baseH);
+      ctxDiseno.restore();
+    }
 
     if (textoDiseno.trim()) {
       // Asegura que la fuente web esté descargada antes de dibujar; si no,
       // el canvas caería al fallback y la imagen guardada no coincidiría.
       await cargarFuenteParaCanvas(fuenteTexto);
-      ctx.save();
-      ctx.translate(
+      ctxDiseno.save();
+      ctxDiseno.translate(
         (posicionTexto.x / 100) * TAMANO_LIENZO,
         (posicionTexto.y / 100) * TAMANO_LIENZO
       );
-      ctx.rotate(((rotacionTexto ?? 0) * Math.PI) / 180);
-      ctx.scale(escalaTexto ?? 1, escalaTexto ?? 1);
-      ctx.fillStyle = colorTexto;
-      ctx.font = `600 ${Math.round(tamanoTexto * FACTOR_LIENZO)}px ${fuenteTexto}`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(textoDiseno, 0, 0);
-      ctx.restore();
+      ctxDiseno.rotate(((rotacionTexto ?? 0) * Math.PI) / 180);
+      ctxDiseno.scale(escalaTexto ?? 1, escalaTexto ?? 1);
+      ctxDiseno.fillStyle = colorTexto;
+      ctxDiseno.font = `600 ${Math.round(tamanoTexto * FACTOR_LIENZO)}px ${fuenteTexto}`;
+      ctxDiseno.textAlign = "center";
+      ctxDiseno.textBaseline = "middle";
+      ctxDiseno.fillText(textoDiseno, 0, 0);
+      ctxDiseno.restore();
     }
+
+    // Recorte a la silueta: "destination-in" conserva únicamente lo que cae
+    // dentro del producto (máscara igual a la del editor 2D).
+    if (baseImg && !permitirDesborde) {
+      ctxDiseno.globalCompositeOperation = "destination-in";
+      ctxDiseno.drawImage(baseImg, encuadreBase.dx, 0, encuadreBase.dw, TAMANO_LIENZO);
+      ctxDiseno.globalCompositeOperation = "source-over";
+    }
+    ctx.drawImage(capaDiseno, 0, 0);
 
     return canvas.toDataURL("image/png");
   };
 
+  // Guarda el mockup compuesto (producto + color + diseño estampado) como un
+  // Diseño con origen USUARIO: aparece en "Mis diseños" del panel con la
+  // prenda de fondo, no el gráfico suelto.
   const handleGuardarDiseno = async () => {
     if (!hayDiseno) {
       setMensaje({ tipo: "error", texto: "Sube una imagen o genera un diseño con IA primero." });
@@ -678,7 +813,7 @@ function Personalizador() {
               Herramientas
             </h2>
 
-            {/* Tira de pestañas: imagen / texto / color */}
+            {/* Tira de pestañas: imagen / plantillas / texto / color */}
             <div className="mb-4 flex items-center gap-1 rounded-xl border border-gray-200 p-1 dark:border-slate-700">
               <button
                 type="button"
@@ -691,6 +826,19 @@ function Personalizador() {
                 }`}
               >
                 <FaUpload className="text-sm" />
+              </button>
+              <button
+                type="button"
+                aria-label="Herramienta de plantillas"
+                title="Plantillas"
+                onClick={() => setHerramienta("plantillas")}
+                className={`flex flex-1 items-center justify-center rounded-lg py-2 transition ${
+                  herramienta === "plantillas"
+                    ? "bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200"
+                    : "text-gray-400 hover:bg-gray-100 dark:text-slate-500 dark:hover:bg-slate-800"
+                }`}
+              >
+                <FaImages className="text-sm" />
               </button>
               <button
                 type="button"
@@ -998,6 +1146,91 @@ function Personalizador() {
                   </>
                 )}
               </>
+            ) : herramienta === "plantillas" ? (
+              <>
+                {/* Galería de plantillas prediseñadas: arrancar de un diseño
+                    ya hecho en vez de empezar en blanco. */}
+                <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Plantillas para {selectedProduct === "camiseta" ? "camiseta" : "mug"}
+                </p>
+
+                {/* Tabs de categoría (derivadas de las plantillas cargadas) */}
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {["todas", ...categoriasPlantillas].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setCategoriaPlantilla(cat)}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                        categoriaPlantilla === cat
+                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
+                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400 dark:hover:border-cyan-500/50"
+                      }`}
+                    >
+                      {cat === "todas" ? "Todas" : cat}
+                    </button>
+                  ))}
+                </div>
+
+                {cargandoPlantillas ? (
+                  <div className="flex flex-col items-center gap-2 py-10 text-xs text-gray-400 dark:text-slate-500">
+                    <FaSpinner className="animate-spin text-lg" />
+                    Cargando plantillas...
+                  </div>
+                ) : errorPlantillas ? (
+                  <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-gray-300 py-8 px-3 text-center dark:border-slate-700">
+                    <FaExclamationTriangle className="text-lg text-red-400" />
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      No fue posible cargar las plantillas: {errorPlantillas}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={cargarGaleriaPlantillas}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : plantillasVisibles.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-gray-300 py-8 px-3 text-center dark:border-slate-700">
+                    <FaImages className="text-lg text-gray-300 dark:text-slate-600" />
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      No hay plantillas para esta categoría y producto todavía.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid max-h-72 grid-cols-2 gap-1.5 overflow-y-auto rounded-xl border border-gray-100 p-1.5 dark:border-slate-800">
+                    {plantillasVisibles.map((plantilla) => (
+                      <button
+                        key={plantilla.id}
+                        type="button"
+                        onClick={() => aplicarPlantilla(plantilla)}
+                        title={`Aplicar "${plantilla.nombre}"`}
+                        className="group flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white transition duration-150 hover:-translate-y-0.5 hover:border-indigo-400 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-cyan-500/50"
+                      >
+                        <span className="flex h-20 w-full items-center justify-center overflow-hidden bg-gray-50 p-1 dark:bg-slate-950">
+                          <img
+                            src={plantilla.imagenUrl}
+                            alt={plantilla.nombre}
+                            loading="lazy"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </span>
+                        <span className="truncate px-1 py-1 text-center text-[10px] font-medium text-gray-500 transition group-hover:text-indigo-600 dark:text-slate-400 dark:group-hover:text-cyan-300">
+                          {plantilla.nombre}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {plantillasVisibles.length > 0 && (
+                  <p className="mt-2 text-[10px] leading-snug text-gray-400 dark:text-slate-500">
+                    Toca una plantilla para agregarla al lienzo; luego muévela,
+                    redimenciónala o cámbiale la ubicación como cualquier imagen.
+                  </p>
+                )}
+              </>
             ) : herramienta === "color" ? (
               <>
                 {/* Paleta de colores */}
@@ -1264,7 +1497,7 @@ function Personalizador() {
               type="button"
               onClick={handleGuardarDiseno}
               disabled={guardandoDiseno}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:border-indigo-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:border-indigo-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
             >
               {guardandoDiseno ? (
                 <FaSpinner className="animate-spin" />

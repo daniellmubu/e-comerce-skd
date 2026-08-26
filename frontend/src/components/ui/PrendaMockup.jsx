@@ -38,6 +38,15 @@ const BASES_POR_CARA = {
 // aplanado final (imagen que se guarda) coincida con lo que se ve en pantalla.
 export const ANCHO_IMAGEN_BASE = 0.38;
 
+// Vista base según el producto y la ubicación activa; con fallback a la
+// frontal del producto (o de la camiseta) si la ubicación no tiene asset
+// propio. Compartida con el Personalizador para que la imagen guardada use
+// exactamente el mismo mockup que se ve en el lienzo.
+// eslint-disable-next-line react-refresh/only-export-components -- helper compartido con el Personalizador
+export function obtenerBaseMockup(tipo, cara) {
+  return (cara && BASES_POR_CARA[tipo]?.[cara]) || IMAGENES[tipo] || camisetaBase;
+}
+
 // Límites de escalado por eje para las imágenes insertadas. El máximo llega
 // justo antes de que el diseño exceda el área imprimible del lienzo (con el
 // ancho base del 38%, x2.5 ≈ 95% del lienzo); por encima de eso el marco
@@ -276,12 +285,7 @@ function PrendaMockup({
   onSeleccionarTexto,
   interactivo = true,
 }) {
-  // Vista base según la ubicación activa; con fallback a la frontal del
-  // producto (o de la camiseta) si la ubicación no tiene asset propio.
-  const base =
-    (cara && BASES_POR_CARA[tipo]?.[cara]) ||
-    IMAGENES[tipo] ||
-    camisetaBase;
+  const base = obtenerBaseMockup(tipo, cara);
   const contenedorRef = useRef(null);
   const startRef = useRef(null);
   const [target, setTarget] = useState(null);

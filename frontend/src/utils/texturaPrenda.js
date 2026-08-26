@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import procesarDiseno from "./quitarFondoBlanco";
+import { cargarFuenteParaCanvas } from "./fuentesTexto";
 
 // Contorno de la camiseta (tipo "buzo") en unidades del mundo (caja de 2.6 x
 // 2.6). Se usa tanto para la geometría extruida (grosor real con bisel) como
@@ -117,10 +118,14 @@ function mapearPorArea(x, y, tamano, area) {
 // transformaciones (trasladar → rotar → escalar) que el editor 2D y la imagen
 // final guardada, para que las tres vistas coincidan. `area` re-mapea las
 // coordenadas al rectángulo imprimible del torso (solo camiseta frente/espalda).
-function dibujarTexto(ctx, texto, w, h, area = null) {
+// Espera la descarga de la fuente web elegida: sin esto, el canvas dibujaría
+// con el fallback mientras el editor 2D ya muestra la fuente real.
+async function dibujarTexto(ctx, texto, w, h, area = null) {
   if (!texto || !texto.contenido || !texto.contenido.trim()) return;
 
   const { cx, cy, fx } = mapearPorArea(texto.x, texto.y, w, area);
+
+  await cargarFuenteParaCanvas(texto.fuente || "sans-serif");
 
   ctx.save();
   ctx.translate(cx, cy);
@@ -177,11 +182,17 @@ export async function componerTexturaCamiseta({
   canvas.height = tamano;
   const ctx = canvas.getContext("2d");
 
-  // 1. Color sólido base de toda la prenda. En capas de proyección
-  //    (manga + costado) se omite para dejar el fondo transparente.
+  // 1. Color sólido base de toda la prenda. En capas de proyección (frente,
+  //    espalda, mangas) se deja el fondo TRANSPARENTE: se limpia el lienzo y
+  //    no se pinta ningún color, para que el decal conserve el canal alpha y
+  //    solo el estampado sea opaco. Cualquier fillRect aquí produciría el
+  //    recuadro sólido (gris/blanco) alrededor del diseño en el modelo 3D.
   if (!fondoTransparente) {
     ctx.fillStyle = color || "#ffffff";
     ctx.fillRect(0, 0, tamano, tamano);
+  } else {
+    ctx.clearRect(0, 0, tamano, tamano);
+    ctx.globalCompositeOperation = "source-over";
   }
 
   // 2. Diseños + texto, opcionalmente recortados a la silueta del torso.
@@ -217,12 +228,16 @@ export async function componerTexturaCamiseta({
     ctx.restore();
   }
 
-  dibujarTexto(ctx, texto, tamano, tamano, area);
+  await dibujarTexto(ctx, texto, tamano, tamano, area);
   ctx.restore();
   ctx.restore();
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;
+  // El canvas usa alpha no-premultiplicado (RGBA estándar); dejar el flag en
+  // false evita que los píxeles transparentes se interpreten como sólidos.
+  textura.premultiplyAlpha = false;
+  textura.needsUpdate = true;
   return textura;
 }
 
@@ -277,9 +292,11 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
   }
 
   // 3. Texto del personalizador, dibujado encima del diseño.
-  dibujarTexto(ctx, texto, texW, texH);
+  await dibujarTexto(ctx, texto, texW, texH);
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;
+  textura.premultiplyAlpha = false;
+  textura.needsUpdate = true;
   return textura;
 }

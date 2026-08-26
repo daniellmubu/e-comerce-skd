@@ -38,6 +38,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/imagenes/**").permitAll()
                         .requestMatchers("/api/categorias/**").permitAll()
                         .requestMatchers("/api/caracteristicas/**").permitAll()
+                        // Galería de plantillas prediseñadas del personalizador
+                        // (solo lectura; la gestión se hace directo en BD).
+                        .requestMatchers("/api/plantillas/**").permitAll()
                         // Las reseñas por producto son públicas; crearlas exige
                         // autenticación (queda cubierta por anyRequest()).
                         .requestMatchers("/api/resenas/producto/**").permitAll()
