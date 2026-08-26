@@ -4,6 +4,7 @@ import com.skd.sublimacion_api.dto.producto.ProductoBusquedaRequest;
 import com.skd.sublimacion_api.dto.producto.ProductoListaResponse;
 import com.skd.sublimacion_api.dto.producto.ProductoRequest;
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
+import com.skd.sublimacion_api.dto.producto.VarianteProductoResponse;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.service.ProductoService;
 import jakarta.validation.Valid;
@@ -36,6 +37,11 @@ public class ProductoController {
             @AuthenticationPrincipal Usuario usuario) {
 
         return productoService.obtenerPorId(id, idOpcional(usuario));
+    }
+
+    @GetMapping("/{id}/variantes")
+    public List<VarianteProductoResponse> listarVariantes(@PathVariable Long id) {
+        return productoService.listarVariantes(id);
     }
 
     @PostMapping

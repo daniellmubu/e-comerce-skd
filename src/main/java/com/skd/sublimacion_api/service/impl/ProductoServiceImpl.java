@@ -16,7 +16,10 @@ import com.skd.sublimacion_api.dto.producto.ProductoListaResponse;
 import com.skd.sublimacion_api.dto.producto.OrdenProducto;
 import com.skd.sublimacion_api.dto.producto.ProductoRequest;
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
+import com.skd.sublimacion_api.dto.producto.VarianteProductoResponse;
 import com.skd.sublimacion_api.entity.Categoria;
+import com.skd.sublimacion_api.entity.VarianteProducto;
+import com.skd.sublimacion_api.repository.VarianteProductoRepository;
 import com.skd.sublimacion_api.specification.ProductoSpecification;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -39,6 +42,7 @@ public class ProductoServiceImpl implements ProductoService {
     private final ResenaRepository resenaRepository;
     private final FavoritoRepository favoritoRepository;
     private final ImagenProductoRepository imagenProductoRepository;
+    private final VarianteProductoRepository varianteProductoRepository;
 
     @Override
     public List<ProductoResponse> listar(Long usuarioId) {
@@ -172,6 +176,19 @@ public class ProductoServiceImpl implements ProductoService {
         return convertir(producto, obtenerResumenResenas(usuarioId));
     }
 
+    @Override
+    public List<VarianteProductoResponse> listarVariantes(Long productoId) {
+
+        productoRepository.findById(productoId)
+            .orElseThrow(() ->
+                    new ResourceNotFoundException("Producto no encontrado con id: " + productoId));
+
+        return varianteProductoRepository.findByProductoId(productoId)
+                .stream()
+                .map(this::convertirVariante)
+                .toList();
+    }
+
     private Pageable aplicarOrden(Pageable pageable, OrdenProducto orden) {
 
         Sort sort = switch (orden) {
@@ -281,6 +298,18 @@ public class ProductoServiceImpl implements ProductoService {
                 .esFavorito(
                         resumen.favoritos().contains(producto.getId()))
                 .imagenUrl(imagenUrl)
+                .build();
+    }
+
+    private VarianteProductoResponse convertirVariante(VarianteProducto variante) {
+
+        return VarianteProductoResponse.builder()
+                .id(variante.getId())
+                .talla(variante.getTalla())
+                .color(variante.getColor())
+                .precio(variante.getPrecio())
+                .stock(variante.getStock())
+                .sku(variante.getSku())
                 .build();
     }
 }
