@@ -9,6 +9,7 @@ import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.entity.Rol;
 import com.skd.sublimacion_api.entity.TarifaEnvio;
 import com.skd.sublimacion_api.entity.Usuario;
+import com.skd.sublimacion_api.entity.VarianteProducto;
 import com.skd.sublimacion_api.entity.ItemCarrito;
 import com.skd.sublimacion_api.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class DataInitializer implements CommandLineRunner {
     private final CarritoRepository carritoRepository;
     private final ItemCarritoRepository itemCarritoRepository;
     private final TarifaEnvioRepository tarifaEnvioRepository;
+    private final VarianteProductoRepository varianteProductoRepository;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -53,6 +55,7 @@ public class DataInitializer implements CommandLineRunner {
         crearDirecciones();
         crearCarritoConItems();
         crearTarifasEnvio();
+        crearVariantes();
 
         System.out.println("=================================");
         System.out.println("Datos de prueba verificados/cargados.");
@@ -292,6 +295,72 @@ public class DataInitializer implements CommandLineRunner {
                     .build();
 
             tarifaEnvioRepository.save(tarifa);
+        }
+    }
+
+    // Variantes de producto (talla/color/stock/precio) para que Jeanpierre pueda mockear
+    private void crearVariantes() {
+
+        Categoria camisetas = categoriaRepository.findByNombre("Camisetas")
+                .orElseThrow(() -> new IllegalStateException("Categoría Camisetas no existe"));
+        Categoria mugs = categoriaRepository.findByNombre("Mugs")
+                .orElseThrow(() -> new IllegalStateException("Categoría Mugs no existe"));
+        Categoria gorras = categoriaRepository.findByNombre("Gorras")
+                .orElseThrow(() -> new IllegalStateException("Categoría Gorras no existe"));
+
+        // Camiseta Blanca Sublimable (producto id existente)
+        Producto camiseta = productoRepository.findByNombre("Camiseta Blanca Sublimable")
+                .orElseThrow(() -> new IllegalStateException("Producto Camiseta Blanca Sublimable no existe"));
+        crearVarianteSiNoExiste(camiseta, "S", "Blanco", new BigDecimal("35000"), 50);
+        crearVarianteSiNoExiste(camiseta, "M", "Blanco", new BigDecimal("35000"), 50);
+        crearVarianteSiNoExiste(camiseta, "L", "Blanco", new BigDecimal("35000"), 50);
+        crearVarianteSiNoExiste(camiseta, "XL", "Blanco", new BigDecimal("35000"), 30);
+        crearVarianteSiNoExiste(camiseta, "XXL", "Blanco", new BigDecimal("35000"), 20);
+        crearVarianteSiNoExiste(camiseta, "S", "Negro", new BigDecimal("35000"), 50);
+        crearVarianteSiNoExiste(camiseta, "M", "Negro", new BigDecimal("35000"), 50);
+        crearVarianteSiNoExiste(camiseta, "L", "Negro", new BigDecimal("35000"), 50);
+        crearVarianteSiNoExiste(camiseta, "XL", "Negro", new BigDecimal("35000"), 30);
+        crearVarianteSiNoExiste(camiseta, "XXL", "Negro", new BigDecimal("35000"), 20);
+
+        // Mug Cerámico Blanco 11oz
+        Producto mug = productoRepository.findByNombre("Mug Cerámico Blanco 11oz")
+                .orElseThrow(() -> new IllegalStateException("Producto Mug Cerámico Blanco 11oz no existe"));
+        crearVarianteSiNoExiste(mug, "Única", "Blanco", new BigDecimal("18000"), 100);
+        crearVarianteSiNoExiste(mug, "Única", "Negro", new BigDecimal("18000"), 80);
+        crearVarianteSiNoExiste(mug, "Única", "Rojo", new BigDecimal("18000"), 60);
+        crearVarianteSiNoExiste(mug, "Única", "Azul", new BigDecimal("18000"), 60);
+
+        // Gorra Trucker
+        Producto gorra = productoRepository.findByNombre("Gorra Trucker Sublimable")
+                .orElseThrow(() -> new IllegalStateException("Producto Gorra Trucker Sublimable no existe"));
+        crearVarianteSiNoExiste(gorra, "Única", "Negro", new BigDecimal("28000"), 45);
+        crearVarianteSiNoExiste(gorra, "Única", "Blanco", new BigDecimal("28000"), 30);
+        crearVarianteSiNoExiste(gorra, "Única", "Azul Marino", new BigDecimal("28000"), 30);
+        crearVarianteSiNoExiste(gorra, "Única", "Rojo", new BigDecimal("28000"), 25);
+
+        System.out.println("✔ Variantes verificadas");
+    }
+
+    private void crearVarianteSiNoExiste(
+            Producto producto,
+            String talla,
+            String color,
+            BigDecimal precio,
+            int stock) {
+
+        if (varianteProductoRepository
+                .findByProductoIdAndTallaAndColor(producto.getId(), talla, color)
+                .isEmpty()) {
+
+            VarianteProducto variante = VarianteProducto.builder()
+                    .producto(producto)
+                    .talla(talla)
+                    .color(color)
+                    .precio(precio)
+                    .stock(stock)
+                    .build();
+
+            varianteProductoRepository.save(variante);
         }
     }
 }
