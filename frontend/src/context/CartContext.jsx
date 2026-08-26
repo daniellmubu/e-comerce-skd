@@ -75,7 +75,7 @@ export function CartProvider({ children }) {
     cargarCarrito();
   }, [cargarCarrito, usuario]);
 
-  const agregarProducto = async (producto) => {
+  const agregarProducto = async (producto, opciones = {}) => {
     try {
       setLoading(true);
 
@@ -87,10 +87,13 @@ export function CartProvider({ children }) {
         setCarritoId(idCarrito);
       }
 
+      const varianteId = opciones.varianteId ?? null;
       const listaItems = Array.isArray(items) ? items : [];
 
       const existente = listaItems.find(
-        (item) => item.productoId === producto.id
+        (item) =>
+          item.productoId === producto.id &&
+          (item.varianteId ?? null) === varianteId
       );
 
       let itemActualizado;
@@ -111,6 +114,7 @@ export function CartProvider({ children }) {
           carritoId: idCarrito,
           productoId: producto.id,
           cantidad: 1,
+          varianteId,
         });
 
         setItems((prev) => [...prev, itemActualizado]);

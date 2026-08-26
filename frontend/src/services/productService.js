@@ -10,6 +10,11 @@ export async function obtenerProductoPorId(id) {
   return data;
 }
 
+export async function obtenerVariantesDeProducto(id) {
+  const { data } = await api.get(`/productos/${id}/variantes`);
+  return data;
+}
+
 export async function buscarProductosPorNombre(nombre) {
   const { data } = await api.get("/productos/buscar", { params: { nombre } });
   return data;
