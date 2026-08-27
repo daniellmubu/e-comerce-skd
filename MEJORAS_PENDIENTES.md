@@ -58,16 +58,20 @@
 - [ ] **`DataInitializer` crea datos de prueba en cualquier entorno**: limitarlo a perfiles
   `dev`/`local` para no sembrar catálogo de prueba en producción.
 
-## 3. Variantes (CRUD implementado en panel admin)
+## 3. Variantes (CRUD admin alineado a `VarianteProducto`)
 
-- [ ] **Integrar variantes al flujo de compra**: `ItemPedido` no guarda qué variante
-  (talla/color) se compró. Persistir `variante_id` en el item y mostrarla en el detalle de pedido.
+> Nota: el equipo ya definió la entidad canónica `VarianteProducto` (talla/color/precio/stock/sku),
+> la integró al carrito (`item_carrito.variante_id`) y publicó `GET /api/productos/{id}/variantes`.
+> El CRUD del panel admin (`/api/admin/variantes`) opera sobre esa misma entidad.
+
+- [ ] **Persistir la variante en `ItemPedido`**: el pedido aún no guarda qué talla/color se compró;
+  mostrarla en el detalle de pedido, factura y panel admin.
 - [ ] **Descontar stock de la variante** al confirmar el pedido y validar disponibilidad antes de
   pagar (evitar ventas sin stock).
-- [ ] **Exponer selector de talla/color en el catálogo público** (`DetalleProducto`/`ProductCard`)
-  usando las variantes activas.
-- [ ] **Coherencia de stock**: definir si `producto.stock` es la suma de las variantes activas o
-  un valor independiente, y mantenerlo consistente al crear/editar variantes.
+- [ ] **Selector de talla/color en el catálogo público** (`DetalleProducto`/`ProductCard`) usando
+  `GET /api/productos/{id}/variantes`.
+- [ ] **Coherencia de stock**: definir si `producto.stock` es la suma de las variantes o un valor
+  independiente, y mantenerlo consistente al crear/editar variantes.
 
 ## 4. Moderación de reseñas (CRUD de moderación implementado en panel admin)
 
@@ -92,9 +96,12 @@
 
 ## 6. Operativo / DevOps
 
-- [ ] **Migraciones SQL pendientes (`ddl-auto=validate`)**: antes de levantar la app tras
-  "Variantes + Moderación" hay que ejecutar en Supabase (idempotentes):
-  - `sql/crear_variante.sql` — tabla `variante`.
+- [ ] **Migraciones SQL pendientes (`ddl-auto=validate`)**: antes de levantar la app hay que
+  ejecutar en Supabase (idempotentes) los scripts acumulados del repo:
+  - `sql/crear_variante_producto.sql` — tabla `variante_producto` (variantes canónicas).
+  - `sql/agregar_variante_item_carrito.sql` — columna `variante_id` en `item_carrito`.
+  - `sql/crear_plantilla.sql` — tabla `plantilla`.
+  - `sql/limpiar_plantilla_columnas_heredadas.sql` — limpieza de columnas de plantilla.
   - `sql/moderacion_resenas.sql` — columnas `imagen_url` y `estado` en `resena`.
 - [ ] **`.env.example` está vacío**: documentar todas las variables requeridas
   (`DB_PASSWORD`, `JWT_SECRET`, `SUPABASE_SERVICE_KEY`, `WOMPI_*`, `GMAIL_*`, `CLOUDFLARE_*`,

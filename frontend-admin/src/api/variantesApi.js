@@ -1,8 +1,11 @@
 import api from "./axios";
 
+// CRUD admin de variantes. Opera sobre la entidad VarianteProducto del backend
+// (la misma del carrito y del endpoint público GET /api/productos/{id}/variantes).
+
 // GET /api/admin/variantes/producto/{productoId}
 // Respuesta: VarianteResponse[] = [{ id, productoId, productoNombre, talla,
-//   color, stock, precio, activo }]
+//   color, precio, stock, sku }]
 export async function listarVariantesDeProducto(productoId) {
   const { data } = await api.get(`/admin/variantes/producto/${productoId}`);
   return data;
@@ -13,7 +16,7 @@ export async function obtenerVariantePorId(id) {
   return data;
 }
 
-// Body: { productoId, talla, color, stock, precio, activo }
+// Body: { productoId, talla, color, stock, precio, sku }
 export async function crearVariante(variante) {
   const { data } = await api.post("/admin/variantes", variante);
   return data;

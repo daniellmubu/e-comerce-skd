@@ -1,5 +1,6 @@
 package com.skd.sublimacion_api.service.impl.admin;
 
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -8,19 +9,23 @@ import org.springframework.transaction.annotation.Transactional;
 import com.skd.sublimacion_api.dto.variante.VarianteRequest;
 import com.skd.sublimacion_api.dto.variante.VarianteResponse;
 import com.skd.sublimacion_api.entity.Producto;
-import com.skd.sublimacion_api.entity.Variante;
+import com.skd.sublimacion_api.entity.VarianteProducto;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.ProductoRepository;
-import com.skd.sublimacion_api.repository.VarianteRepository;
+import com.skd.sublimacion_api.repository.VarianteProductoRepository;
 import com.skd.sublimacion_api.service.admin.AdminVarianteService;
 
 import lombok.RequiredArgsConstructor;
 
+/**
+ * CRUD admin de variantes sobre la entidad canónica {@code VarianteProducto}
+ * (la misma que usa el carrito y el endpoint público GET /api/productos/{id}/variantes).
+ */
 @Service
 @RequiredArgsConstructor
 public class AdminVarianteServiceImpl implements AdminVarianteService {
 
-    private final VarianteRepository varianteRepository;
+    private final VarianteProductoRepository varianteRepository;
     private final ProductoRepository productoRepository;
 
     @Override
@@ -31,8 +36,9 @@ public class AdminVarianteServiceImpl implements AdminVarianteService {
                     "Producto no encontrado con id: " + productoId);
         }
 
-        return varianteRepository.findByProductoIdOrderByIdAsc(productoId)
+        return varianteRepository.findByProductoId(productoId)
                 .stream()
+                .sorted(Comparator.comparing(VarianteProducto::getId))
                 .map(this::convertir)
                 .toList();
     }
@@ -48,15 +54,15 @@ public class AdminVarianteServiceImpl implements AdminVarianteService {
 
         Producto producto = buscarProducto(request.getProductoId());
 
-        validarUnica(request, null);
+        validarUnica(request.getProductoId(), request.getTalla(), request.getColor(), null);
 
-        Variante variante = Variante.builder()
+        VarianteProducto variante = VarianteProducto.builder()
                 .producto(producto)
-                .talla(normalizar(request.getTalla()))
-                .color(normalizar(request.getColor()))
-                .stock(request.getStock() == null ? 0 : request.getStock())
+                .talla(request.getTalla().trim())
+                .color(request.getColor().trim())
                 .precio(request.getPrecio())
-                .activo(request.getActivo() == null || request.getActivo())
+                .stock(request.getStock())
+                .sku(opcional(request.getSku()))
                 .build();
 
         return convertir(varianteRepository.save(variante));
@@ -66,16 +72,16 @@ public class AdminVarianteServiceImpl implements AdminVarianteService {
     @Transactional
     public VarianteResponse actualizar(Long id, VarianteRequest request) {
 
-        Variante variante = buscarVariante(id);
+        VarianteProducto variante = buscarVariante(id);
 
-        validarUnica(request, id);
+        validarUnica(request.getProductoId(), request.getTalla(), request.getColor(), id);
 
         variante.setProducto(buscarProducto(request.getProductoId()));
-        variante.setTalla(normalizar(request.getTalla()));
-        variante.setColor(normalizar(request.getColor()));
-        variante.setStock(request.getStock() == null ? 0 : request.getStock());
+        variante.setTalla(request.getTalla().trim());
+        variante.setColor(request.getColor().trim());
         variante.setPrecio(request.getPrecio());
-        variante.setActivo(request.getActivo() == null || request.getActivo());
+        variante.setStock(request.getStock());
+        variante.setSku(opcional(request.getSku()));
 
         return convertir(varianteRepository.save(variante));
     }
@@ -83,41 +89,30 @@ public class AdminVarianteServiceImpl implements AdminVarianteService {
     @Override
     @Transactional
     public void eliminar(Long id) {
-        Variante variante = buscarVariante(id);
-        varianteRepository.delete(variante);
+        varianteRepository.delete(buscarVariante(id));
     }
 
-    private void validarUnica(VarianteRequest request, Long idActual) {
+    private void validarUnica(Long productoId, String talla, String color, Long idActual) {
 
-        String talla = normalizar(request.getTalla());
-        String color = normalizar(request.getColor());
-
-        List<Variante> existentes = varianteRepository
-                .findByProductoIdOrderByIdAsc(request.getProductoId());
-
-        boolean duplicada = existentes.stream().anyMatch(v -> {
-            boolean mismoRegistro = idActual != null && v.getId().equals(idActual);
-            if (mismoRegistro) {
-                return false;
-            }
-            return normalizar(v.getTalla()).equals(talla)
-                    && normalizar(v.getColor()).equals(color);
-        });
-
-        if (duplicada) {
-            throw new IllegalArgumentException(
-                    "Ya existe una variante con esa talla y color para este producto");
-        }
+        varianteRepository.findByProductoIdAndTallaAndColor(
+                        productoId, talla.trim(), color.trim())
+                .ifPresent(existente -> {
+                    if (idActual == null || !existente.getId().equals(idActual)) {
+                        throw new IllegalArgumentException(
+                                "Ya existe una variante con esa talla y color para este producto");
+                    }
+                });
     }
 
-    private String normalizar(String valor) {
+    private String opcional(String valor) {
         if (valor == null) {
-            return "";
+            return null;
         }
-        return valor.trim();
+        String recortado = valor.trim();
+        return recortado.isEmpty() ? null : recortado;
     }
 
-    private Variante buscarVariante(Long id) {
+    private VarianteProducto buscarVariante(Long id) {
         return varianteRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Variante no encontrada con id: " + id));
@@ -129,21 +124,17 @@ public class AdminVarianteServiceImpl implements AdminVarianteService {
                         "Producto no encontrado con id: " + id));
     }
 
-    private VarianteResponse convertir(Variante variante) {
+    private VarianteResponse convertir(VarianteProducto variante) {
 
         return VarianteResponse.builder()
                 .id(variante.getId())
                 .productoId(variante.getProducto().getId())
                 .productoNombre(variante.getProducto().getNombre())
-                .talla(esVacio(variante.getTalla()) ? null : variante.getTalla())
-                .color(esVacio(variante.getColor()) ? null : variante.getColor())
-                .stock(variante.getStock())
+                .talla(variante.getTalla())
+                .color(variante.getColor())
                 .precio(variante.getPrecio())
-                .activo(variante.getActivo())
+                .stock(variante.getStock())
+                .sku(variante.getSku())
                 .build();
-    }
-
-    private boolean esVacio(String valor) {
-        return valor == null || valor.isBlank();
     }
 }

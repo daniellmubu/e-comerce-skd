@@ -16,7 +16,6 @@ import Input from "../components/Input";
 import Loading from "../components/Loading";
 import Modal from "../components/Modal";
 import Select from "../components/Select";
-import Toggle from "../components/Toggle";
 import { getErrorMessage } from "../api/axios";
 import { listarProductos } from "../api/productosApi";
 import {
@@ -32,7 +31,7 @@ const FORM_VACIO = {
   color: "",
   stock: "",
   precio: "",
-  activo: true,
+  sku: "",
 };
 
 function Variantes() {
@@ -126,7 +125,7 @@ function Variantes() {
       color: variante.color || "",
       stock: variante.stock ?? "",
       precio: variante.precio ?? "",
-      activo: variante.activo ?? true,
+      sku: variante.sku || "",
     });
     setFormError(null);
     setModalAbierto(true);
@@ -135,21 +134,25 @@ function Variantes() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const stock = Number(form.stock);
-    const precio = form.precio === "" ? null : Number(form.precio);
+    const precio = Number(form.precio);
 
     if (!productoId) {
       setFormError("Debes seleccionar un producto");
       return;
     }
-    if (!form.talla.trim() && !form.color.trim()) {
-      setFormError("Indica al menos una talla o un color");
+    if (!form.talla.trim()) {
+      setFormError("La talla es obligatoria");
+      return;
+    }
+    if (!form.color.trim()) {
+      setFormError("El color es obligatorio");
       return;
     }
     if (form.stock === "" || Number.isNaN(stock) || stock < 0) {
       setFormError("Ingresa un stock válido (mayor o igual a 0)");
       return;
     }
-    if (precio !== null && (Number.isNaN(precio) || precio < 0)) {
+    if (form.precio === "" || Number.isNaN(precio) || precio < 0) {
       setFormError("Ingresa un precio válido (mayor o igual a 0)");
       return;
     }
@@ -160,7 +163,7 @@ function Variantes() {
       color: form.color.trim(),
       stock,
       precio,
-      activo: form.activo,
+      sku: form.sku.trim() || null,
     };
 
     setGuardando(true);
@@ -294,7 +297,7 @@ function Variantes() {
                   <th className="px-6 py-4">Color</th>
                   <th className="px-6 py-4">Stock</th>
                   <th className="px-6 py-4">Precio</th>
-                  <th className="hidden px-6 py-4 md:table-cell">Estado</th>
+                  <th className="hidden px-6 py-4 md:table-cell">SKU</th>
                   <th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -302,9 +305,7 @@ function Variantes() {
                 {variantes.map((variante) => (
                   <tr
                     key={variante.id}
-                    className={`transition hover:bg-gray-50 dark:hover:bg-slate-800/40 ${
-                      !variante.activo ? "opacity-60" : ""
-                    }`}
+                    className="transition hover:bg-gray-50 dark:hover:bg-slate-800/40"
                   >
                     <td className="px-6 py-4 text-gray-500 dark:text-slate-400">
                       #{variante.id}
@@ -328,20 +329,18 @@ function Variantes() {
                         "—"
                       )}
                     </td>
-                    <td className="px-6 py-4 text-gray-600 dark:text-slate-300">
-                      {variante.stock}
+                    <td className="px-6 py-4">
+                      {variante.stock > 0 ? (
+                        <Badge variant="green">{variante.stock} und</Badge>
+                      ) : (
+                        <Badge variant="red">Sin stock</Badge>
+                      )}
                     </td>
                     <td className="px-6 py-4 font-semibold text-gray-900 dark:text-white">
-                      {variante.precio != null
-                        ? formatPrice(variante.precio)
-                        : "Base"}
+                      {formatPrice(variante.precio)}
                     </td>
-                    <td className="hidden px-6 py-4 md:table-cell">
-                      {variante.activo ? (
-                        <Badge variant="green">Activo</Badge>
-                      ) : (
-                        <Badge variant="red">Inactivo</Badge>
-                      )}
+                    <td className="hidden px-6 py-4 text-gray-500 dark:text-slate-400 md:table-cell">
+                      {variante.sku || "—"}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
@@ -418,7 +417,7 @@ function Variantes() {
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Input
               label="Stock"
               type="number"
@@ -429,22 +428,19 @@ function Variantes() {
               onChange={(e) => setForm({ ...form, stock: e.target.value })}
             />
             <Input
-              label="Precio (COP) — opcional"
+              label="Precio (COP)"
               type="number"
               min="0"
               step="0.01"
-              placeholder="Vacío = precio base"
+              placeholder="0"
               value={form.precio}
               onChange={(e) => setForm({ ...form, precio: e.target.value })}
             />
-          </div>
-
-          <div className="rounded-xl border border-gray-200 p-4 dark:border-slate-700">
-            <Toggle
-              label="Activa"
-              description="Disponible para la venta"
-              checked={form.activo}
-              onChange={(valor) => setForm({ ...form, activo: valor })}
+            <Input
+              label="SKU (opcional)"
+              placeholder="Ej. CAM-M-AZUL"
+              value={form.sku}
+              onChange={(e) => setForm({ ...form, sku: e.target.value })}
             />
           </div>
 

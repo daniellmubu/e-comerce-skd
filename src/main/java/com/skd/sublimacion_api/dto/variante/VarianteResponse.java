@@ -5,6 +5,9 @@ import java.math.BigDecimal;
 import lombok.Builder;
 import lombok.Data;
 
+/**
+ * Respuesta del CRUD admin de variantes (alineada con VarianteProductoResponse).
+ */
 @Data
 @Builder
 public class VarianteResponse {
@@ -19,9 +22,9 @@ public class VarianteResponse {
 
     private String color;
 
-    private Integer stock;
-
     private BigDecimal precio;
 
-    private Boolean activo;
+    private Integer stock;
+
+    private String sku;
 }

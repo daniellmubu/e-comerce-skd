@@ -384,7 +384,9 @@ Uso en el frontend: petición con `Authorization: Bearer <token>` y `responseTyp
 
 Base: `/api/admin/variantes`
 
-CRUD de variantes por producto (talla / color / stock / precio opcional).
+CRUD admin de variantes por producto (talla / color / stock / precio / sku).
+El panel opera sobre la entidad canónica `VarianteProducto` — la misma que usa el
+carrito (`item_carrito.variante_id`) y el endpoint público `GET /api/productos/{id}/variantes`.
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -403,11 +405,11 @@ CRUD de variantes por producto (talla / color / stock / precio opcional).
   "color": "Azul",
   "stock": 10,
   "precio": 37000.00,
-  "activo": true
+  "sku": "CAM-M-AZUL"
 }
 ```
 
-`talla` y/o `color` son opcionales (al menos uno obligatorio). `precio` opcional: si se omite, se usa el precio base del producto.
+`talla`, `color`, `stock` y `precio` son obligatorios (talla máx. 10 caracteres, color máx. 50). `sku` es opcional (máx. 50, único).
 
 **VarianteResponse:**
 
@@ -420,11 +422,11 @@ CRUD de variantes por producto (talla / color / stock / precio opcional).
   "color": "Azul",
   "stock": 10,
   "precio": 37000.00,
-  "activo": true
+  "sku": "CAM-M-AZUL"
 }
 ```
 
-**Regla de negocio:** no puede existir más de una variante con la misma combinación `talla + color` para el mismo producto (error 400).
+**Regla de negocio:** no puede existir más de una variante con la misma combinación `talla + color` para el mismo producto (error 400; además hay índice único en BD).
 
 ---
 
