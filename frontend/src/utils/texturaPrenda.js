@@ -132,13 +132,32 @@ async function dibujarTexto(ctx, texto, w, h, area = null) {
   ctx.rotate(((texto.rotacion ?? 0) * Math.PI) / 180);
   ctx.scale(texto.escala ?? 1, texto.escala ?? 1);
   ctx.fillStyle = texto.color || "#111111";
-  ctx.font = `600 ${Math.round((texto.tamano || 32) * (w / 500) * fx)}px ${
-    texto.fuente || "sans-serif"
-  }`;
+  // Formato: peso (negrita), estilo (cursiva) y subrayado (línea manual).
+  const peso = texto.negrita ? "700" : "600";
+  const estilo = texto.cursiva ? "italic " : "";
+  const tamDibujo = Math.round((texto.tamano || 32) * (w / 500) * fx);
+  ctx.font = `${estilo}${peso} ${tamDibujo}px ${texto.fuente || "sans-serif"}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(texto.contenido, 0, 0);
+  if (texto.subrayado) {
+    const ancho = ctx.measureText(texto.contenido).width;
+    ctx.strokeStyle = texto.color || "#111111";
+    ctx.lineWidth = Math.max(2, tamDibujo * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(-ancho / 2, tamDibujo * 0.45);
+    ctx.lineTo(ancho / 2, tamDibujo * 0.45);
+    ctx.stroke();
+  }
   ctx.restore();
+}
+
+// Dibuja una lista de configs de texto (texto principal + emojis como capas
+// independientes), cada uno con su propia posición/escala/rotación/tamaño.
+async function dibujarTextos(ctx, textos, w, h, area = null) {
+  for (const config of textos ?? []) {
+    await dibujarTexto(ctx, config, w, h, area);
+  }
 }
 
 // Carga un diseño igual que se ve en el editor 2D: con el fondo blanco
@@ -169,6 +188,7 @@ export async function componerTexturaCamiseta({
   color = "#ffffff",
   disenos = [],
   texto = null,
+  textos = null,
   tamano = 1024,
   recortarSilueta = false,
   espejoX = false,
@@ -228,7 +248,10 @@ export async function componerTexturaCamiseta({
     ctx.restore();
   }
 
-  await dibujarTexto(ctx, texto, tamano, tamano, area);
+  // Texto + emojis: `textos` (lista de capas) tiene prioridad; `texto` se
+  // mantiene para llamadas de un único texto (compatibilidad).
+  const listaTextos = textos ?? (texto ? [texto] : []);
+  await dibujarTextos(ctx, listaTextos, tamano, tamano, area);
   ctx.restore();
   ctx.restore();
 
@@ -244,7 +267,7 @@ export async function componerTexturaCamiseta({
 // Textura para prendas cilíndricas (mug): cilindro de color sólido con los
 // diseños dibujados encima. `disenos` (o `disenoUrl` para un único diseño) se
 // pre-distorsionan para compensar el envolver del cilindro.
-export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null, disenos = null }) {
+export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null, textos = null, disenos = null }) {
   const texW = 1024;
   const texH = 1024;
 
@@ -291,8 +314,11 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
     );
   }
 
-  // 3. Texto del personalizador, dibujado encima del diseño.
-  await dibujarTexto(ctx, texto, texW, texH);
+  // 3. Texto + emojis del personalizador, dibujados encima del diseño como
+  //    capas independientes (`textos` tiene prioridad; `texto` es un único
+  //    texto para compatibilidad).
+  const listaTextos = textos ?? (texto ? [texto] : []);
+  await dibujarTextos(ctx, listaTextos, texW, texH);
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;

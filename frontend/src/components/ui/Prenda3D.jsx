@@ -765,10 +765,14 @@ function ModeloGltf({
   color,
   disenoUrl,
   imagenes = null,
+  emojis = null,
   texto = "",
   colorTexto = "#111111",
   fuenteTexto,
   tamanoTexto = 32,
+  esNegrita = false,
+  esCursiva = false,
+  esSubrayado = false,
   posicionTexto = { x: 50, y: 50 },
   rotacionTexto = 0,
   escalaTexto = 1,
@@ -817,19 +821,36 @@ function ModeloGltf({
       };
     }
 
-    const textoConfig =
-      texto && texto.trim()
-        ? {
-            contenido: texto,
-            color: colorTexto,
-            fuente: fuenteTexto,
-            tamano: tamanoTexto,
-            x: posicionTexto.x,
-            y: posicionTexto.y,
-            rotacion: rotacionTexto,
-            escala: escalaTexto,
-          }
-        : null;
+    // Configs de texto por capa: el texto principal + cada emoji independiente.
+    // Cada uno conserva su posición, escala, rotación y tamaño propios.
+    const textosConfig = [];
+    if (texto && texto.trim()) {
+      textosConfig.push({
+        contenido: texto,
+        color: colorTexto,
+        fuente: fuenteTexto,
+        tamano: tamanoTexto,
+        negrita: esNegrita,
+        cursiva: esCursiva,
+        subrayado: esSubrayado,
+        x: posicionTexto.x,
+        y: posicionTexto.y,
+        rotacion: rotacionTexto,
+        escala: escalaTexto,
+      });
+    }
+    for (const em of emojis ?? []) {
+      textosConfig.push({
+        contenido: em.emoji,
+        color: "#000000",
+        fuente: '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
+        tamano: em.tamano ?? 48,
+        x: em.x,
+        y: em.y,
+        rotacion: em.rotacion ?? 0,
+        escala: em.escala ?? 1,
+      });
+    }
 
     preparado.materialesLisos.forEach(aplicarColorLiso);
 
@@ -840,8 +861,8 @@ function ModeloGltf({
       if (!material) continue;
 
       const disenosSup = grupos[superficie.clave] ?? [];
-      const textoSup = superficie.conTexto ? textoConfig : null;
-      const hayContenidoSup = disenosSup.length > 0 || Boolean(textoSup);
+      const textosSup = superficie.conTexto ? textosConfig : [];
+      const hayContenidoSup = disenosSup.length > 0 || textosSup.length > 0;
 
       // Capas de proyección (frente, espalda, mangas): material transparente,
       // se muestran solo cuando su ubicación tiene contenido.
@@ -859,7 +880,7 @@ function ModeloGltf({
         componerTexturaCamiseta({
           color,
           disenos: disenosSup,
-          texto: textoSup,
+          textos: textosSup,
           recortarSilueta: superficie.silueta,
           espejoX: superficie.espejoX,
           espejoY: superficie.espejoY,
@@ -897,7 +918,7 @@ function ModeloGltf({
       componerTexturaCamiseta({
         color,
         disenos: disenosSup,
-        texto: textoSup,
+        textos: textosSup,
         recortarSilueta: superficie.silueta,
         espejoX: superficie.espejoX,
         espejoY: superficie.espejoY,
@@ -922,7 +943,7 @@ function ModeloGltf({
     return () => {
       cancelado = true;
     };
-  }, [color, disenosEfectivos, texto, colorTexto, fuenteTexto, tamanoTexto, posicionTexto, rotacionTexto, escalaTexto, preparado, unaSuperficie]);
+  }, [color, disenosEfectivos, emojis, texto, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado, posicionTexto, rotacionTexto, escalaTexto, preparado, unaSuperficie]);
 
   // Limpieza: solo lo creado por esta instancia (materiales, texturas y
   // geometrías de las capas de proyección). Las geometrías del glTF
@@ -1081,10 +1102,14 @@ function Mug3D({
   color,
   disenoUrl,
   imagenes = null,
+  emojis = null,
   texto = "",
   colorTexto = "#111111",
   fuenteTexto,
   tamanoTexto = 32,
+  esNegrita = false,
+  esCursiva = false,
+  esSubrayado = false,
   posicionTexto = { x: 50, y: 50 },
   rotacionTexto = 0,
   escalaTexto = 1,
@@ -1299,19 +1324,34 @@ function Mug3D({
   useEffect(() => {
     let cancelado = false;
 
-    const textoConfig =
-      texto && texto.trim()
-        ? {
-            contenido: texto,
-            color: colorTexto,
-            fuente: fuenteTexto,
-            tamano: tamanoTexto,
-            x: posicionTexto.x,
-            y: posicionTexto.y,
-            rotacion: rotacionTexto,
-            escala: escalaTexto,
-          }
-        : null;
+    const textosConfig = [];
+    if (texto && texto.trim()) {
+      textosConfig.push({
+        contenido: texto,
+        color: colorTexto,
+        fuente: fuenteTexto,
+        tamano: tamanoTexto,
+        negrita: esNegrita,
+        cursiva: esCursiva,
+        subrayado: esSubrayado,
+        x: posicionTexto.x,
+        y: posicionTexto.y,
+        rotacion: rotacionTexto,
+        escala: escalaTexto,
+      });
+    }
+    for (const em of emojis ?? []) {
+      textosConfig.push({
+        contenido: em.emoji,
+        color: "#000000",
+        fuente: '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
+        tamano: em.tamano ?? 48,
+        x: em.x,
+        y: em.y,
+        rotacion: em.rotacion ?? 0,
+        escala: em.escala ?? 1,
+      });
+    }
 
     const disenosArray = imagenes && imagenes.length ? imagenes : null;
 
@@ -1326,7 +1366,7 @@ function Mug3D({
 
     const trabajo = componerTexturaSolida(color, disenoUrl, {
       ...configDisenoMug(),
-      texto: textoConfig,
+      textos: textosConfig,
       disenos: disenosArray,
     });
 
@@ -1344,7 +1384,7 @@ function Mug3D({
     return () => {
       cancelado = true;
     };
-  }, [tipo, color, disenoUrl, imagenes, texto, colorTexto, fuenteTexto, tamanoTexto, posicionTexto, rotacionTexto, escalaTexto]);
+  }, [tipo, color, disenoUrl, imagenes, emojis, texto, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado, posicionTexto, rotacionTexto, escalaTexto]);
 
   return (
     <canvas

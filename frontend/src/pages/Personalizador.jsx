@@ -37,7 +37,6 @@ import procesarDiseno from "../utils/quitarFondoBlanco";
 import {
   FUENTES_TEXTO,
   FUENTE_TEXTO_DEFECTO,
-  CATEGORIAS_FUENTE,
   buscarFuente,
   cargarFuenteParaCanvas,
 } from "../utils/fuentesTexto";
@@ -86,6 +85,9 @@ const PALETA_COLORES = [
   "#BBF7D0", "#BFDBFE",
 ];
 
+// Emojis de inserción rápida para el texto del personalizador.
+const EMOJIS_RAPIDOS = ["⭐", "🐶", "❤️", "🔥", "🎉", "✨", "⚽", "👑"];
+
 function formatPrice(value) {
   return Number(value).toLocaleString("es-CO", {
     style: "currency",
@@ -117,14 +119,21 @@ function blobToDataURL(blob) {
 
 // Carga una imagen (dataURL o URL remota) como elemento <img> para poder
 // dibujarla en el lienzo final. Devuelve null si no se puede cargar.
+// Intenta primero con crossOrigin anónimo (evita "tainted canvas" al componer
+// el diseño o subir la textura a Three.js); si el servidor remoto no expone
+// cabeceras CORS (p. ej. buckets de Supabase sin política), reintenta sin él
+// para que la imagen igualmente se dibuje y sea editable en el lienzo.
 function cargarImagenElemento(url) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    if (url.startsWith("http")) img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
+  const intentar = (conCors) =>
+    new Promise((resolve) => {
+      const img = new Image();
+      if (conCors) img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+
+  return intentar(true).then((img) => img ?? intentar(false));
 }
 
 // Convierte un dataURL (PNG/JPEG) en un File, listo para subir con FormData.
@@ -157,6 +166,16 @@ function dpiDeImagen(img) {
   return calcularDpi(img.naturalWidth, ancho);
 }
 
+// Normaliza un HEX (con o sin '#', 3 o 6 dígitos) a la forma #rrggbb que
+// exige <input type="color">; si no es válido devuelve null para usar un
+// color por defecto sin romper el selector.
+function normalizarHexParaPicker(valor) {
+  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec((valor ?? "").trim());
+  if (!m) return null;
+  const hex = m[1].length === 3 ? [...m[1]].map((c) => c + c).join("") : m[1];
+  return `#${hex}`;
+}
+
 function Personalizador() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -182,15 +201,25 @@ function Personalizador() {
   const [imagenActivaId, setImagenActivaId] = useState(null);
   const [caraActiva, setCaraActiva] = useState("frente");
 
+  // Capas de emoji independientes: cada emoji es un objeto con su propia
+  // posición, escala, rotación y tamaño, seleccionable/arrastrable/redimensionable
+  // por separado (igual que las imágenes), en lugar de concatenarse al texto.
+  const [emojis, setEmojis] = useState([]); // { id, emoji, cara, x, y, escala, rotacion, tamano }
+  const [emojiActivoId, setEmojiActivoId] = useState(null);
+
   const [prompt, setPrompt] = useState("");
-  const [estiloIA, setEstiloIA] = useState(null); // "caricatura" | "minimalista" | "retro" | "lineas" | null
   const [generandoIA, setGenerandoIA] = useState(false);
   const [colorSeleccionado, setColorSeleccionado] = useState(null); // hex
   const [textoDiseno, setTextoDiseno] = useState("");
   const [colorTexto, setColorTexto] = useState("#111111");
   const [fuenteTexto, setFuenteTexto] = useState(FUENTE_TEXTO_DEFECTO);
-  const [filtroFuente, setFiltroFuente] = useState("todas");
+  const [busquedaFuente, setBusquedaFuente] = useState("");
   const [tamanoTexto, setTamanoTexto] = useState(32);
+  // Formato del texto: negrita, cursiva y subrayado (se aplica en el lienzo
+  // 2D, en la proyección 3D y en la imagen final guardada).
+  const [esNegrita, setEsNegrita] = useState(false);
+  const [esCursiva, setEsCursiva] = useState(false);
+  const [esSubrayado, setEsSubrayado] = useState(false);
   const [posicionTexto, setPosicionTexto] = useState({ x: 50, y: 50 });
   const [rotacionTexto, setRotacionTexto] = useState(0);
   const [escalaTexto, setEscalaTexto] = useState(1);
@@ -219,6 +248,7 @@ function Personalizador() {
   const plantillasCargadasRef = useRef(false);
 
   const imagenActiva = imagenes.find((img) => img.id === imagenActivaId) ?? null;
+  const emojiActivo = emojis.find((e) => e.id === emojiActivoId) ?? null;
 
   // DPI estimado de la imagen seleccionada (para avisar si quedará pixelada).
   const dpiImagenActiva = imagenActiva ? dpiDeImagen(imagenActiva) : 0;
@@ -235,20 +265,27 @@ function Personalizador() {
   const imagenesEnCaraActiva = imagenes.filter(
     (img) => caraDe(img) === caraActiva
   );
+  // Emojis de la cara activa (misma regla que las imágenes).
+  const emojisEnCaraActiva = emojis.filter((e) => (e.cara ?? "frente") === caraActiva);
 
   const hayDiseno = Boolean(
-    imagenes.length || colorSeleccionado || textoDiseno.trim()
+    imagenes.length || emojis.length || colorSeleccionado || textoDiseno.trim()
   );
 
   const total = useMemo(() => precioBase + COSTO_PERSONALIZACION, [precioBase]);
 
-  // Fuentes del menú, filtradas por la categoría elegida.
+// Fuentes del menú, filtradas por búsqueda en tiempo real.
   const fuentesVisibles = useMemo(
-    () =>
-      filtroFuente === "todas"
-        ? FUENTES_TEXTO
-        : FUENTES_TEXTO.filter((f) => f.categoria === filtroFuente),
-    [filtroFuente]
+    () => {
+      const bajo = busquedaFuente.toLowerCase();
+      if (!busquedaFuente) return FUENTES_TEXTO;
+      return FUENTES_TEXTO.filter(
+        (f) =>
+          f.nombre.toLowerCase().includes(bajo) ||
+          f.css.toLowerCase().includes(bajo)
+      );
+    },
+    [busquedaFuente]
   );
 
   // --- Galería de plantillas prediseñadas ---
@@ -294,15 +331,56 @@ function Personalizador() {
     [plantillas, categoriaPlantilla, selectedProduct]
   );
 
-  // Aplica la plantilla como imagen de diseño en la cara activa: mismo
-  // camino que subir una imagen, así queda seleccionada, arrastrable y
-  // redimensionable con el editor normal.
-  const aplicarPlantilla = (plantilla) => {
-    agregarImagen(plantilla.imagenUrl);
-    setMensaje({
-      tipo: "ok",
-      texto: `Plantilla "${plantilla.nombre}" agregada. Muévela y ajústala a tu gusto.`,
-    });
+  // Aplica la plantilla como imagen de diseño en la cara activa: mismo camino
+  // que subir una imagen, así queda seleccionada, arrastrable y redimensionable
+  // con el editor normal. Carga el PNG real en el lienzo (nunca un placeholder)
+  // validando ambas formas del campo de imagen.
+  const aplicarPlantilla = async (plantilla) => {
+    if (!plantilla) return;
+
+    // Soporta camelCase y snake_case según cómo serialice el backend.
+    const url = plantilla.imagenUrl || plantilla.imagen_url;
+    if (!url) {
+      console.error("La plantilla no tiene URL válida:", plantilla);
+      setMensaje({
+        tipo: "error",
+        texto: "La plantilla no tiene una imagen disponible.",
+      });
+      return;
+    }
+
+    try {
+      // Precarga del PNG real con CORS anónimo antes de insertar la capa;
+      // cargarImagenElemento reintenta sin CORS si el bucket lo bloquea, así
+      // el estampado se dibuja igualmente en el lienzo 2D y en las texturas
+      // de Three.js (Prenda3D).
+      const img = await cargarImagenElemento(url);
+      if (!img) {
+        console.error(
+          `No se pudo cargar la imagen de la plantilla "${plantilla.nombre}":`,
+          url
+        );
+        setMensaje({
+          tipo: "error",
+          texto: `No se pudo cargar la imagen de "${plantilla.nombre}".`,
+        });
+        return;
+      }
+
+      // Función real del archivo que agrega capas al lienzo y las vuelve
+      // seleccionables/arrastrables con el editor normal.
+      await agregarImagen(url);
+      setMensaje({
+        tipo: "ok",
+        texto: `Plantilla "${plantilla.nombre}" agregada. Muévela y ajústala a tu gusto.`,
+      });
+    } catch (err) {
+      console.error("Error cargando la plantilla en el canvas:", err);
+      setMensaje({
+        tipo: "error",
+        texto: "No fue posible aplicar la plantilla al lienzo.",
+      });
+    }
   };
 
   const agregarImagen = async (url) => {
@@ -346,17 +424,58 @@ function Personalizador() {
 
   const seleccionarImagen = (id) => {
     setImagenActivaId(id);
+    setEmojiActivoId(null);
     if (id) setTextoActivo(false);
   };
 
   const seleccionarTexto = () => {
     setImagenActivaId(null);
+    setEmojiActivoId(null);
     setTextoActivo(true);
   };
 
   const handleTextoTransform = (patch) => {
     if (patch.rotacion !== undefined) setRotacionTexto(patch.rotacion);
     if (patch.escala !== undefined) setEscalaTexto(patch.escala);
+  };
+
+  // Añade un emoji como CAPA INDEPENDIENTE del lienzo (no se concatena al
+  // texto): cada emoji guarda su propia cara, posición, escala, rotación y
+  // tamaño, y queda seleccionado para moverlo/redimensionarlo libremente.
+  const agregarEmoji = (emoji) => {
+    const id = crearIdImagen();
+    const offset = desplazamientoAleatorio();
+    const nuevo = {
+      id,
+      emoji,
+      cara: caraActiva,
+      x: 50 + offset,
+      y: 45 + offset,
+      escala: 1,
+      rotacion: 0,
+      tamano: 48,
+    };
+    setEmojis((prev) => [...prev, nuevo]);
+    setEmojiActivoId(id);
+    setImagenActivaId(null);
+    setTextoActivo(false);
+  };
+
+  const actualizarEmoji = (id, patch) => {
+    setEmojis((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, ...patch } : e))
+    );
+  };
+
+  const seleccionarEmoji = (id) => {
+    setEmojiActivoId(id);
+    setImagenActivaId(null);
+    if (id) setTextoActivo(false);
+  };
+
+  const eliminarEmoji = (id) => {
+    setEmojis((prev) => prev.filter((e) => e.id !== id));
+    setEmojiActivoId((actual) => (actual === id ? null : actual));
   };
 
   const handleRotarImagen = () => {
@@ -370,6 +489,41 @@ function Personalizador() {
     setImagenes((prev) => prev.filter((img) => img.id !== id));
     setImagenActivaId((actual) => (actual === id ? null : actual));
   };
+
+  // Elimina la capa activa (imagen, texto o emoji) desde el teclado.
+  const eliminarCapaActiva = () => {
+    if (imagenActivaId) {
+      handleEliminarImagen(imagenActivaId);
+      return;
+    }
+    if (emojiActivoId) {
+      eliminarEmoji(emojiActivoId);
+      return;
+    }
+    if (textoActivo) {
+      setTextoDiseno("");
+      setTextoActivo(false);
+    }
+  };
+
+  // Tecla Delete/Backspace: elimina la capa activa (imagen, emoji o texto).
+  // Se ignora cuando el foco está en un input/textarea para no borrar texto
+  // mientras se escribe.
+  useEffect(() => {
+    const alTeclado = (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const objetivo = e.target;
+      const esCampo =
+        objetivo &&
+        (objetivo.tagName === "INPUT" ||
+          objetivo.tagName === "TEXTAREA" ||
+          objetivo.isContentEditable);
+      if (esCampo) return;
+      eliminarCapaActiva();
+    };
+    window.addEventListener("keydown", alTeclado);
+    return () => window.removeEventListener("keydown", alTeclado);
+  });
 
   const handleSubirImagen = async (e) => {
     const archivos = Array.from(e.target.files ?? []);
@@ -428,7 +582,6 @@ function Personalizador() {
       const resultado = await generarDiseno({
         prompt,
         productoId: productoOrigen?.id ?? null,
-        estilo: estiloIA,
       });
 
       const imagenUrl =
@@ -458,12 +611,17 @@ function Personalizador() {
   const handleQuitarDiseno = () => {
     setImagenes([]);
     setImagenActivaId(null);
+    setEmojis([]);
+    setEmojiActivoId(null);
     setTextoActivo(false);
     setColorSeleccionado(null);
     setTextoDiseno("");
     setColorTexto("#111111");
     setFuenteTexto(FUENTE_TEXTO_DEFECTO);
     setTamanoTexto(32);
+    setEsNegrita(false);
+    setEsCursiva(false);
+    setEsSubrayado(false);
     setPosicionTexto({ x: 50, y: 50 });
     setRotacionTexto(0);
     setEscalaTexto(1);
@@ -479,7 +637,7 @@ function Personalizador() {
   // no solo el diseño suelto. La posición de cada elemento es libre ({x, y}
   // en %), la misma que usa el editor con react-moveable.
   const componerImagenFinal = async () => {
-    if (!imagenes.length && !textoDiseno.trim()) return null;
+    if (!imagenes.length && !emojis.length && !textoDiseno.trim()) return null;
 
     const canvas = document.createElement("canvas");
     canvas.width = TAMANO_LIENZO;
@@ -569,10 +727,41 @@ function Personalizador() {
       ctxDiseno.rotate(((rotacionTexto ?? 0) * Math.PI) / 180);
       ctxDiseno.scale(escalaTexto ?? 1, escalaTexto ?? 1);
       ctxDiseno.fillStyle = colorTexto;
-      ctxDiseno.font = `600 ${Math.round(tamanoTexto * FACTOR_LIENZO)}px ${fuenteTexto}`;
+      const peso = esNegrita ? "700" : "600";
+      const estiloFuente = esCursiva ? "italic " : "";
+      ctxDiseno.font = `${estiloFuente}${peso} ${Math.round(tamanoTexto * FACTOR_LIENZO)}px ${fuenteTexto}`;
       ctxDiseno.textAlign = "center";
       ctxDiseno.textBaseline = "middle";
       ctxDiseno.fillText(textoDiseno, 0, 0);
+      // Subrayado: el canvas no tiene textDecoration, se dibuja una línea bajo
+      // el texto usando el ancho medido y un grosor proporcional al tamaño.
+      if (esSubrayado) {
+        const anchoTexto = ctxDiseno.measureText(textoDiseno).width;
+        const tamDibujo = Math.round(tamanoTexto * FACTOR_LIENZO);
+        ctxDiseno.strokeStyle = colorTexto;
+        ctxDiseno.lineWidth = Math.max(2, tamDibujo * 0.08);
+        ctxDiseno.beginPath();
+        ctxDiseno.moveTo(-anchoTexto / 2, tamDibujo * 0.45);
+        ctxDiseno.lineTo(anchoTexto / 2, tamDibujo * 0.45);
+        ctxDiseno.stroke();
+      }
+      ctxDiseno.restore();
+    }
+
+    // Emojis como capas independientes: cada uno con su posición, escala,
+    // rotación y tamaño propios (mismo encuadre que el editor 2D).
+    for (const emoji of emojisEnCaraActiva) {
+      const tamDibujo = Math.round((emoji.tamano ?? 48) * FACTOR_LIENZO * (emoji.escala ?? 1));
+      ctxDiseno.save();
+      ctxDiseno.translate(
+        (emoji.x / 100) * TAMANO_LIENZO,
+        (emoji.y / 100) * TAMANO_LIENZO
+      );
+      ctxDiseno.rotate(((emoji.rotacion ?? 0) * Math.PI) / 180);
+      ctxDiseno.font = `${tamDibujo}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+      ctxDiseno.textAlign = "center";
+      ctxDiseno.textBaseline = "middle";
+      ctxDiseno.fillText(emoji.emoji, 0, 0);
       ctxDiseno.restore();
     }
 
@@ -652,6 +841,7 @@ function Personalizador() {
         const notas = [
           `Producto: ${selectedProduct === "camiseta" ? "Camiseta" : "Mug"}`,
           imagenes.length ? `Imágenes insertadas: ${imagenes.length}` : null,
+          emojis.length ? `Emojis insertados: ${emojis.length}` : null,
           colorSeleccionado ? `Color elegido: ${colorSeleccionado}` : null,
           textoDiseno.trim()
             ? `Texto: "${textoDiseno.trim()}" (${colorTexto}, ${tamanoTexto}px, fuente ${buscarFuente(fuenteTexto)?.nombre ?? "Clásica"}, posición ${Math.round(posicionTexto.x)}%,${Math.round(posicionTexto.y)}%)`
@@ -692,10 +882,17 @@ function Personalizador() {
       imagenActivaId={imagenActivaId}
       onImagenChange={actualizarImagen}
       onSeleccionarImagen={seleccionarImagen}
+      emojis={emojisEnCaraActiva}
+      emojiActivoId={emojiActivoId}
+      onEmojiChange={actualizarEmoji}
+      onSeleccionarEmoji={seleccionarEmoji}
       texto={caraActiva === "frente" ? textoDiseno : ""}
       colorTexto={colorTexto}
       fuenteTexto={fuenteTexto}
       tamanoTexto={tamanoTexto}
+      esNegrita={esNegrita}
+      esCursiva={esCursiva}
+      esSubrayado={esSubrayado}
       posicionTexto={posicionTexto}
       onPosicionTextoChange={setPosicionTexto}
       rotacionTexto={rotacionTexto}
@@ -956,31 +1153,6 @@ function Personalizador() {
                   Generar con IA
                 </p>
 
-                {/* Selector de estilo */}
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {[
-                    { id: "caricatura", label: "Caricatura" },
-                    { id: "minimalista", label: "Minimalista" },
-                    { id: "retro", label: "Retro" },
-                    { id: "lineas", label: "Línea simple" },
-                  ].map((op) => (
-                    <button
-                      key={op.id}
-                      type="button"
-                      onClick={() =>
-                        setEstiloIA((actual) => (actual === op.id ? null : op.id))
-                      }
-                      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                        estiloIA === op.id
-                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
-                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400"
-                      }`}
-                    >
-                      {op.label}
-                    </button>
-                  ))}
-                </div>
-
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
@@ -1199,7 +1371,7 @@ function Personalizador() {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid max-h-72 grid-cols-2 gap-1.5 overflow-y-auto rounded-xl border border-gray-100 p-1.5 dark:border-slate-800">
+                  <div className="grid max-h-[450px] grid-cols-2 gap-3 overflow-y-auto rounded-xl border border-gray-100 p-2 dark:border-slate-800">
                     {plantillasVisibles.map((plantilla) => (
                       <button
                         key={plantilla.id}
@@ -1208,9 +1380,9 @@ function Personalizador() {
                         title={`Aplicar "${plantilla.nombre}"`}
                         className="group flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white transition duration-150 hover:-translate-y-0.5 hover:border-indigo-400 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-cyan-500/50"
                       >
-                        <span className="flex h-20 w-full items-center justify-center overflow-hidden bg-gray-50 p-1 dark:bg-slate-950">
+                        <span className="flex h-24 w-full items-center justify-center overflow-hidden bg-gray-50 p-1 dark:bg-slate-950">
                           <img
-                            src={plantilla.imagenUrl}
+                            src={plantilla.imagenUrl || plantilla.imagen_url}
                             alt={plantilla.nombre}
                             loading="lazy"
                             className="max-h-full max-w-full object-contain"
@@ -1286,27 +1458,22 @@ function Personalizador() {
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 placeholder:text-gray-400 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
                 />
 
-                {/* Selector interactivo de tipografía */}
+{/* Selector interactivo de tipografía */}
                 <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
                   Fuente ({fuentesVisibles.length})
                 </label>
 
-                {/* Filtros por categoría */}
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {CATEGORIAS_FUENTE.map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setFiltroFuente(cat.id)}
-                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
-                        filtroFuente === cat.id
-                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
-                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400 dark:hover:border-cyan-500/50"
-                      }`}
-                    >
-                      {cat.label}
-                    </button>
-                  ))}
+                <div className="mb-2 flex items-center gap-2">
+                  <svg className="h-4 w-4 text-gray-400 dark:text-slate-500" viewBox="0 0 24 24">
+                    <path d="M21 21l-3.33-3.33l-2.21 2.21l5.45 5.45l-1.42 1.42zM21 3l-3.33 3.33l2.21 2.21l-5.45-5.45l1.42-1.42zM3 3l3.33-3.33l-2.21-2.21l5.45 5.45l-1.42-1.42zM3 21l3.33 3.33l-2.21 2.21l-5.45-5.45l1.42 1.42zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM12 4v12c1.1 0 2-0.9 2-2V4c0-1.1-0.9-2-2-2z" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Buscar fuente..."
+                    value={busquedaFuente}
+                    onChange={(e) => setBusquedaFuente(e.target.value)}
+                    className="rounded-xl border border-gray-200 bg-gray-50 p-2 text-sm text-gray-700 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500 flex-1"
+                  />
                 </div>
 
                 {/* Tarjetas: cada una se dibuja con su propia tipografía para
@@ -1351,12 +1518,159 @@ function Personalizador() {
                   })}
                 </div>
 
+                {/* Formato del texto: negrita, cursiva y subrayado */}
+                <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Formato
+                </label>
+                <div className="mb-4 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-pressed={esNegrita}
+                    title="Negrita"
+                    onClick={() => setEsNegrita((v) => !v)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-bold transition ${
+                      esNegrita
+                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-300"
+                        : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
+                    }`}
+                  >
+                    B
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={esCursiva}
+                    title="Cursiva"
+                    onClick={() => setEsCursiva((v) => !v)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-semibold italic transition ${
+                      esCursiva
+                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-300"
+                        : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
+                    }`}
+                  >
+                    I
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={esSubrayado}
+                    title="Subrayado"
+                    onClick={() => setEsSubrayado((v) => !v)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-semibold underline transition ${
+                      esSubrayado
+                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-300"
+                        : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
+                    }`}
+                  >
+                    U
+                  </button>
+                </div>
+
+                {/* Emojis como capas independientes en el lienzo */}
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Emojis
+                </label>
+                <div className="mb-4 flex flex-wrap gap-1.5">
+                  {EMOJIS_RAPIDOS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => agregarEmoji(emoji)}
+                      title={`Agregar ${emoji} como capa`}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-lg transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:hover:border-cyan-400"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+
+                {emojis.length > 0 && (
+                  <>
+                    <div className="my-3 border-t border-gray-200 dark:border-slate-800" />
+                    <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
+                      Emojis agregados ({emojis.length})
+                    </p>
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      {emojis.map((em) => (
+                        <button
+                          key={em.id}
+                          type="button"
+                          onClick={() => seleccionarEmoji(em.id)}
+                          title="Seleccionar para mover, escalar o eliminar"
+                          className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition ${
+                            em.id === emojiActivoId
+                              ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:ring-cyan-500/40"
+                              : "border-gray-200 bg-gray-50 hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-cyan-500/50"
+                          }`}
+                        >
+                          {em.emoji}
+                        </button>
+                      ))}
+                    </div>
+
+                    {emojiActivo && (
+                      <div className="space-y-3 rounded-xl border border-gray-200 p-3 dark:border-slate-700">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                          Emoji seleccionado
+                        </p>
+
+                        <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                          Tamaño: {Math.round((emojiActivo.tamano ?? 48) * (emojiActivo.escala ?? 1))}px
+                        </label>
+                        <input
+                          type="range"
+                          min={16}
+                          max={120}
+                          step={2}
+                          value={Math.round((emojiActivo.tamano ?? 48) * (emojiActivo.escala ?? 1))}
+                          onChange={(e) => {
+                            const base = emojiActivo.tamano ?? 48;
+                            actualizarEmoji(emojiActivo.id, {
+                              escala: Number(e.target.value) / base,
+                            });
+                          }}
+                          className="w-full accent-indigo-600 dark:accent-cyan-500"
+                        />
+                        <p className="text-[10px] text-gray-400 dark:text-slate-500">
+                          También puedes escalarlo arrastrando las esquinas del
+                          marco en el lienzo.
+                        </p>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              actualizarEmoji(emojiActivo.id, {
+                                rotacion: ((emojiActivo.rotacion ?? 0) + 90) % 360,
+                              })
+                            }
+                            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+                          >
+                            <FaSyncAlt /> Rotar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => eliminarEmoji(emojiActivo.id)}
+                            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-red-500 transition hover:border-red-300 dark:border-slate-700 dark:text-red-400 dark:hover:border-red-500/50"
+                          >
+                            <FaTrash /> Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {/* Vista previa en vivo del texto con la fuente y color elegidos */}
                 <div className="mt-2 flex min-h-[44px] items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50 p-2 dark:border-slate-700 dark:bg-slate-950">
                   {textoDiseno.trim() ? (
                     <span
                       className="truncate text-xl leading-tight"
-                      style={{ fontFamily: fuenteTexto, color: colorTexto }}
+                      style={{
+                        fontFamily: fuenteTexto,
+                        color: colorTexto,
+                        fontWeight: esNegrita ? 700 : 600,
+                        fontStyle: esCursiva ? "italic" : "normal",
+                        textDecoration: esSubrayado ? "underline" : "none",
+                      }}
                     >
                       {textoDiseno}
                     </span>
@@ -1373,11 +1687,26 @@ function Personalizador() {
                 <div className="mb-4 flex items-center gap-3 rounded-xl border border-gray-200 p-2 dark:border-slate-700">
                   <input
                     type="color"
-                    value={colorTexto}
+                    value={normalizarHexParaPicker(colorTexto) ?? "#111111"}
                     onChange={(e) => setColorTexto(e.target.value)}
                     className="h-9 w-12 cursor-pointer rounded border-none bg-transparent p-0"
                   />
-                  <span className="text-sm text-gray-500 dark:text-slate-400">{colorTexto}</span>
+                  <input
+                    type="text"
+                    maxLength="7"
+                    value={colorTexto}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setColorTexto(val);
+                      // Si es un HEX válido (# + 3 o 6 dígitos), el color se
+                      // aplica automáticamente al texto del canvas.
+                      if (/^#?([0-9a-fA-F]{3}){1,2}$/.test(val)) {
+                        setColorTexto(val.startsWith("#") ? val : `#${val}`);
+                      }
+                    }}
+                    placeholder="#111111"
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-700 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
+                  />
                 </div>
 
                 <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
@@ -1393,26 +1722,25 @@ function Personalizador() {
                   className="w-full accent-indigo-600 dark:accent-cyan-500"
                 />
 
-                <button
-                  type="button"
-                  onClick={() => setRotacionTexto((r) => (r + 90) % 360)}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
-                >
-                  <FaSyncAlt /> Rotar texto
-                </button>
-
-                <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Escala: {Math.round(escalaTexto * 100)}%
-                </label>
-                <input
-                  type="range"
-                  min={0.2}
-                  max={3}
-                  step={0.05}
-                  value={escalaTexto}
-                  onChange={(e) => setEscalaTexto(Number(e.target.value))}
-                  className="w-full accent-indigo-600 dark:accent-cyan-500"
-                />
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRotacionTexto((r) => (r + 90) % 360)}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+                  >
+                    <FaSyncAlt /> Rotar texto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTextoDiseno("");
+                      setTextoActivo(false);
+                    }}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-red-500 transition hover:border-red-300 dark:border-slate-700 dark:text-red-400 dark:hover:border-red-500/50"
+                  >
+                    <FaTrash /> Eliminar texto
+                  </button>
+                </div>
               </>
             )}
 
@@ -1474,10 +1802,14 @@ function Personalizador() {
                   tipo={selectedProduct}
                   color={colorSeleccionado ?? "#ffffff"}
                   imagenes={imagenes}
+                  emojis={emojis}
                   texto={textoDiseno}
                   colorTexto={colorTexto}
                   fuenteTexto={fuenteTexto}
                   tamanoTexto={tamanoTexto}
+                  esNegrita={esNegrita}
+                  esCursiva={esCursiva}
+                  esSubrayado={esSubrayado}
                   posicionTexto={posicionTexto}
                   rotacionTexto={rotacionTexto}
                   escalaTexto={escalaTexto}
@@ -1600,10 +1932,14 @@ function Personalizador() {
                 tipo={selectedProduct}
                 color={colorSeleccionado ?? "#ffffff"}
                 imagenes={imagenes}
+                emojis={emojis}
                 texto={textoDiseno}
                 colorTexto={colorTexto}
                 fuenteTexto={fuenteTexto}
                 tamanoTexto={tamanoTexto}
+                esNegrita={esNegrita}
+                esCursiva={esCursiva}
+                esSubrayado={esSubrayado}
                 posicionTexto={posicionTexto}
                 rotacionTexto={rotacionTexto}
                 escalaTexto={escalaTexto}
