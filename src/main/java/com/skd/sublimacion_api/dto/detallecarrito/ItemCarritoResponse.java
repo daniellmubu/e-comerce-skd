@@ -26,4 +26,10 @@ public class ItemCarritoResponse {
     private Long disenoId;
 
     private String imagenDisenoUrl;
+
+    private Long varianteId;
+
+    private String talla;
+
+    private String color;
 }

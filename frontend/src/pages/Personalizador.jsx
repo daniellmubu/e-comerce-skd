@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaUpload,
@@ -14,18 +14,22 @@ import {
   FaMinus,
   FaPlus,
   FaTimes,
+  FaExclamationTriangle,
+  FaImages,
 } from "react-icons/fa";
 import { Shirt, Coffee } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { guardarPersonalizacion } from "../services/personalizacionService";
-import { generarDiseno } from "../services/disenoService";
+import { generarDiseno, subirDiseno } from "../services/disenoService";
+import { listarPlantillas } from "../services/plantillaService";
 import { getErrorMessage } from "../services/api";
 import PrendaMockup, {
   ANCHO_IMAGEN_BASE,
   ESCALA_MIN,
   ESCALA_MAX,
+  obtenerBaseMockup,
 } from "../components/ui/PrendaMockup";
 import Prenda3D from "../components/ui/Prenda3D";
 import { removeBackground } from "@imgly/background-removal";
@@ -33,7 +37,6 @@ import procesarDiseno from "../utils/quitarFondoBlanco";
 import {
   FUENTES_TEXTO,
   FUENTE_TEXTO_DEFECTO,
-  CATEGORIAS_FUENTE,
   buscarFuente,
   cargarFuenteParaCanvas,
 } from "../utils/fuentesTexto";
@@ -82,12 +85,27 @@ const PALETA_COLORES = [
   "#BBF7D0", "#BFDBFE",
 ];
 
+// Emojis de inserción rápida para el texto del personalizador.
+const EMOJIS_RAPIDOS = ["⭐", "🐶", "❤️", "🔥", "🎉", "✨", "⚽", "👑"];
+
 function formatPrice(value) {
   return Number(value).toLocaleString("es-CO", {
     style: "currency",
     currency: "COP",
     maximumFractionDigits: 0,
   });
+}
+
+// Identificador único para cada imagen insertada (helper de módulo: Date.now
+// y Math.random no pueden llamarse dentro del render del componente).
+function crearIdImagen() {
+  return `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// Pequeño desplazamiento aleatorio (%) para que al agregar varias imágenes no
+// queden exactamente apiladas y sea más fácil separarlas.
+function desplazamientoAleatorio() {
+  return Math.round((Math.random() - 0.5) * 16);
 }
 
 function blobToDataURL(blob) {
@@ -101,14 +119,61 @@ function blobToDataURL(blob) {
 
 // Carga una imagen (dataURL o URL remota) como elemento <img> para poder
 // dibujarla en el lienzo final. Devuelve null si no se puede cargar.
+// Intenta primero con crossOrigin anónimo (evita "tainted canvas" al componer
+// el diseño o subir la textura a Three.js); si el servidor remoto no expone
+// cabeceras CORS (p. ej. buckets de Supabase sin política), reintenta sin él
+// para que la imagen igualmente se dibuje y sea editable en el lienzo.
 function cargarImagenElemento(url) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    if (url.startsWith("http")) img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
+  const intentar = (conCors) =>
+    new Promise((resolve) => {
+      const img = new Image();
+      if (conCors) img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+
+  return intentar(true).then((img) => img ?? intentar(false));
+}
+
+// Convierte un dataURL (PNG/JPEG) en un File, listo para subir con FormData.
+function dataUrlToFile(dataUrl, nombre) {
+  const coma = dataUrl.indexOf(",");
+  const meta = dataUrl.slice(0, coma);
+  const base64 = dataUrl.slice(coma + 1);
+  const mime = meta.match(/:(.*?);/)?.[1] || "image/png";
+  const binario = atob(base64);
+  const bytes = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  return new File([bytes], nombre, { type: mime });
+}
+
+// Ancho real (pulgadas) que representa el lienzo al imprimir. Sirve para
+// estimar el DPI efectivo de cada imagen una vez escalada.
+const PRINT_WIDTH_INCHES = 12;
+const DPI_MINIMO = 150;
+
+function calcularDpi(naturalWidth, anchoRenderizadoPx) {
+  if (!naturalWidth || !anchoRenderizadoPx) return 0;
+  const pulgadas = (anchoRenderizadoPx / TAMANO_LIENZO) * PRINT_WIDTH_INCHES;
+  return pulgadas > 0 ? naturalWidth / pulgadas : 0;
+}
+
+// DPI efectivo de una imagen ya colocada en el lienzo, con su escala actual.
+function dpiDeImagen(img) {
+  const ancho =
+    TAMANO_LIENZO * ANCHO_IMAGEN_BASE * (img.escalaX ?? img.escala ?? 1);
+  return calcularDpi(img.naturalWidth, ancho);
+}
+
+// Normaliza un HEX (con o sin '#', 3 o 6 dígitos) a la forma #rrggbb que
+// exige <input type="color">; si no es válido devuelve null para usar un
+// color por defecto sin romper el selector.
+function normalizarHexParaPicker(valor) {
+  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec((valor ?? "").trim());
+  if (!m) return null;
+  const hex = m[1].length === 3 ? [...m[1]].map((c) => c + c).join("") : m[1];
+  return `#${hex}`;
 }
 
 function Personalizador() {
@@ -136,21 +201,33 @@ function Personalizador() {
   const [imagenActivaId, setImagenActivaId] = useState(null);
   const [caraActiva, setCaraActiva] = useState("frente");
 
+  // Capas de emoji independientes: cada emoji es un objeto con su propia
+  // posición, escala, rotación y tamaño, seleccionable/arrastrable/redimensionable
+  // por separado (igual que las imágenes), en lugar de concatenarse al texto.
+  const [emojis, setEmojis] = useState([]); // { id, emoji, cara, x, y, escala, rotacion, tamano }
+  const [emojiActivoId, setEmojiActivoId] = useState(null);
+
   const [prompt, setPrompt] = useState("");
-  const [estiloIA, setEstiloIA] = useState(null); // "caricatura" | "minimalista" | "retro" | "lineas" | null
   const [generandoIA, setGenerandoIA] = useState(false);
   const [colorSeleccionado, setColorSeleccionado] = useState(null); // hex
   const [textoDiseno, setTextoDiseno] = useState("");
   const [colorTexto, setColorTexto] = useState("#111111");
   const [fuenteTexto, setFuenteTexto] = useState(FUENTE_TEXTO_DEFECTO);
-  const [filtroFuente, setFiltroFuente] = useState("todas");
+  const [busquedaFuente, setBusquedaFuente] = useState("");
   const [tamanoTexto, setTamanoTexto] = useState(32);
+  // Formato del texto: negrita, cursiva y subrayado (se aplica en el lienzo
+  // 2D, en la proyección 3D y en la imagen final guardada).
+  const [esNegrita, setEsNegrita] = useState(false);
+  const [esCursiva, setEsCursiva] = useState(false);
+  const [esSubrayado, setEsSubrayado] = useState(false);
   const [posicionTexto, setPosicionTexto] = useState({ x: 50, y: 50 });
   const [rotacionTexto, setRotacionTexto] = useState(0);
   const [escalaTexto, setEscalaTexto] = useState(1);
   const [textoActivo, setTextoActivo] = useState(false);
-  const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "color" | "texto"
+  const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "plantillas" | "texto" | "color"
   const [guardando, setGuardando] = useState(false);
+  // Guardado del diseño compuesto en "Mis diseños" (endpoint /disenos/subir).
+  const [guardandoDiseno, setGuardandoDiseno] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [procesandoImagen, setProcesandoImagen] = useState(false);
   // Recorte inteligente de fondo al subir imágenes (@imgly): activado por
@@ -162,34 +239,168 @@ function Personalizador() {
   const [zoomLienzo, setZoomLienzo] = useState(1);
   const [lienzoMaximizado, setLienzoMaximizado] = useState(false);
 
+  // Galería de plantillas prediseñadas: se carga la primera vez que se abre
+  // la pestaña y se filtra en cliente por categoría y compatibilidad.
+  const [plantillas, setPlantillas] = useState([]);
+  const [cargandoPlantillas, setCargandoPlantillas] = useState(false);
+  const [errorPlantillas, setErrorPlantillas] = useState(null);
+  const [categoriaPlantilla, setCategoriaPlantilla] = useState("todas");
+  const plantillasCargadasRef = useRef(false);
+
   const imagenActiva = imagenes.find((img) => img.id === imagenActivaId) ?? null;
+  const emojiActivo = emojis.find((e) => e.id === emojiActivoId) ?? null;
+
+  // DPI estimado de la imagen seleccionada (para avisar si quedará pixelada).
+  const dpiImagenActiva = imagenActiva ? dpiDeImagen(imagenActiva) : 0;
+  const imagenActivaBajaCalidad =
+    imagenActiva != null &&
+    imagenActiva.naturalWidth > 0 &&
+    dpiImagenActiva < DPI_MINIMO;
+  const hayImagenesBajaCalidad = imagenes.some(
+    (img) => img.naturalWidth > 0 && dpiDeImagen(img) < DPI_MINIMO
+  );
 
   const caraDe = (img) => img.cara ?? "frente";
   // Imágenes de la cara activa (las que se editan en el mockup grande).
   const imagenesEnCaraActiva = imagenes.filter(
     (img) => caraDe(img) === caraActiva
   );
+  // Emojis de la cara activa (misma regla que las imágenes).
+  const emojisEnCaraActiva = emojis.filter((e) => (e.cara ?? "frente") === caraActiva);
 
   const hayDiseno = Boolean(
-    imagenes.length || colorSeleccionado || textoDiseno.trim()
+    imagenes.length || emojis.length || colorSeleccionado || textoDiseno.trim()
   );
 
   const total = useMemo(() => precioBase + COSTO_PERSONALIZACION, [precioBase]);
 
-  // Fuentes del menú, filtradas por la categoría elegida.
+// Fuentes del menú, filtradas por búsqueda en tiempo real.
   const fuentesVisibles = useMemo(
-    () =>
-      filtroFuente === "todas"
-        ? FUENTES_TEXTO
-        : FUENTES_TEXTO.filter((f) => f.categoria === filtroFuente),
-    [filtroFuente]
+    () => {
+      const bajo = busquedaFuente.toLowerCase();
+      if (!busquedaFuente) return FUENTES_TEXTO;
+      return FUENTES_TEXTO.filter(
+        (f) =>
+          f.nombre.toLowerCase().includes(bajo) ||
+          f.css.toLowerCase().includes(bajo)
+      );
+    },
+    [busquedaFuente]
   );
 
-  const agregarImagen = (url) => {
-    const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    // Pequeño desplazamiento aleatorio para que al agregar varias no queden
-    // exactamente apiladas y sea más fácil separarlas.
-    const offset = Math.round((Math.random() - 0.5) * 16);
+  // --- Galería de plantillas prediseñadas ---
+
+  // Carga única y diferida: solo se pide al backend la primera vez que se
+  // abre la pestaña (o al reintentar tras un error).
+  const cargarGaleriaPlantillas = async () => {
+    setCargandoPlantillas(true);
+    setErrorPlantillas(null);
+    try {
+      const datos = await listarPlantillas();
+      setPlantillas(datos);
+      plantillasCargadasRef.current = true;
+    } catch (err) {
+      setErrorPlantillas(getErrorMessage(err));
+    } finally {
+      setCargandoPlantillas(false);
+    }
+  };
+
+  useEffect(() => {
+    if (herramienta !== "plantillas") return;
+    if (!plantillasCargadasRef.current) cargarGaleriaPlantillas();
+  }, [herramienta]);
+
+  // Tabs de categoría derivadas de los datos (se adapta a lo que haya en BD).
+  const categoriasPlantillas = useMemo(
+    () => [...new Set(plantillas.map((p) => p.categoria))],
+    [plantillas]
+  );
+
+  // Plantillas visibles: categoría elegida + compatibles con el producto
+  // actual ("ambos" siempre aplica; el resto se oculta al cambiar de producto).
+  const plantillasVisibles = useMemo(
+    () =>
+      plantillas.filter(
+        (p) =>
+          (categoriaPlantilla === "todas" ||
+            p.categoria === categoriaPlantilla) &&
+          (p.productoTipoCompatible === selectedProduct ||
+            p.productoTipoCompatible === "ambos")
+      ),
+    [plantillas, categoriaPlantilla, selectedProduct]
+  );
+
+  // Aplica la plantilla como imagen de diseño en la cara activa: mismo camino
+  // que subir una imagen, así queda seleccionada, arrastrable y redimensionable
+  // con el editor normal. Carga el PNG real en el lienzo (nunca un placeholder)
+  // validando ambas formas del campo de imagen.
+  const aplicarPlantilla = async (plantilla) => {
+    if (!plantilla) return;
+
+    // Soporta camelCase y snake_case según cómo serialice el backend.
+    const url = plantilla.imagenUrl || plantilla.imagen_url;
+    if (!url) {
+      console.error("La plantilla no tiene URL válida:", plantilla);
+      setMensaje({
+        tipo: "error",
+        texto: "La plantilla no tiene una imagen disponible.",
+      });
+      return;
+    }
+
+    try {
+      // Precarga del PNG real con CORS anónimo antes de insertar la capa;
+      // cargarImagenElemento reintenta sin CORS si el bucket lo bloquea, así
+      // el estampado se dibuja igualmente en el lienzo 2D y en las texturas
+      // de Three.js (Prenda3D).
+      const img = await cargarImagenElemento(url);
+      if (!img) {
+        console.error(
+          `No se pudo cargar la imagen de la plantilla "${plantilla.nombre}":`,
+          url
+        );
+        setMensaje({
+          tipo: "error",
+          texto: `No se pudo cargar la imagen de "${plantilla.nombre}".`,
+        });
+        return;
+      }
+
+      // Función real del archivo que agrega capas al lienzo y las vuelve
+      // seleccionables/arrastrables con el editor normal.
+      await agregarImagen(url);
+      setMensaje({
+        tipo: "ok",
+        texto: `Plantilla "${plantilla.nombre}" agregada. Muévela y ajústala a tu gusto.`,
+      });
+    } catch (err) {
+      console.error("Error cargando la plantilla en el canvas:", err);
+      setMensaje({
+        tipo: "error",
+        texto: "No fue posible aplicar la plantilla al lienzo.",
+      });
+    }
+  };
+
+  const agregarImagen = async (url) => {
+    const id = crearIdImagen();
+    const offset = desplazamientoAleatorio();
+
+    // Dimensiones originales de la imagen, para poder estimar el DPI al
+    // escalarla y avisar si quedará pixelada al imprimir.
+    let naturalWidth = 0;
+    let naturalHeight = 0;
+    try {
+      const el = await cargarImagenElemento(url);
+      if (el) {
+        naturalWidth = el.naturalWidth;
+        naturalHeight = el.naturalHeight;
+      }
+    } catch {
+      // Sin dimensiones: se trata como desconocidas y no se muestra aviso.
+    }
+
     const nueva = {
       id,
       url,
@@ -199,6 +410,8 @@ function Personalizador() {
       escalaX: 1,
       escalaY: 1,
       rotacion: 0,
+      naturalWidth,
+      naturalHeight,
     };
     setImagenes((prev) => [...prev, nueva]);
     setImagenActivaId(id);
@@ -211,17 +424,58 @@ function Personalizador() {
 
   const seleccionarImagen = (id) => {
     setImagenActivaId(id);
+    setEmojiActivoId(null);
     if (id) setTextoActivo(false);
   };
 
   const seleccionarTexto = () => {
     setImagenActivaId(null);
+    setEmojiActivoId(null);
     setTextoActivo(true);
   };
 
   const handleTextoTransform = (patch) => {
     if (patch.rotacion !== undefined) setRotacionTexto(patch.rotacion);
     if (patch.escala !== undefined) setEscalaTexto(patch.escala);
+  };
+
+  // Añade un emoji como CAPA INDEPENDIENTE del lienzo (no se concatena al
+  // texto): cada emoji guarda su propia cara, posición, escala, rotación y
+  // tamaño, y queda seleccionado para moverlo/redimensionarlo libremente.
+  const agregarEmoji = (emoji) => {
+    const id = crearIdImagen();
+    const offset = desplazamientoAleatorio();
+    const nuevo = {
+      id,
+      emoji,
+      cara: caraActiva,
+      x: 50 + offset,
+      y: 45 + offset,
+      escala: 1,
+      rotacion: 0,
+      tamano: 48,
+    };
+    setEmojis((prev) => [...prev, nuevo]);
+    setEmojiActivoId(id);
+    setImagenActivaId(null);
+    setTextoActivo(false);
+  };
+
+  const actualizarEmoji = (id, patch) => {
+    setEmojis((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, ...patch } : e))
+    );
+  };
+
+  const seleccionarEmoji = (id) => {
+    setEmojiActivoId(id);
+    setImagenActivaId(null);
+    if (id) setTextoActivo(false);
+  };
+
+  const eliminarEmoji = (id) => {
+    setEmojis((prev) => prev.filter((e) => e.id !== id));
+    setEmojiActivoId((actual) => (actual === id ? null : actual));
   };
 
   const handleRotarImagen = () => {
@@ -235,6 +489,41 @@ function Personalizador() {
     setImagenes((prev) => prev.filter((img) => img.id !== id));
     setImagenActivaId((actual) => (actual === id ? null : actual));
   };
+
+  // Elimina la capa activa (imagen, texto o emoji) desde el teclado.
+  const eliminarCapaActiva = () => {
+    if (imagenActivaId) {
+      handleEliminarImagen(imagenActivaId);
+      return;
+    }
+    if (emojiActivoId) {
+      eliminarEmoji(emojiActivoId);
+      return;
+    }
+    if (textoActivo) {
+      setTextoDiseno("");
+      setTextoActivo(false);
+    }
+  };
+
+  // Tecla Delete/Backspace: elimina la capa activa (imagen, emoji o texto).
+  // Se ignora cuando el foco está en un input/textarea para no borrar texto
+  // mientras se escribe.
+  useEffect(() => {
+    const alTeclado = (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const objetivo = e.target;
+      const esCampo =
+        objetivo &&
+        (objetivo.tagName === "INPUT" ||
+          objetivo.tagName === "TEXTAREA" ||
+          objetivo.isContentEditable);
+      if (esCampo) return;
+      eliminarCapaActiva();
+    };
+    window.addEventListener("keydown", alTeclado);
+    return () => window.removeEventListener("keydown", alTeclado);
+  });
 
   const handleSubirImagen = async (e) => {
     const archivos = Array.from(e.target.files ?? []);
@@ -293,7 +582,6 @@ function Personalizador() {
       const resultado = await generarDiseno({
         prompt,
         productoId: productoOrigen?.id ?? null,
-        estilo: estiloIA,
       });
 
       const imagenUrl =
@@ -323,12 +611,17 @@ function Personalizador() {
   const handleQuitarDiseno = () => {
     setImagenes([]);
     setImagenActivaId(null);
+    setEmojis([]);
+    setEmojiActivoId(null);
     setTextoActivo(false);
     setColorSeleccionado(null);
     setTextoDiseno("");
     setColorTexto("#111111");
     setFuenteTexto(FUENTE_TEXTO_DEFECTO);
     setTamanoTexto(32);
+    setEsNegrita(false);
+    setEsCursiva(false);
+    setEsSubrayado(false);
     setPosicionTexto({ x: 50, y: 50 });
     setRotacionTexto(0);
     setEscalaTexto(1);
@@ -338,71 +631,185 @@ function Personalizador() {
     setMensaje(null);
   };
 
-  // Aplana todas las imágenes y el texto en una sola imagen PNG (con fondo
-  // transparente) para guardarla como la imagen final de la personalización.
-  // La posición de cada elemento es libre ({x, y} en %), la misma que usa el
-  // editor de "Ajuste fino" con react-moveable.
+  // Aplana el mockup de la vista activa (producto + color) junto con las
+  // imágenes y el texto en una sola imagen PNG, idéntica a lo que se ve en el
+  // lienzo 2D: así la personalización guardada muestra la prenda de fondo y
+  // no solo el diseño suelto. La posición de cada elemento es libre ({x, y}
+  // en %), la misma que usa el editor con react-moveable.
   const componerImagenFinal = async () => {
-    if (!imagenes.length && !textoDiseno.trim()) return null;
+    if (!imagenes.length && !emojis.length && !textoDiseno.trim()) return null;
 
     const canvas = document.createElement("canvas");
     canvas.width = TAMANO_LIENZO;
     canvas.height = TAMANO_LIENZO;
     const ctx = canvas.getContext("2d");
 
-      for (const imagen of imagenes) {
-        // Mismo procesamiento que el editor 2D y la textura 3D: sin esto, la
-        // imagen guardada conservaría el fondo blanco que en pantalla no se ve.
-        const procesada = await procesarDiseno(imagen.url);
-        const el = await cargarImagenElemento(procesada?.dataUrl ?? imagen.url);
-        if (!el) continue;
+    // 1. Producto de fondo: misma imagen base y encuadre que PrendaMockup
+    //    (a alto completo del lienzo, centrada horizontalmente; si es más
+    //    ancha que el cuadrado, se recorta por los lados como en pantalla).
+    const baseImg = await cargarImagenElemento(
+      obtenerBaseMockup(selectedProduct, caraActiva)
+    );
+    let encuadreBase = null;
+    if (baseImg) {
+      const anchoBase =
+        TAMANO_LIENZO * (baseImg.naturalWidth / baseImg.naturalHeight);
+      encuadreBase = {
+        dx: (TAMANO_LIENZO - anchoBase) / 2,
+        dw: anchoBase,
+      };
+      ctx.drawImage(baseImg, encuadreBase.dx, 0, encuadreBase.dw, TAMANO_LIENZO);
+    }
 
-        const baseW =
-          TAMANO_LIENZO *
-          ANCHO_IMAGEN_BASE *
-          (imagen.escalaX ?? imagen.escala ?? 1);
-        const baseH =
-          baseW *
-          (el.naturalHeight / el.naturalWidth) *
-          (imagen.escalaY ?? imagen.escala ?? 1);
-        const cx = (imagen.x / 100) * TAMANO_LIENZO;
-        const cy = (imagen.y / 100) * TAMANO_LIENZO;
+    // 2. Color del producto: silueta rellena con el color elegido y mezclada
+    //    en "multiply" sobre la foto (igual que la capa de color del editor).
+    if (baseImg && colorSeleccionado) {
+      const capaColor = document.createElement("canvas");
+      capaColor.width = TAMANO_LIENZO;
+      capaColor.height = TAMANO_LIENZO;
+      const ctxColor = capaColor.getContext("2d");
+      ctxColor.drawImage(baseImg, encuadreBase.dx, 0, encuadreBase.dw, TAMANO_LIENZO);
+      ctxColor.globalCompositeOperation = "source-in";
+      ctxColor.fillStyle = colorSeleccionado;
+      ctxColor.fillRect(0, 0, TAMANO_LIENZO, TAMANO_LIENZO);
 
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(((imagen.rotacion ?? 0) * Math.PI) / 180);
-        ctx.drawImage(el, -baseW / 2, -baseH / 2, baseW, baseH);
-        ctx.restore();
-      }
+      ctx.globalCompositeOperation = "multiply";
+      ctx.drawImage(capaColor, 0, 0);
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    // 3. Diseños + texto en una capa aparte, para poder recortarlos con la
+    //    silueta del producto igual que en el editor (en las vistas de manga
+    //    se permite desbordar hacia el costado del torso).
+    const permitirDesborde =
+      selectedProduct === "camiseta" &&
+      (caraActiva === "mangaIzquierda" || caraActiva === "mangaDerecha");
+
+    const capaDiseno = document.createElement("canvas");
+    capaDiseno.width = TAMANO_LIENZO;
+    capaDiseno.height = TAMANO_LIENZO;
+    const ctxDiseno = capaDiseno.getContext("2d");
+
+    for (const imagen of imagenes) {
+      // Mismo procesamiento que el editor 2D y la textura 3D: sin esto, la
+      // imagen guardada conservaría el fondo blanco que en pantalla no se ve.
+      const procesada = await procesarDiseno(imagen.url);
+      const el = await cargarImagenElemento(procesada?.dataUrl ?? imagen.url);
+      if (!el) continue;
+
+      const baseW =
+        TAMANO_LIENZO *
+        ANCHO_IMAGEN_BASE *
+        (imagen.escalaX ?? imagen.escala ?? 1);
+      const baseH =
+        baseW *
+        (el.naturalHeight / el.naturalWidth) *
+        (imagen.escalaY ?? imagen.escala ?? 1);
+      const cx = (imagen.x / 100) * TAMANO_LIENZO;
+      const cy = (imagen.y / 100) * TAMANO_LIENZO;
+
+      ctxDiseno.save();
+      ctxDiseno.translate(cx, cy);
+      ctxDiseno.rotate(((imagen.rotacion ?? 0) * Math.PI) / 180);
+      ctxDiseno.drawImage(el, -baseW / 2, -baseH / 2, baseW, baseH);
+      ctxDiseno.restore();
+    }
 
     if (textoDiseno.trim()) {
       // Asegura que la fuente web esté descargada antes de dibujar; si no,
       // el canvas caería al fallback y la imagen guardada no coincidiría.
       await cargarFuenteParaCanvas(fuenteTexto);
-      ctx.save();
-      ctx.translate(
+      ctxDiseno.save();
+      ctxDiseno.translate(
         (posicionTexto.x / 100) * TAMANO_LIENZO,
         (posicionTexto.y / 100) * TAMANO_LIENZO
       );
-      ctx.rotate(((rotacionTexto ?? 0) * Math.PI) / 180);
-      ctx.scale(escalaTexto ?? 1, escalaTexto ?? 1);
-      ctx.fillStyle = colorTexto;
-      ctx.font = `600 ${Math.round(tamanoTexto * FACTOR_LIENZO)}px ${fuenteTexto}`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(textoDiseno, 0, 0);
-      ctx.restore();
+      ctxDiseno.rotate(((rotacionTexto ?? 0) * Math.PI) / 180);
+      ctxDiseno.scale(escalaTexto ?? 1, escalaTexto ?? 1);
+      ctxDiseno.fillStyle = colorTexto;
+      const peso = esNegrita ? "700" : "600";
+      const estiloFuente = esCursiva ? "italic " : "";
+      ctxDiseno.font = `${estiloFuente}${peso} ${Math.round(tamanoTexto * FACTOR_LIENZO)}px ${fuenteTexto}`;
+      ctxDiseno.textAlign = "center";
+      ctxDiseno.textBaseline = "middle";
+      ctxDiseno.fillText(textoDiseno, 0, 0);
+      // Subrayado: el canvas no tiene textDecoration, se dibuja una línea bajo
+      // el texto usando el ancho medido y un grosor proporcional al tamaño.
+      if (esSubrayado) {
+        const anchoTexto = ctxDiseno.measureText(textoDiseno).width;
+        const tamDibujo = Math.round(tamanoTexto * FACTOR_LIENZO);
+        ctxDiseno.strokeStyle = colorTexto;
+        ctxDiseno.lineWidth = Math.max(2, tamDibujo * 0.08);
+        ctxDiseno.beginPath();
+        ctxDiseno.moveTo(-anchoTexto / 2, tamDibujo * 0.45);
+        ctxDiseno.lineTo(anchoTexto / 2, tamDibujo * 0.45);
+        ctxDiseno.stroke();
+      }
+      ctxDiseno.restore();
     }
+
+    // Emojis como capas independientes: cada uno con su posición, escala,
+    // rotación y tamaño propios (mismo encuadre que el editor 2D).
+    for (const emoji of emojisEnCaraActiva) {
+      const tamDibujo = Math.round((emoji.tamano ?? 48) * FACTOR_LIENZO * (emoji.escala ?? 1));
+      ctxDiseno.save();
+      ctxDiseno.translate(
+        (emoji.x / 100) * TAMANO_LIENZO,
+        (emoji.y / 100) * TAMANO_LIENZO
+      );
+      ctxDiseno.rotate(((emoji.rotacion ?? 0) * Math.PI) / 180);
+      ctxDiseno.font = `${tamDibujo}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+      ctxDiseno.textAlign = "center";
+      ctxDiseno.textBaseline = "middle";
+      ctxDiseno.fillText(emoji.emoji, 0, 0);
+      ctxDiseno.restore();
+    }
+
+    // Recorte a la silueta: "destination-in" conserva únicamente lo que cae
+    // dentro del producto (máscara igual a la del editor 2D).
+    if (baseImg && !permitirDesborde) {
+      ctxDiseno.globalCompositeOperation = "destination-in";
+      ctxDiseno.drawImage(baseImg, encuadreBase.dx, 0, encuadreBase.dw, TAMANO_LIENZO);
+      ctxDiseno.globalCompositeOperation = "source-over";
+    }
+    ctx.drawImage(capaDiseno, 0, 0);
 
     return canvas.toDataURL("image/png");
   };
 
+  // Guarda el mockup compuesto (producto + color + diseño estampado) como un
+  // Diseño con origen USUARIO: aparece en "Mis diseños" del panel con la
+  // prenda de fondo, no el gráfico suelto.
   const handleGuardarDiseno = async () => {
     if (!hayDiseno) {
       setMensaje({ tipo: "error", texto: "Sube una imagen o genera un diseño con IA primero." });
       return;
     }
-    setMensaje({ tipo: "ok", texto: "Diseño guardado en esta sesión." });
+    if (!usuario) {
+      navigate("/login");
+      return;
+    }
+    if (!productoOrigen) {
+      setMensaje({ tipo: "error", texto: "Elige un producto desde el catálogo antes de guardar." });
+      return;
+    }
+
+    setGuardandoDiseno(true);
+    setMensaje(null);
+    try {
+      const dataUrl = await componerImagenFinal();
+      if (!dataUrl) {
+        setMensaje({ tipo: "error", texto: "No se pudo generar la imagen del diseño." });
+        return;
+      }
+      const file = dataUrlToFile(dataUrl, "diseno.png");
+      await subirDiseno({ file, productoId: productoOrigen.id });
+      setMensaje({ tipo: "ok", texto: "Diseño guardado. Lo encontrarás en tu dashboard." });
+    } catch (err) {
+      setMensaje({ tipo: "error", texto: getErrorMessage(err) });
+    } finally {
+      setGuardandoDiseno(false);
+    }
   };
 
   const handleAgregarAlCarrito = async () => {
@@ -434,6 +841,7 @@ function Personalizador() {
         const notas = [
           `Producto: ${selectedProduct === "camiseta" ? "Camiseta" : "Mug"}`,
           imagenes.length ? `Imágenes insertadas: ${imagenes.length}` : null,
+          emojis.length ? `Emojis insertados: ${emojis.length}` : null,
           colorSeleccionado ? `Color elegido: ${colorSeleccionado}` : null,
           textoDiseno.trim()
             ? `Texto: "${textoDiseno.trim()}" (${colorTexto}, ${tamanoTexto}px, fuente ${buscarFuente(fuenteTexto)?.nombre ?? "Clásica"}, posición ${Math.round(posicionTexto.x)}%,${Math.round(posicionTexto.y)}%)`
@@ -474,10 +882,17 @@ function Personalizador() {
       imagenActivaId={imagenActivaId}
       onImagenChange={actualizarImagen}
       onSeleccionarImagen={seleccionarImagen}
+      emojis={emojisEnCaraActiva}
+      emojiActivoId={emojiActivoId}
+      onEmojiChange={actualizarEmoji}
+      onSeleccionarEmoji={seleccionarEmoji}
       texto={caraActiva === "frente" ? textoDiseno : ""}
       colorTexto={colorTexto}
       fuenteTexto={fuenteTexto}
       tamanoTexto={tamanoTexto}
+      esNegrita={esNegrita}
+      esCursiva={esCursiva}
+      esSubrayado={esSubrayado}
       posicionTexto={posicionTexto}
       onPosicionTextoChange={setPosicionTexto}
       rotacionTexto={rotacionTexto}
@@ -595,7 +1010,7 @@ function Personalizador() {
               Herramientas
             </h2>
 
-            {/* Tira de pestañas: imagen / texto / color */}
+            {/* Tira de pestañas: imagen / plantillas / texto / color */}
             <div className="mb-4 flex items-center gap-1 rounded-xl border border-gray-200 p-1 dark:border-slate-700">
               <button
                 type="button"
@@ -608,6 +1023,19 @@ function Personalizador() {
                 }`}
               >
                 <FaUpload className="text-sm" />
+              </button>
+              <button
+                type="button"
+                aria-label="Herramienta de plantillas"
+                title="Plantillas"
+                onClick={() => setHerramienta("plantillas")}
+                className={`flex flex-1 items-center justify-center rounded-lg py-2 transition ${
+                  herramienta === "plantillas"
+                    ? "bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200"
+                    : "text-gray-400 hover:bg-gray-100 dark:text-slate-500 dark:hover:bg-slate-800"
+                }`}
+              >
+                <FaImages className="text-sm" />
               </button>
               <button
                 type="button"
@@ -725,31 +1153,6 @@ function Personalizador() {
                   Generar con IA
                 </p>
 
-                {/* Selector de estilo */}
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {[
-                    { id: "caricatura", label: "Caricatura" },
-                    { id: "minimalista", label: "Minimalista" },
-                    { id: "retro", label: "Retro" },
-                    { id: "lineas", label: "Línea simple" },
-                  ].map((op) => (
-                    <button
-                      key={op.id}
-                      type="button"
-                      onClick={() =>
-                        setEstiloIA((actual) => (actual === op.id ? null : op.id))
-                      }
-                      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                        estiloIA === op.id
-                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
-                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400"
-                      }`}
-                    >
-                      {op.label}
-                    </button>
-                  ))}
-                </div>
-
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
@@ -780,8 +1183,16 @@ function Personalizador() {
                   <>
                     <div className="my-5 border-t border-gray-200 dark:border-slate-800" />
 
-                    <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
+                    <p className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-slate-300">
                       Imágenes ({imagenes.length})
+                      {hayImagenesBajaCalidad && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
+                          title={`Algunas imágenes están por debajo de ${DPI_MINIMO} DPI para impresión`}
+                        >
+                          <FaExclamationTriangle /> baja calidad
+                        </span>
+                      )}
                     </p>
                     <div className="mb-3 flex flex-wrap gap-2">
                       {imagenes.map((img) => {
@@ -797,7 +1208,7 @@ function Personalizador() {
                               setCaraActiva(caraDe(img));
                             }}
                             title={`Ubicación: ${etiquetaCara ?? "Frente"}`}
-                            className={`flex h-16 w-14 flex-col items-center justify-center overflow-hidden rounded-lg border-2 bg-gray-50 transition dark:bg-slate-800 ${
+                            className={`relative flex h-16 w-14 flex-col items-center justify-center overflow-hidden rounded-lg border-2 bg-gray-50 transition dark:bg-slate-800 ${
                               img.id === imagenActivaId
                                 ? "border-indigo-500 dark:border-cyan-400"
                                 : "border-gray-200 hover:border-indigo-300 dark:border-slate-700"
@@ -807,6 +1218,10 @@ function Personalizador() {
                             <span className="w-full truncate px-0.5 text-center text-[9px] text-gray-400 dark:text-slate-500">
                               {etiquetaCara ?? "Frente"}
                             </span>
+                            {img.naturalWidth > 0 &&
+                              dpiDeImagen(img) < DPI_MINIMO && (
+                                <FaExclamationTriangle className="absolute right-0.5 top-0.5 text-[10px] text-amber-500" />
+                              )}
                           </button>
                         );
                       })}
@@ -817,6 +1232,15 @@ function Personalizador() {
                         <p className="text-xs font-semibold text-gray-500 dark:text-slate-400">
                           Imagen seleccionada
                         </p>
+
+                        {imagenActivaBajaCalidad && (
+                          <p className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                            <FaExclamationTriangle className="mt-0.5 shrink-0" />
+                            Imagen pequeña para imprimir (≈
+                            {Math.round(dpiImagenActiva)} DPI, mínimo {DPI_MINIMO}).
+                            Usa una de mayor resolución o redúcela de tamaño.
+                          </p>
+                        )}
 
                         <>
                           <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
@@ -894,6 +1318,91 @@ function Personalizador() {
                   </>
                 )}
               </>
+            ) : herramienta === "plantillas" ? (
+              <>
+                {/* Galería de plantillas prediseñadas: arrancar de un diseño
+                    ya hecho en vez de empezar en blanco. */}
+                <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Plantillas para {selectedProduct === "camiseta" ? "camiseta" : "mug"}
+                </p>
+
+                {/* Tabs de categoría (derivadas de las plantillas cargadas) */}
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {["todas", ...categoriasPlantillas].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setCategoriaPlantilla(cat)}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                        categoriaPlantilla === cat
+                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
+                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400 dark:hover:border-cyan-500/50"
+                      }`}
+                    >
+                      {cat === "todas" ? "Todas" : cat}
+                    </button>
+                  ))}
+                </div>
+
+                {cargandoPlantillas ? (
+                  <div className="flex flex-col items-center gap-2 py-10 text-xs text-gray-400 dark:text-slate-500">
+                    <FaSpinner className="animate-spin text-lg" />
+                    Cargando plantillas...
+                  </div>
+                ) : errorPlantillas ? (
+                  <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-gray-300 py-8 px-3 text-center dark:border-slate-700">
+                    <FaExclamationTriangle className="text-lg text-red-400" />
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      No fue posible cargar las plantillas: {errorPlantillas}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={cargarGaleriaPlantillas}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : plantillasVisibles.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-gray-300 py-8 px-3 text-center dark:border-slate-700">
+                    <FaImages className="text-lg text-gray-300 dark:text-slate-600" />
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      No hay plantillas para esta categoría y producto todavía.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid max-h-[450px] grid-cols-2 gap-3 overflow-y-auto rounded-xl border border-gray-100 p-2 dark:border-slate-800">
+                    {plantillasVisibles.map((plantilla) => (
+                      <button
+                        key={plantilla.id}
+                        type="button"
+                        onClick={() => aplicarPlantilla(plantilla)}
+                        title={`Aplicar "${plantilla.nombre}"`}
+                        className="group flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white transition duration-150 hover:-translate-y-0.5 hover:border-indigo-400 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-cyan-500/50"
+                      >
+                        <span className="flex h-24 w-full items-center justify-center overflow-hidden bg-gray-50 p-1 dark:bg-slate-950">
+                          <img
+                            src={plantilla.imagenUrl || plantilla.imagen_url}
+                            alt={plantilla.nombre}
+                            loading="lazy"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </span>
+                        <span className="truncate px-1 py-1 text-center text-[10px] font-medium text-gray-500 transition group-hover:text-indigo-600 dark:text-slate-400 dark:group-hover:text-cyan-300">
+                          {plantilla.nombre}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {plantillasVisibles.length > 0 && (
+                  <p className="mt-2 text-[10px] leading-snug text-gray-400 dark:text-slate-500">
+                    Toca una plantilla para agregarla al lienzo; luego muévela,
+                    redimenciónala o cámbiale la ubicación como cualquier imagen.
+                  </p>
+                )}
+              </>
             ) : herramienta === "color" ? (
               <>
                 {/* Paleta de colores */}
@@ -949,27 +1458,22 @@ function Personalizador() {
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 placeholder:text-gray-400 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
                 />
 
-                {/* Selector interactivo de tipografía */}
+{/* Selector interactivo de tipografía */}
                 <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
                   Fuente ({fuentesVisibles.length})
                 </label>
 
-                {/* Filtros por categoría */}
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {CATEGORIAS_FUENTE.map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setFiltroFuente(cat.id)}
-                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
-                        filtroFuente === cat.id
-                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
-                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400 dark:hover:border-cyan-500/50"
-                      }`}
-                    >
-                      {cat.label}
-                    </button>
-                  ))}
+                <div className="mb-2 flex items-center gap-2">
+                  <svg className="h-4 w-4 text-gray-400 dark:text-slate-500" viewBox="0 0 24 24">
+                    <path d="M21 21l-3.33-3.33l-2.21 2.21l5.45 5.45l-1.42 1.42zM21 3l-3.33 3.33l2.21 2.21l-5.45-5.45l1.42-1.42zM3 3l3.33-3.33l-2.21-2.21l5.45 5.45l-1.42-1.42zM3 21l3.33 3.33l-2.21 2.21l-5.45-5.45l1.42 1.42zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM12 4v12c1.1 0 2-0.9 2-2V4c0-1.1-0.9-2-2-2z" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Buscar fuente..."
+                    value={busquedaFuente}
+                    onChange={(e) => setBusquedaFuente(e.target.value)}
+                    className="rounded-xl border border-gray-200 bg-gray-50 p-2 text-sm text-gray-700 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500 flex-1"
+                  />
                 </div>
 
                 {/* Tarjetas: cada una se dibuja con su propia tipografía para
@@ -1014,12 +1518,159 @@ function Personalizador() {
                   })}
                 </div>
 
+                {/* Formato del texto: negrita, cursiva y subrayado */}
+                <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Formato
+                </label>
+                <div className="mb-4 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-pressed={esNegrita}
+                    title="Negrita"
+                    onClick={() => setEsNegrita((v) => !v)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-bold transition ${
+                      esNegrita
+                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-300"
+                        : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
+                    }`}
+                  >
+                    B
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={esCursiva}
+                    title="Cursiva"
+                    onClick={() => setEsCursiva((v) => !v)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-semibold italic transition ${
+                      esCursiva
+                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-300"
+                        : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
+                    }`}
+                  >
+                    I
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={esSubrayado}
+                    title="Subrayado"
+                    onClick={() => setEsSubrayado((v) => !v)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-semibold underline transition ${
+                      esSubrayado
+                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-300"
+                        : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
+                    }`}
+                  >
+                    U
+                  </button>
+                </div>
+
+                {/* Emojis como capas independientes en el lienzo */}
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Emojis
+                </label>
+                <div className="mb-4 flex flex-wrap gap-1.5">
+                  {EMOJIS_RAPIDOS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => agregarEmoji(emoji)}
+                      title={`Agregar ${emoji} como capa`}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-lg transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:hover:border-cyan-400"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+
+                {emojis.length > 0 && (
+                  <>
+                    <div className="my-3 border-t border-gray-200 dark:border-slate-800" />
+                    <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
+                      Emojis agregados ({emojis.length})
+                    </p>
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      {emojis.map((em) => (
+                        <button
+                          key={em.id}
+                          type="button"
+                          onClick={() => seleccionarEmoji(em.id)}
+                          title="Seleccionar para mover, escalar o eliminar"
+                          className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition ${
+                            em.id === emojiActivoId
+                              ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:ring-cyan-500/40"
+                              : "border-gray-200 bg-gray-50 hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-cyan-500/50"
+                          }`}
+                        >
+                          {em.emoji}
+                        </button>
+                      ))}
+                    </div>
+
+                    {emojiActivo && (
+                      <div className="space-y-3 rounded-xl border border-gray-200 p-3 dark:border-slate-700">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                          Emoji seleccionado
+                        </p>
+
+                        <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                          Tamaño: {Math.round((emojiActivo.tamano ?? 48) * (emojiActivo.escala ?? 1))}px
+                        </label>
+                        <input
+                          type="range"
+                          min={16}
+                          max={120}
+                          step={2}
+                          value={Math.round((emojiActivo.tamano ?? 48) * (emojiActivo.escala ?? 1))}
+                          onChange={(e) => {
+                            const base = emojiActivo.tamano ?? 48;
+                            actualizarEmoji(emojiActivo.id, {
+                              escala: Number(e.target.value) / base,
+                            });
+                          }}
+                          className="w-full accent-indigo-600 dark:accent-cyan-500"
+                        />
+                        <p className="text-[10px] text-gray-400 dark:text-slate-500">
+                          También puedes escalarlo arrastrando las esquinas del
+                          marco en el lienzo.
+                        </p>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              actualizarEmoji(emojiActivo.id, {
+                                rotacion: ((emojiActivo.rotacion ?? 0) + 90) % 360,
+                              })
+                            }
+                            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+                          >
+                            <FaSyncAlt /> Rotar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => eliminarEmoji(emojiActivo.id)}
+                            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-red-500 transition hover:border-red-300 dark:border-slate-700 dark:text-red-400 dark:hover:border-red-500/50"
+                          >
+                            <FaTrash /> Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {/* Vista previa en vivo del texto con la fuente y color elegidos */}
                 <div className="mt-2 flex min-h-[44px] items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50 p-2 dark:border-slate-700 dark:bg-slate-950">
                   {textoDiseno.trim() ? (
                     <span
                       className="truncate text-xl leading-tight"
-                      style={{ fontFamily: fuenteTexto, color: colorTexto }}
+                      style={{
+                        fontFamily: fuenteTexto,
+                        color: colorTexto,
+                        fontWeight: esNegrita ? 700 : 600,
+                        fontStyle: esCursiva ? "italic" : "normal",
+                        textDecoration: esSubrayado ? "underline" : "none",
+                      }}
                     >
                       {textoDiseno}
                     </span>
@@ -1036,11 +1687,26 @@ function Personalizador() {
                 <div className="mb-4 flex items-center gap-3 rounded-xl border border-gray-200 p-2 dark:border-slate-700">
                   <input
                     type="color"
-                    value={colorTexto}
+                    value={normalizarHexParaPicker(colorTexto) ?? "#111111"}
                     onChange={(e) => setColorTexto(e.target.value)}
                     className="h-9 w-12 cursor-pointer rounded border-none bg-transparent p-0"
                   />
-                  <span className="text-sm text-gray-500 dark:text-slate-400">{colorTexto}</span>
+                  <input
+                    type="text"
+                    maxLength="7"
+                    value={colorTexto}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setColorTexto(val);
+                      // Si es un HEX válido (# + 3 o 6 dígitos), el color se
+                      // aplica automáticamente al texto del canvas.
+                      if (/^#?([0-9a-fA-F]{3}){1,2}$/.test(val)) {
+                        setColorTexto(val.startsWith("#") ? val : `#${val}`);
+                      }
+                    }}
+                    placeholder="#111111"
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-700 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
+                  />
                 </div>
 
                 <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
@@ -1056,26 +1722,25 @@ function Personalizador() {
                   className="w-full accent-indigo-600 dark:accent-cyan-500"
                 />
 
-                <button
-                  type="button"
-                  onClick={() => setRotacionTexto((r) => (r + 90) % 360)}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
-                >
-                  <FaSyncAlt /> Rotar texto
-                </button>
-
-                <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Escala: {Math.round(escalaTexto * 100)}%
-                </label>
-                <input
-                  type="range"
-                  min={0.2}
-                  max={3}
-                  step={0.05}
-                  value={escalaTexto}
-                  onChange={(e) => setEscalaTexto(Number(e.target.value))}
-                  className="w-full accent-indigo-600 dark:accent-cyan-500"
-                />
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRotacionTexto((r) => (r + 90) % 360)}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+                  >
+                    <FaSyncAlt /> Rotar texto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTextoDiseno("");
+                      setTextoActivo(false);
+                    }}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-red-500 transition hover:border-red-300 dark:border-slate-700 dark:text-red-400 dark:hover:border-red-500/50"
+                  >
+                    <FaTrash /> Eliminar texto
+                  </button>
+                </div>
               </>
             )}
 
@@ -1137,10 +1802,14 @@ function Personalizador() {
                   tipo={selectedProduct}
                   color={colorSeleccionado ?? "#ffffff"}
                   imagenes={imagenes}
+                  emojis={emojis}
                   texto={textoDiseno}
                   colorTexto={colorTexto}
                   fuenteTexto={fuenteTexto}
                   tamanoTexto={tamanoTexto}
+                  esNegrita={esNegrita}
+                  esCursiva={esCursiva}
+                  esSubrayado={esSubrayado}
                   posicionTexto={posicionTexto}
                   rotacionTexto={rotacionTexto}
                   escalaTexto={escalaTexto}
@@ -1159,9 +1828,15 @@ function Personalizador() {
             <button
               type="button"
               onClick={handleGuardarDiseno}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
+              disabled={guardandoDiseno}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:border-indigo-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
             >
-              <FaSave /> Guardar diseño
+              {guardandoDiseno ? (
+                <FaSpinner className="animate-spin" />
+              ) : (
+                <FaSave />
+              )}
+              {guardandoDiseno ? "Guardando..." : "Guardar diseño"}
             </button>
 
             <button
@@ -1257,10 +1932,14 @@ function Personalizador() {
                 tipo={selectedProduct}
                 color={colorSeleccionado ?? "#ffffff"}
                 imagenes={imagenes}
+                emojis={emojis}
                 texto={textoDiseno}
                 colorTexto={colorTexto}
                 fuenteTexto={fuenteTexto}
                 tamanoTexto={tamanoTexto}
+                esNegrita={esNegrita}
+                esCursiva={esCursiva}
+                esSubrayado={esSubrayado}
                 posicionTexto={posicionTexto}
                 rotacionTexto={rotacionTexto}
                 escalaTexto={escalaTexto}

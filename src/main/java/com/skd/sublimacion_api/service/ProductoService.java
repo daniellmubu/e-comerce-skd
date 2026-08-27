@@ -4,6 +4,7 @@ import com.skd.sublimacion_api.dto.producto.ProductoBusquedaRequest;
 import com.skd.sublimacion_api.dto.producto.ProductoListaResponse;
 import com.skd.sublimacion_api.dto.producto.ProductoRequest;
 import com.skd.sublimacion_api.dto.producto.ProductoResponse;
+import com.skd.sublimacion_api.dto.producto.VarianteProductoResponse;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
@@ -26,4 +27,6 @@ public interface ProductoService {
             ProductoBusquedaRequest filtros,
             Pageable pageable,
             Long usuarioId);
+
+    List<VarianteProductoResponse> listarVariantes(Long productoId);
 }

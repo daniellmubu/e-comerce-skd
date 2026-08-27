@@ -38,6 +38,26 @@ const BASES_POR_CARA = {
 // aplanado final (imagen que se guarda) coincida con lo que se ve en pantalla.
 export const ANCHO_IMAGEN_BASE = 0.38;
 
+// Factor de zoom de la imagen base dentro del lienzo. Las fotos (camiseta, mug)
+// son panorámicas con la prenda centrada y mucho fondo vacío; al renderizarlas
+// a la altura completa del cuadrado la prenda queda pequeña (~66% de la altura,
+// ~62% del ancho). Este factor amplía la imagen sobre su centro para que la
+// prenda llene mejor el lienzo (≈85-95% de la altura), acercando su escala a la
+// de la vista previa 3D. Se aplica por igual a la máscara, a las imágenes
+// insertadas y al texto para mantener la alineación entre capas y no recortar
+// la prenda. NO cambia las coordenadas semánticas (x/y %, escala) del diseño:
+// solo es un zoom de visualización del editor 2D.
+const ZOOM_BASE = 1.3;
+
+// Vista base según el producto y la ubicación activa; con fallback a la
+// frontal del producto (o de la camiseta) si la ubicación no tiene asset
+// propio. Compartida con el Personalizador para que la imagen guardada use
+// exactamente el mismo mockup que se ve en el lienzo.
+// eslint-disable-next-line react-refresh/only-export-components -- helper compartido con el Personalizador
+export function obtenerBaseMockup(tipo, cara) {
+  return (cara && BASES_POR_CARA[tipo]?.[cara]) || IMAGENES[tipo] || camisetaBase;
+}
+
 // Límites de escalado por eje para las imágenes insertadas. El máximo llega
 // justo antes de que el diseño exceda el área imprimible del lienzo (con el
 // ancho base del 38%, x2.5 ≈ 95% del lienzo); por encima de eso el marco
@@ -263,10 +283,17 @@ function PrendaMockup({
   imagenActivaId = null,
   onImagenChange,
   onSeleccionarImagen,
+  emojis = [],
+  emojiActivoId = null,
+  onEmojiChange,
+  onSeleccionarEmoji,
   texto = "",
   colorTexto = "#111111",
   fuenteTexto = FUENTE_TEXTO_DEFECTO,
   tamanoTexto = 32,
+  esNegrita = false,
+  esCursiva = false,
+  esSubrayado = false,
   posicionTexto = { x: 50, y: 50 },
   onPosicionTextoChange,
   rotacionTexto = 0,
@@ -276,12 +303,7 @@ function PrendaMockup({
   onSeleccionarTexto,
   interactivo = true,
 }) {
-  // Vista base según la ubicación activa; con fallback a la frontal del
-  // producto (o de la camiseta) si la ubicación no tiene asset propio.
-  const base =
-    (cara && BASES_POR_CARA[tipo]?.[cara]) ||
-    IMAGENES[tipo] ||
-    camisetaBase;
+  const base = obtenerBaseMockup(tipo, cara);
   const contenedorRef = useRef(null);
   const startRef = useRef(null);
   const [target, setTarget] = useState(null);
@@ -312,16 +334,24 @@ function PrendaMockup({
   const permitirDesborde =
     tipo === "camiseta" && (cara === "mangaIzquierda" || cara === "mangaDerecha");
 
-  // Elemento actualmente editable (imagen activa o texto).
+  // Elemento actualmente editable (imagen activa, emoji activo o texto).
   const elementoActivo = imagenActivaId
     ? { tipo: "imagen", id: imagenActivaId }
-    : textoActivo
-      ? { tipo: "texto" }
-      : null;
+    : emojiActivoId
+      ? { tipo: "emoji", id: emojiActivoId }
+      : textoActivo
+        ? { tipo: "texto" }
+        : null;
 
   const seleccionarImagen = (id) => {
     if (!interactivo) return;
     if (onSeleccionarImagen) onSeleccionarImagen(id);
+  };
+
+  const seleccionarEmoji = (e, id) => {
+    if (!interactivo) return;
+    e.stopPropagation();
+    if (onSeleccionarEmoji) onSeleccionarEmoji(id);
   };
 
   const seleccionarTexto = (e) => {
@@ -333,6 +363,7 @@ function PrendaMockup({
   const limpiarSeleccion = () => {
     if (!interactivo) return;
     if (onSeleccionarImagen) onSeleccionarImagen(null);
+    if (onSeleccionarEmoji) onSeleccionarEmoji(null);
     if (onSeleccionarTexto) onSeleccionarTexto(false);
   };
 
@@ -344,6 +375,9 @@ function PrendaMockup({
     if (act.tipo === "imagen") {
       const img = imagenes.find((i) => i.id === act.id);
       if (img) startRef.current = { tipo: "imagen", id: img.id, x: img.x, y: img.y };
+    } else if (act.tipo === "emoji") {
+      const em = emojis.find((i) => i.id === act.id);
+      if (em) startRef.current = { tipo: "emoji", id: em.id, x: em.x, y: em.y };
     } else {
       startRef.current = { tipo: "texto", x: posicionTexto.x, y: posicionTexto.y };
     }
@@ -355,10 +389,23 @@ function PrendaMockup({
     if (!s || !contenedor) return;
 
     const rect = contenedor.getBoundingClientRect();
-    const nx = clamp(s.x + (beforeTranslate[0] / rect.width) * 100, 0, 100);
-    const ny = clamp(s.y + (beforeTranslate[1] / rect.height) * 100, 0, 100);
+    // El contenido se dibuja ampliado por ZOOM_BASE (sobre el centro): el
+    // delta en píxeles de pantalla se divide por el zoom para convertirlo al
+    // espacio semántico (0-100%) del editor, de modo que el diseño siga
+    // exactamente al cursor aunque la prenda esté ampliada.
+    const nx = clamp(
+      s.x + ((beforeTranslate[0] / rect.width) * 100) / ZOOM_BASE,
+      0,
+      100
+    );
+    const ny = clamp(
+      s.y + ((beforeTranslate[1] / rect.height) * 100) / ZOOM_BASE,
+      0,
+      100
+    );
 
     if (s.tipo === "imagen") onImagenChange?.(s.id, { x: nx, y: ny });
+    else if (s.tipo === "emoji") onEmojiChange?.(s.id, { x: nx, y: ny });
     else onPosicionTextoChange?.({ x: nx, y: ny });
   };
 
@@ -377,6 +424,9 @@ function PrendaMockup({
           escalaY: img.escalaY ?? img.escala ?? 1,
         };
       }
+    } else if (act.tipo === "emoji") {
+      const em = emojis.find((i) => i.id === act.id);
+      if (em) startRef.current = { tipo: "emoji", id: em.id, escala: em.escala ?? 1 };
     } else {
       startRef.current = { tipo: "texto", escala: escalaTexto ?? 1 };
     }
@@ -389,6 +439,9 @@ function PrendaMockup({
       const nuevaX = clamp((s.escalaX ?? 1) * scale[0], ESCALA_MIN, ESCALA_MAX);
       const nuevaY = clamp((s.escalaY ?? 1) * scale[1], ESCALA_MIN, ESCALA_MAX);
       onImagenChange?.(s.id, { escalaX: nuevaX, escalaY: nuevaY });
+    } else if (s.tipo === "emoji") {
+      const nuevaEscala = clamp((s.escala ?? 1) * scale[0], 0.2, 4);
+      onEmojiChange?.(s.id, { escala: nuevaEscala });
     } else {
       const nuevaEscala = clamp((s.escala ?? 1) * scale[0], 0.2, 4);
       onTextoTransformChange?.({ escala: nuevaEscala });
@@ -401,6 +454,9 @@ function PrendaMockup({
     if (act.tipo === "imagen") {
       const img = imagenes.find((i) => i.id === act.id);
       if (img) startRef.current = { tipo: "imagen", id: img.id, rotacion: img.rotacion ?? 0 };
+    } else if (act.tipo === "emoji") {
+      const em = emojis.find((i) => i.id === act.id);
+      if (em) startRef.current = { tipo: "emoji", id: em.id, rotacion: em.rotacion ?? 0 };
     } else {
       startRef.current = { tipo: "texto", rotacion: rotacionTexto ?? 0 };
     }
@@ -411,20 +467,22 @@ function PrendaMockup({
     if (!s) return;
     const nuevaRotacion = (s.rotacion ?? 0) + (beforeRotate ?? 0);
     if (s.tipo === "imagen") onImagenChange?.(s.id, { rotacion: nuevaRotacion });
+    else if (s.tipo === "emoji") onEmojiChange?.(s.id, { rotacion: nuevaRotacion });
     else onTextoTransformChange?.({ rotacion: nuevaRotacion });
   };
 
   // Máscara con la silueta del producto: recorta la capa de color, las imágenes
   // y el texto para que nada se salga de la prenda (así se ve "estampado").
   // Cuando la vista base es más ancha que el lienzo, la máscara se dimensiona
-  // igual que la imagen visible (cuadrado central del fotograma).
+  // igual que la imagen visible (cuadrado central del fotograma, ampliado por
+  // ZOOM_BASE sobre el centro para que coincida con la imagen base).
   const mascara = {
     WebkitMaskImage: `url(${base})`,
-    WebkitMaskSize: `${ratioBase * 100}% 100%`,
+    WebkitMaskSize: `${ratioBase * ZOOM_BASE * 100}% ${ZOOM_BASE * 100}%`,
     WebkitMaskRepeat: "no-repeat",
     WebkitMaskPosition: "50% 50%",
     maskImage: `url(${base})`,
-    maskSize: `${ratioBase * 100}% 100%`,
+    maskSize: `${ratioBase * ZOOM_BASE * 100}% ${ZOOM_BASE * 100}%`,
     maskRepeat: "no-repeat",
     maskPosition: "50% 50%",
   };
@@ -435,7 +493,8 @@ function PrendaMockup({
       className="relative aspect-square w-full overflow-hidden"
       style={{ isolation: "isolate" }}
     >
-      {/* 1. Foto base del producto, recortada al cuadrado central y centrada.
+      {/* 1. Foto base del producto, recortada al cuadrado central, centrada y
+             ampliada con ZOOM_BASE para que la prenda llene mejor el lienzo.
              key={base} fuerza remount al cambiar de vista para evitar
              imágenes obsoletas del navegador/dev server. */}
       <img
@@ -449,11 +508,13 @@ function PrendaMockup({
             h: e.currentTarget.naturalHeight || 1,
           })
         }
-        className="absolute top-0 h-full max-w-none"
+        className="absolute max-w-none"
         style={{
           left: "50%",
-          transform: "translateX(-50%)",
-          width: `${ratioBase * 100}%`,
+          top: "50%",
+          width: `${ratioBase * ZOOM_BASE * 100}%`,
+          height: `${ZOOM_BASE * 100}%`,
+          transform: "translate(-50%, -50%)",
         }}
       />
 
@@ -487,9 +548,9 @@ function PrendaMockup({
               }}
               style={{
                 position: "absolute",
-                left: `${imagen.x}%`,
-                top: `${imagen.y}%`,
-                width: `${ANCHO_IMAGEN_BASE * 100}%`,
+                left: `${50 + (imagen.x - 50) * ZOOM_BASE}%`,
+                top: `${50 + (imagen.y - 50) * ZOOM_BASE}%`,
+                width: `${ANCHO_IMAGEN_BASE * ZOOM_BASE * 100}%`,
                 transform: `translate(-50%, -50%) rotate(${imagen.rotacion ?? 0}deg) scale(${imagen.escalaX ?? imagen.escala ?? 1}, ${imagen.escalaY ?? imagen.escala ?? 1})`,
                 transformOrigin: "center center",
                 cursor: "move",
@@ -508,6 +569,36 @@ function PrendaMockup({
             </div>
           );
         })}
+
+        {/* Emojis como capas independientes: cada uno con su propia posición,
+            escala, rotación y tamaño; se selecciona, arrastra y redimensiona
+            por separado con el mismo marco de edición. */}
+        {emojis.map((em) => {
+          const esActiva = em.id === emojiActivoId;
+          return (
+            <div
+              key={em.id}
+              ref={esActiva ? setTarget : undefined}
+              onPointerDown={(e) => seleccionarEmoji(e, em.id)}
+              className="pointer-events-auto"
+              style={{
+                position: "absolute",
+                left: `${50 + (em.x - 50) * ZOOM_BASE}%`,
+                top: `${50 + (em.y - 50) * ZOOM_BASE}%`,
+                fontSize: `${Math.round(
+                  (em.tamano ?? 48) * ((anchoLienzo || 500) / 500) * ZOOM_BASE
+                )}px`,
+                lineHeight: 1,
+                cursor: "move",
+                touchAction: "none",
+                userSelect: "none",
+                transform: `translate(-50%, -50%) rotate(${em.rotacion ?? 0}deg) scale(${em.escala ?? 1})`,
+              }}
+            >
+              {em.emoji}
+            </div>
+          );
+        })}
       </div>
 
       {/* 4. Texto opcional: también se puede arrastrar, redimensionar y rotar
@@ -523,14 +614,16 @@ function PrendaMockup({
             className="pointer-events-auto"
             style={{
               position: "absolute",
-              left: `${posicionTexto.x}%`,
-              top: `${posicionTexto.y}%`,
+              left: `${50 + (posicionTexto.x - 50) * ZOOM_BASE}%`,
+              top: `${50 + (posicionTexto.y - 50) * ZOOM_BASE}%`,
               color: colorTexto,
               fontFamily: fuenteTexto,
               fontSize: `${Math.round(
-                tamanoTexto * ((anchoLienzo || 500) / 500)
+                tamanoTexto * ((anchoLienzo || 500) / 500) * ZOOM_BASE
               )}px`,
-              fontWeight: 600,
+              fontWeight: esNegrita ? 700 : 600,
+              fontStyle: esCursiva ? "italic" : "normal",
+              textDecoration: esSubrayado ? "underline" : "none",
               lineHeight: 1.1,
               textAlign: "center",
               whiteSpace: "nowrap",

@@ -109,66 +109,11 @@ function crearTexturaTela() {
 /* ------------------------------------------------------------------ */
 /* Preparación de modelos glTF                                         */
 
-// El export de CLO trae UVs fuera del rango [0,1] (se extienden cientos de
-// unidades), lo que haría que cualquier textura se repita miles de veces.
-// Normalizamos los UVs de cada geometría a [0,1].
-function normalizarUv(geometry) {
-  const uv = geometry.attributes.uv;
-  if (!uv) return;
-
-  let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
-  for (let i = 0; i < uv.count; i++) {
-    const u = uv.getX(i);
-    const v = uv.getY(i);
-    if (u < minU) minU = u;
-    if (u > maxU) maxU = u;
-    if (v < minV) minV = v;
-    if (v > maxV) maxV = v;
-  }
-
-  const rangoU = maxU - minU || 1;
-  const rangoV = maxV - minV || 1;
-  for (let i = 0; i < uv.count; i++) {
-    uv.setXY(i, (uv.getX(i) - minU) / rangoU, (uv.getY(i) - minV) / rangoV);
-  }
-  uv.needsUpdate = true;
-}
-
-// Detecta si los UVs del mesh están invertidos respecto a los ejes del mundo
-// correlacionando posición mundial con coordenadas UV (covarianza negativa =
-// eje invertido). Se usa para dibujar la textura espejada y que el estampado
-// se vea derecho y en la misma posición que en el editor 2D.
-function orientacionUv(mesh) {
-  const pos = mesh.geometry.attributes.position;
-  const uv = mesh.geometry.attributes.uv;
-  if (!pos || !uv || !uv.count) return { espejoX: false, espejoY: false };
-
-  mesh.updateWorldMatrix(true, false);
-  const matriz = mesh.matrixWorld;
-  const punto = new THREE.Vector3();
-
-  let n = 0, sx = 0, su = 0, sy = 0, sv = 0;
-  let sxu = 0, syv = 0;
-  const paso = Math.max(1, Math.floor(pos.count / 5000));
-  for (let i = 0; i < pos.count; i += paso) {
-    punto.fromBufferAttribute(pos, i).applyMatrix4(matriz);
-    const u = uv.getX(i);
-    const v = uv.getY(i);
-    n++;
-    sx += punto.x; su += u; sy += punto.y; sv += v;
-    sxu += punto.x * u; syv += punto.y * v;
-  }
-
-  return {
-    espejoX: sxu / n - (sx / n) * (su / n) < 0,
-    espejoY: syv / n - (sy / n) * (sv / n) < 0,
-  };
-}
-
 // Extrae los triángulos de un mesh como geometría independiente en
-// coordenadas de mundo (requiere matrixWorld al día). filtro(centroideX)
-// decide qué triángulos conservar; null = todos. Devuelve null si ninguno
-// pasa el filtro. No muta la geometría original compartida del glTF.
+// coordenadas de mundo (requiere matrixWorld al día). filtro(centroide)
+// decide qué triángulos conservar (recibe {x, y, z} del centroide); null =
+// todos. Devuelve null si ninguno pasa el filtro. No muta la geometría
+// original compartida del glTF.
 function extraerTriangulos(mesh, filtro) {
   const base = mesh.geometry.index
     ? mesh.geometry.toNonIndexed()
@@ -189,7 +134,14 @@ function extraerTriangulos(mesh, filtro) {
     a.fromBufferAttribute(pos, i).applyMatrix4(matriz);
     b.fromBufferAttribute(pos, i + 1).applyMatrix4(matriz);
     c.fromBufferAttribute(pos, i + 2).applyMatrix4(matriz);
-    if (filtro && !filtro((a.x + b.x + c.x) / 3)) continue;
+    if (filtro) {
+      const centroide = {
+        x: (a.x + b.x + c.x) / 3,
+        y: (a.y + b.y + c.y) / 3,
+        z: (a.z + b.z + c.z) / 3,
+      };
+      if (!filtro(centroide)) continue;
+    }
 
     posiciones.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
     for (let j = 0; j < 3; j++) {
@@ -266,6 +218,44 @@ function proyectarUvLateral(geo, ladoSigno) {
   geo.attributes.uv.needsUpdate = true;
 }
 
+// Genera UVs de proyección plana frontal/trasera (eje Z) sobre la geometría
+// fusionada del panel del torso. La caja proyectada completa ocupa la textura
+// [0,1]²: así cada píxel de textura corresponde linealmente a una posición del
+// torso y el lienzo 2D (% del cuadrado → % de AREA_IMPRIMIBLE_TORSO) cae en el
+// mismo sitio relativo de la prenda, sin depender de los UVs arbitrarios del
+// export. Frente (desdeAtras=false): u crece hacia +X, igual que la ve la
+// cámara frontal; espalda: u crece hacia -X (vista desde atrás), evitando el
+// espejo. v sigue a +Y (el alto del modelo ↔ fila superior del canvas vía el
+// flipY por defecto de CanvasTexture), misma convención que proyectarUvLateral.
+function proyectarUvFrontal(geo, desdeAtras = false) {
+  const pos = geo.attributes.position;
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const anchoX = maxX - minX || 1;
+  const altoY = maxY - minY || 1;
+
+  geo.setAttribute(
+    "uv",
+    new THREE.Float32BufferAttribute(new Float32Array(pos.count * 2), 2)
+  );
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const u = desdeAtras ? (maxX - x) / anchoX : (x - minX) / anchoX;
+    const v = (y - minY) / altoY;
+    geo.attributes.uv.setXY(i, u, v);
+  }
+  geo.attributes.uv.needsUpdate = true;
+}
+
 // Prepara la camiseta (tshirt.gltf):
 //  - materiales propios por instancia; el color se aplica a TODOS,
 //  - cada mesh se clasifica por el nombre de su MATERIAL del glTF (Body_* /
@@ -273,8 +263,14 @@ function proyectarUvLateral(geo, ladoSigno) {
 //    primitivas en un Group y los Mesh hijos llegan sin nombre,
 //  - el lado de cada manga (izquierda/derecha) y el panel frontal/trasero se
 //    deducen de la posición del mesh (X y Z respectivamente),
-//  - cuatro superficies imprimibles: frente, espalda, manga izquierda y manga
-//    derecha, cada una con su orientación UV detectada,
+//   - cuatro superficies imprimibles como CAPAS DE PROYECCIÓN independientes
+//    (frente, espalda, manga izquierda y manga derecha): los diseños de manga
+//    proyectan sobre TODA la silueta lateral (manga + costado + torso) para
+//    que puedan desbordar de la manga sin cortarse en una costura,
+//    los triángulos de cada cara se extraen a una geometría fusionada con UVs
+//    planares generadas desde el mundo, de modo que la textura dibujada desde
+//    las coordenadas (%) del editor 2D cae exactamente donde debe en el
+//    modelo, sin depender de los UVs arbitrarios del export de CLO,
 //  - centrado y escalado a ALTURA_MODELO.
 // El clon comparte geometrías con la caché de useGLTF (no se disponen aquí).
 function prepararModeloCamiseta(escenaOriginal) {
@@ -301,6 +297,8 @@ function prepararModeloCamiseta(escenaOriginal) {
     return material;
   };
 
+  // Materiales de COLOR base (sin estampado): el estampado vive en las capas
+  // de proyección, así que el cuerpo completo se colorea liso.
   const matCuerpoFrente = crearMaterial(baseCuerpo);
   const matCuerpoLiso = crearMaterial(baseCuerpo);
   const matMangaColor = crearMaterial(baseMangas);
@@ -323,20 +321,9 @@ function prepararModeloCamiseta(escenaOriginal) {
     (objeto.name ?? "").includes("Ribbing") ||
     (objeto.parent?.name ?? "").includes("Ribbing");
 
-  // Primera orientación UV vista por cada material imprimible del cuerpo.
-  const orientaciones = new Map();
-  const recordarOrientacion = (material, mesh) => {
-    if (!orientaciones.has(material)) {
-      orientaciones.set(material, orientacionUv(mesh));
-    }
-  };
-
   // Clasificación por geometría única (el export duplica primitivas con los
   // mismos accessors; así no se procesan ni extraen varias veces).
   const geosProcesadas = new Map();
-  const rangoXcuerpo = { min: Infinity, max: -Infinity };
-  // Fracción exterior del torso que se suma a cada manga como costado.
-  const BANDA_LATERAL = 0.32;
 
   clon.traverse((objeto) => {
     if (!objeto.isMesh) return;
@@ -352,16 +339,10 @@ function prepararModeloCamiseta(escenaOriginal) {
       (objeto.name ?? "").includes("Sleeves");
 
     if (esManga) {
-      // La manga queda en color liso; el estampado va en una capa de
-      // proyección aparte (manga + costado) creada más abajo.
       objeto.material = matMangaColor;
     } else {
       const frontal = esPanelFrontal(cajaMesh);
       objeto.material = frontal ? matCuerpoFrente : matCuerpoLiso;
-      normalizarUv(objeto.geometry);
-      recordarOrientacion(objeto.material, objeto);
-      rangoXcuerpo.min = Math.min(rangoXcuerpo.min, cajaMesh.min.x);
-      rangoXcuerpo.max = Math.max(rangoXcuerpo.max, cajaMesh.max.x);
     }
 
     if (!geosProcesadas.has(objeto.geometry)) {
@@ -374,34 +355,32 @@ function prepararModeloCamiseta(escenaOriginal) {
   });
 
   // Extracción de triángulos ANTES de desplazar el modelo al origen.
+  // - mangas: triángulos del material Sleeve del lado pedido + TODO el torso.
+  //   La proyección lateral (u = profundidad Z, v = altura Y) es continua, así
+  //   el diseño puede desbordar de la manga hacia el costado y el torso sin
+  //   cortarse en una costura invisible; los paneles frontal y trasero ocupan
+  //   rangos de Z disjuntos, así que no se pintan espejados entre sí,
+  // - frente/espalda: triángulos del torso separados por el plano medio Z.
   clon.updateMatrixWorld(true);
-  const construirPartesManga = (ladoSigno) => {
+  const extraerPartes = ({ mangaLado = 0, todo = false, triangulo = null }) => {
     const partes = [];
-    const anchoCuerpo = rangoXcuerpo.max - rangoXcuerpo.min;
     for (const info of geosProcesadas.values()) {
       if (info.esManga) {
-        if (info.lado === ladoSigno) {
+        if (mangaLado !== 0 && info.lado === mangaLado) {
           partes.push(extraerTriangulos(info.mesh, null));
         }
-      } else {
-        const umbral =
-          ladoSigno > 0
-            ? rangoXcuerpo.max - BANDA_LATERAL * anchoCuerpo
-            : rangoXcuerpo.min + BANDA_LATERAL * anchoCuerpo;
-        partes.push(
-          extraerTriangulos(
-            info.mesh,
-            (centroideX) =>
-              ladoSigno > 0 ? centroideX >= umbral : centroideX <= umbral
-          )
-        );
+        continue;
       }
+      if (!todo && !triangulo) continue;
+      partes.push(extraerTriangulos(info.mesh, todo ? null : triangulo));
     }
     return combinarGeometrias(partes);
   };
 
-  const geoCapaIzq = construirPartesManga(-1);
-  const geoCapaDer = construirPartesManga(1);
+  const geoCapaIzq = extraerPartes({ mangaLado: -1, todo: true });
+  const geoCapaDer = extraerPartes({ mangaLado: 1, todo: true });
+  const geoFrente = extraerPartes({ triangulo: (c) => c.z >= centroZ });
+  const geoEspalda = extraerPartes({ triangulo: (c) => c.z < centroZ });
 
   const escala = ALTURA_MODELO / (tamano.y || 1);
   const raiz = new THREE.Group();
@@ -409,20 +388,16 @@ function prepararModeloCamiseta(escenaOriginal) {
   raiz.add(clon);
   raiz.scale.setScalar(escala);
 
-  // Capas de proyección manga+costado: geometría fusionada trasladada al
-  // origen del modelo y UVs planares continuas. Material transparente para no
-  // tapar el color base de la prenda.
-  const crearCapaManga = (geoMerge) => {
+  // Capas de proyección: geometría fusionada trasladada al origen del modelo,
+  // UVs planares regeneradas y material transparente para no tapar el color
+  // base de la prenda. La capa solo se hace visible cuando su ubicación tiene
+  // contenido (ver efecto de texturas en ModeloGltf).
+  const armarCapaProyeccion = (geoMerge, baseMaterial, proyectar) => {
     if (!geoMerge) return null;
     geoMerge.translate(-centro.x, -centro.y, -centro.z);
-    return geoMerge;
-  };
+    proyectar(geoMerge);
 
-  const armarCapaManga = (ladoSigno, geoMerge) => {
-    if (!geoMerge) return null;
-    proyectarUvLateral(geoMerge, ladoSigno);
-
-    const material = crearMaterial(baseMangas);
+    const material = crearMaterial(baseMaterial);
     Object.assign(material, {
       transparent: true,
       alphaTest: 0.01,
@@ -438,35 +413,42 @@ function prepararModeloCamiseta(escenaOriginal) {
     capa.visible = false;
     raiz.add(capa);
 
-    return { material, capa, geometria: geoMerge };
+    return { material, capa };
   };
 
-  const capaIzquierda = armarCapaManga(-1, crearCapaManga(geoCapaIzq));
-  const capaDerecha = armarCapaManga(1, crearCapaManga(geoCapaDer));
-
-  const orientacionDe = (material) =>
-    orientaciones.get(material) ?? { espejoX: false, espejoY: false };
-  const orientFrente = orientacionDe(matCuerpoFrente);
-  const orientEspalda = orientacionDe(matCuerpoLiso);
+  const capaFrente = armarCapaProyeccion(geoFrente, baseCuerpo, (g) =>
+    proyectarUvFrontal(g, false)
+  );
+  const capaEspalda = armarCapaProyeccion(geoEspalda, baseCuerpo, (g) =>
+    proyectarUvFrontal(g, true)
+  );
+  const capaIzquierda = armarCapaProyeccion(geoCapaIzq, baseMangas, (g) =>
+    proyectarUvLateral(g, -1)
+  );
+  const capaDerecha = armarCapaProyeccion(geoCapaDer, baseMangas, (g) =>
+    proyectarUvLateral(g, 1)
+  );
 
   return {
     raiz,
     superficies: [
       {
         clave: "frente",
-        material: matCuerpoFrente,
-        silueta: true,
+        material: capaFrente?.material ?? null,
+        mesh: capaFrente?.capa ?? null,
+        transparencia: true,
+        silueta: false,
         conTexto: true,
         mapearTorso: true,
-        ...orientFrente,
       },
       {
         clave: "espalda",
-        material: matCuerpoLiso,
-        silueta: true,
+        material: capaEspalda?.material ?? null,
+        mesh: capaEspalda?.capa ?? null,
+        transparencia: true,
+        silueta: false,
         conTexto: false,
         mapearTorso: true,
-        ...orientEspalda,
       },
       {
         clave: "mangaIzquierda",
@@ -475,8 +457,6 @@ function prepararModeloCamiseta(escenaOriginal) {
         transparencia: true,
         silueta: false,
         conTexto: false,
-        espejoX: false,
-        espejoY: false,
       },
       {
         clave: "mangaDerecha",
@@ -485,20 +465,22 @@ function prepararModeloCamiseta(escenaOriginal) {
         transparencia: true,
         silueta: false,
         conTexto: false,
-        espejoX: false,
-        espejoY: false,
       },
     ],
-    materialesLisos: [matRibbing, matMangaColor],
+    materialesLisos: [matRibbing, matMangaColor, matCuerpoFrente, matCuerpoLiso],
     materialesTodos: [
       matCuerpoFrente,
       matCuerpoLiso,
       matMangaColor,
       matRibbing,
+      capaFrente?.material,
+      capaEspalda?.material,
       capaIzquierda?.material,
       capaDerecha?.material,
     ].filter(Boolean),
-    geometriasPropias: [geoCapaIzq, geoCapaDer].filter(Boolean),
+    geometriasPropias: [geoCapaIzq, geoCapaDer, geoFrente, geoEspalda].filter(
+      Boolean
+    ),
   };
 }
 
@@ -783,10 +765,14 @@ function ModeloGltf({
   color,
   disenoUrl,
   imagenes = null,
+  emojis = null,
   texto = "",
   colorTexto = "#111111",
   fuenteTexto,
   tamanoTexto = 32,
+  esNegrita = false,
+  esCursiva = false,
+  esSubrayado = false,
   posicionTexto = { x: 50, y: 50 },
   rotacionTexto = 0,
   escalaTexto = 1,
@@ -809,8 +795,9 @@ function ModeloGltf({
 
   // Color + estampados en un solo efecto:
   //  - superficie sin contenido → color liso vía material.color,
-  //  - superficie con contenido → textura opaca rellena con el color (los
-  //    diseños no se tintan) y material.color en blanco para no alterar tonos.
+  //  - superficie con contenido → su capa de proyección se hace visible con
+  //    una textura transparente (solo el estampado es opaco); el color de la
+  //    prenda vive siempre en los materiales base.
   useEffect(() => {
     const generacion = ++generacionRef.current;
     let cancelado = false;
@@ -834,19 +821,36 @@ function ModeloGltf({
       };
     }
 
-    const textoConfig =
-      texto && texto.trim()
-        ? {
-            contenido: texto,
-            color: colorTexto,
-            fuente: fuenteTexto,
-            tamano: tamanoTexto,
-            x: posicionTexto.x,
-            y: posicionTexto.y,
-            rotacion: rotacionTexto,
-            escala: escalaTexto,
-          }
-        : null;
+    // Configs de texto por capa: el texto principal + cada emoji independiente.
+    // Cada uno conserva su posición, escala, rotación y tamaño propios.
+    const textosConfig = [];
+    if (texto && texto.trim()) {
+      textosConfig.push({
+        contenido: texto,
+        color: colorTexto,
+        fuente: fuenteTexto,
+        tamano: tamanoTexto,
+        negrita: esNegrita,
+        cursiva: esCursiva,
+        subrayado: esSubrayado,
+        x: posicionTexto.x,
+        y: posicionTexto.y,
+        rotacion: rotacionTexto,
+        escala: escalaTexto,
+      });
+    }
+    for (const em of emojis ?? []) {
+      textosConfig.push({
+        contenido: em.emoji,
+        color: "#000000",
+        fuente: '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
+        tamano: em.tamano ?? 48,
+        x: em.x,
+        y: em.y,
+        rotacion: em.rotacion ?? 0,
+        escala: em.escala ?? 1,
+      });
+    }
 
     preparado.materialesLisos.forEach(aplicarColorLiso);
 
@@ -857,11 +861,11 @@ function ModeloGltf({
       if (!material) continue;
 
       const disenosSup = grupos[superficie.clave] ?? [];
-      const textoSup = superficie.conTexto ? textoConfig : null;
-      const hayContenidoSup = disenosSup.length > 0 || Boolean(textoSup);
+      const textosSup = superficie.conTexto ? textosConfig : [];
+      const hayContenidoSup = disenosSup.length > 0 || textosSup.length > 0;
 
-      // Capas de proyección (manga + costado): material transparente, se
-      // muestran solo cuando su ubicación tiene contenido.
+      // Capas de proyección (frente, espalda, mangas): material transparente,
+      // se muestran solo cuando su ubicación tiene contenido.
       if (superficie.transparencia) {
         const capa = superficie.mesh;
         if (!hayContenidoSup) {
@@ -876,7 +880,7 @@ function ModeloGltf({
         componerTexturaCamiseta({
           color,
           disenos: disenosSup,
-          texto: textoSup,
+          textos: textosSup,
           recortarSilueta: superficie.silueta,
           espejoX: superficie.espejoX,
           espejoY: superficie.espejoY,
@@ -888,6 +892,12 @@ function ModeloGltf({
               textura.dispose();
               return;
             }
+            // Garantiza que la capa renderice el decal con alpha real: el
+            // fondo de la textura es transparente (alpha 0) y debe descartarse
+            // para no pintar un recuadro sólido detrás del diseño.
+            material.transparent = true;
+            material.alphaTest = 0.01;
+            material.opacity = 1;
             material.map = textura;
             material.color.set("#ffffff");
             material.needsUpdate = true;
@@ -908,7 +918,7 @@ function ModeloGltf({
       componerTexturaCamiseta({
         color,
         disenos: disenosSup,
-        texto: textoSup,
+        textos: textosSup,
         recortarSilueta: superficie.silueta,
         espejoX: superficie.espejoX,
         espejoY: superficie.espejoY,
@@ -933,7 +943,7 @@ function ModeloGltf({
     return () => {
       cancelado = true;
     };
-  }, [color, disenosEfectivos, texto, colorTexto, fuenteTexto, tamanoTexto, posicionTexto, rotacionTexto, escalaTexto, preparado, unaSuperficie]);
+  }, [color, disenosEfectivos, emojis, texto, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado, posicionTexto, rotacionTexto, escalaTexto, preparado, unaSuperficie]);
 
   // Limpieza: solo lo creado por esta instancia (materiales, texturas y
   // geometrías de las capas de proyección). Las geometrías del glTF
@@ -1092,10 +1102,14 @@ function Mug3D({
   color,
   disenoUrl,
   imagenes = null,
+  emojis = null,
   texto = "",
   colorTexto = "#111111",
   fuenteTexto,
   tamanoTexto = 32,
+  esNegrita = false,
+  esCursiva = false,
+  esSubrayado = false,
   posicionTexto = { x: 50, y: 50 },
   rotacionTexto = 0,
   escalaTexto = 1,
@@ -1310,19 +1324,34 @@ function Mug3D({
   useEffect(() => {
     let cancelado = false;
 
-    const textoConfig =
-      texto && texto.trim()
-        ? {
-            contenido: texto,
-            color: colorTexto,
-            fuente: fuenteTexto,
-            tamano: tamanoTexto,
-            x: posicionTexto.x,
-            y: posicionTexto.y,
-            rotacion: rotacionTexto,
-            escala: escalaTexto,
-          }
-        : null;
+    const textosConfig = [];
+    if (texto && texto.trim()) {
+      textosConfig.push({
+        contenido: texto,
+        color: colorTexto,
+        fuente: fuenteTexto,
+        tamano: tamanoTexto,
+        negrita: esNegrita,
+        cursiva: esCursiva,
+        subrayado: esSubrayado,
+        x: posicionTexto.x,
+        y: posicionTexto.y,
+        rotacion: rotacionTexto,
+        escala: escalaTexto,
+      });
+    }
+    for (const em of emojis ?? []) {
+      textosConfig.push({
+        contenido: em.emoji,
+        color: "#000000",
+        fuente: '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
+        tamano: em.tamano ?? 48,
+        x: em.x,
+        y: em.y,
+        rotacion: em.rotacion ?? 0,
+        escala: em.escala ?? 1,
+      });
+    }
 
     const disenosArray = imagenes && imagenes.length ? imagenes : null;
 
@@ -1337,7 +1366,7 @@ function Mug3D({
 
     const trabajo = componerTexturaSolida(color, disenoUrl, {
       ...configDisenoMug(),
-      texto: textoConfig,
+      textos: textosConfig,
       disenos: disenosArray,
     });
 
@@ -1355,7 +1384,7 @@ function Mug3D({
     return () => {
       cancelado = true;
     };
-  }, [tipo, color, disenoUrl, imagenes, texto, colorTexto, fuenteTexto, tamanoTexto, posicionTexto, rotacionTexto, escalaTexto]);
+  }, [tipo, color, disenoUrl, imagenes, emojis, texto, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado, posicionTexto, rotacionTexto, escalaTexto]);
 
   return (
     <canvas

@@ -22,21 +22,42 @@ const ROL_LABELS = {
 };
 
 // Descarga una imagen remota como archivo (el atributo `download` no funciona
-// cruzando dominios, por eso se trae como blob).
-async function descargarDiseno(imagenUrl) {
+// cruzando dominios, por eso se trae como blob). Si el fetch falla (CORS, 404,
+// red...), cae a un enlace directo en nueva pestaña; se usa un ancla en vez de
+// window.open porque, tras un await, el popup blocker suele bloquearlo y la
+// descarga "no hace nada".
+async function descargarDiseno(diseno) {
+  const url = diseno?.imagenUrl;
+  if (!url) return;
+  const nombre = `diseno-skd-${diseno.id ?? Date.now()}`;
   try {
-    const respuesta = await fetch(imagenUrl);
+    const respuesta = await fetch(url);
+    if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
     const blob = await respuesta.blob();
-    const url = URL.createObjectURL(blob);
+    // Extensión según el tipo real del archivo (png/jpeg/webp).
+    const extension = blob.type.includes("jpeg")
+      ? ".jpg"
+      : blob.type.includes("webp")
+        ? ".webp"
+        : ".png";
+    const urlBlob = URL.createObjectURL(blob);
     const enlace = document.createElement("a");
-    enlace.href = url;
-    enlace.download = `diseno-skd-${Date.now()}.png`;
+    enlace.href = urlBlob;
+    enlace.download = `${nombre}${extension}`;
     document.body.appendChild(enlace);
     enlace.click();
     enlace.remove();
-    URL.revokeObjectURL(url);
-  } catch {
-    window.open(imagenUrl, "_blank");
+    URL.revokeObjectURL(urlBlob);
+  } catch (error) {
+    console.warn("Descarga por blob falló; abriendo en nueva pestaña:", error);
+    const enlace = document.createElement("a");
+    enlace.href = url;
+    enlace.target = "_blank";
+    enlace.rel = "noopener";
+    enlace.download = `${nombre}.png`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
   }
 }
 
@@ -267,7 +288,7 @@ function Dashboard() {
                     <div className="mt-3 flex justify-end">
                       {diseno.imagenUrl && (
                         <button
-                          onClick={() => descargarDiseno(diseno.imagenUrl)}
+                          onClick={() => descargarDiseno(diseno)}
                           className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
                         >
                           <FaDownload /> Descargar

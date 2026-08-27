@@ -18,4 +18,5 @@ public class ItemCarritoRequest {
     @Min(1)
     private Integer cantidad;
     private Long disenoId;
+    private Long varianteId;
 }

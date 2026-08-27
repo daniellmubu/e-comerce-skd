@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import procesarDiseno from "./quitarFondoBlanco";
+import { cargarFuenteParaCanvas } from "./fuentesTexto";
 
 // Contorno de la camiseta (tipo "buzo") en unidades del mundo (caja de 2.6 x
 // 2.6). Se usa tanto para la geometría extruida (grosor real con bisel) como
@@ -117,23 +118,46 @@ function mapearPorArea(x, y, tamano, area) {
 // transformaciones (trasladar → rotar → escalar) que el editor 2D y la imagen
 // final guardada, para que las tres vistas coincidan. `area` re-mapea las
 // coordenadas al rectángulo imprimible del torso (solo camiseta frente/espalda).
-function dibujarTexto(ctx, texto, w, h, area = null) {
+// Espera la descarga de la fuente web elegida: sin esto, el canvas dibujaría
+// con el fallback mientras el editor 2D ya muestra la fuente real.
+async function dibujarTexto(ctx, texto, w, h, area = null) {
   if (!texto || !texto.contenido || !texto.contenido.trim()) return;
 
   const { cx, cy, fx } = mapearPorArea(texto.x, texto.y, w, area);
+
+  await cargarFuenteParaCanvas(texto.fuente || "sans-serif");
 
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(((texto.rotacion ?? 0) * Math.PI) / 180);
   ctx.scale(texto.escala ?? 1, texto.escala ?? 1);
   ctx.fillStyle = texto.color || "#111111";
-  ctx.font = `600 ${Math.round((texto.tamano || 32) * (w / 500) * fx)}px ${
-    texto.fuente || "sans-serif"
-  }`;
+  // Formato: peso (negrita), estilo (cursiva) y subrayado (línea manual).
+  const peso = texto.negrita ? "700" : "600";
+  const estilo = texto.cursiva ? "italic " : "";
+  const tamDibujo = Math.round((texto.tamano || 32) * (w / 500) * fx);
+  ctx.font = `${estilo}${peso} ${tamDibujo}px ${texto.fuente || "sans-serif"}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(texto.contenido, 0, 0);
+  if (texto.subrayado) {
+    const ancho = ctx.measureText(texto.contenido).width;
+    ctx.strokeStyle = texto.color || "#111111";
+    ctx.lineWidth = Math.max(2, tamDibujo * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(-ancho / 2, tamDibujo * 0.45);
+    ctx.lineTo(ancho / 2, tamDibujo * 0.45);
+    ctx.stroke();
+  }
   ctx.restore();
+}
+
+// Dibuja una lista de configs de texto (texto principal + emojis como capas
+// independientes), cada uno con su propia posición/escala/rotación/tamaño.
+async function dibujarTextos(ctx, textos, w, h, area = null) {
+  for (const config of textos ?? []) {
+    await dibujarTexto(ctx, config, w, h, area);
+  }
 }
 
 // Carga un diseño igual que se ve en el editor 2D: con el fondo blanco
@@ -164,6 +188,7 @@ export async function componerTexturaCamiseta({
   color = "#ffffff",
   disenos = [],
   texto = null,
+  textos = null,
   tamano = 1024,
   recortarSilueta = false,
   espejoX = false,
@@ -177,11 +202,17 @@ export async function componerTexturaCamiseta({
   canvas.height = tamano;
   const ctx = canvas.getContext("2d");
 
-  // 1. Color sólido base de toda la prenda. En capas de proyección
-  //    (manga + costado) se omite para dejar el fondo transparente.
+  // 1. Color sólido base de toda la prenda. En capas de proyección (frente,
+  //    espalda, mangas) se deja el fondo TRANSPARENTE: se limpia el lienzo y
+  //    no se pinta ningún color, para que el decal conserve el canal alpha y
+  //    solo el estampado sea opaco. Cualquier fillRect aquí produciría el
+  //    recuadro sólido (gris/blanco) alrededor del diseño en el modelo 3D.
   if (!fondoTransparente) {
     ctx.fillStyle = color || "#ffffff";
     ctx.fillRect(0, 0, tamano, tamano);
+  } else {
+    ctx.clearRect(0, 0, tamano, tamano);
+    ctx.globalCompositeOperation = "source-over";
   }
 
   // 2. Diseños + texto, opcionalmente recortados a la silueta del torso.
@@ -217,19 +248,26 @@ export async function componerTexturaCamiseta({
     ctx.restore();
   }
 
-  dibujarTexto(ctx, texto, tamano, tamano, area);
+  // Texto + emojis: `textos` (lista de capas) tiene prioridad; `texto` se
+  // mantiene para llamadas de un único texto (compatibilidad).
+  const listaTextos = textos ?? (texto ? [texto] : []);
+  await dibujarTextos(ctx, listaTextos, tamano, tamano, area);
   ctx.restore();
   ctx.restore();
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;
+  // El canvas usa alpha no-premultiplicado (RGBA estándar); dejar el flag en
+  // false evita que los píxeles transparentes se interpreten como sólidos.
+  textura.premultiplyAlpha = false;
+  textura.needsUpdate = true;
   return textura;
 }
 
 // Textura para prendas cilíndricas (mug): cilindro de color sólido con los
 // diseños dibujados encima. `disenos` (o `disenoUrl` para un único diseño) se
 // pre-distorsionan para compensar el envolver del cilindro.
-export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null, disenos = null }) {
+export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null, textos = null, disenos = null }) {
   const texW = 1024;
   const texH = 1024;
 
@@ -276,10 +314,15 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
     );
   }
 
-  // 3. Texto del personalizador, dibujado encima del diseño.
-  dibujarTexto(ctx, texto, texW, texH);
+  // 3. Texto + emojis del personalizador, dibujados encima del diseño como
+  //    capas independientes (`textos` tiene prioridad; `texto` es un único
+  //    texto para compatibilidad).
+  const listaTextos = textos ?? (texto ? [texto] : []);
+  await dibujarTextos(ctx, listaTextos, texW, texH);
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;
+  textura.premultiplyAlpha = false;
+  textura.needsUpdate = true;
   return textura;
 }

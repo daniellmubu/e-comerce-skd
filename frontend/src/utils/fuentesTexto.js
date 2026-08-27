@@ -100,6 +100,30 @@ export const FUENTES_TEXTO = [
     categoria: "retro",
     css: '"Press Start 2P", monospace',
   },
+  {
+    id: "opensans",
+    nombre: "Open Sans",
+    categoria: "basicas",
+    css: '"Open Sans", Arial, sans-serif',
+  },
+  {
+    id: "montserrat",
+    nombre: "Montserrat",
+    categoria: "basicas",
+    css: '"Montserrat", Arial, sans-serif',
+  },
+  {
+    id: "poppins",
+    nombre: "Poppins",
+    categoria: "basicas",
+    css: '"Poppins", Arial, sans-serif',
+  },
+  {
+    id: "cinzel",
+    nombre: "Cinzel",
+    categoria: "elegantes",
+    css: '"Cinzel", Georgia, serif',
+  },
 ];
 
 // Fuente aplicada por defecto (equivalente al sans-serif anterior).
