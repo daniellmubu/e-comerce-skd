@@ -49,6 +49,15 @@ public class Resena {
     @Column(columnDefinition = "TEXT")
     private String comentario;
 
+    @Column(name = "imagen_url")
+    private String imagenUrl;
+
+    // Estados: pendiente, aprobada, rechazada. Las nuevas reseñas nacen
+    // pendientes hasta que el administrador las modera.
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private String estado = "pendiente";
+
     @Column(name = "creado_en", nullable = false, updatable = false)
     private LocalDateTime creadoEn;
 

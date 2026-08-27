@@ -30,3 +30,13 @@ export async function cambiarEstadoPedido(id, estado) {
   const { data } = await api.patch(`/admin/pedidos/${id}/estado`, { estado });
   return data;
 }
+
+// GET /api/admin/pedidos/kanban
+// Respuesta: { recibido: [...], disenando: [...], imprimiendo: [...],
+//   empacando: [...], enviado: [...] }
+// Cada elemento: { id, usuarioId, usuario, estado, total, creadoEn,
+//   cantidadItems, tieneDiseno, guiaEnvio }
+export async function obtenerKanban() {
+  const { data } = await api.get("/admin/pedidos/kanban");
+  return data;
+}

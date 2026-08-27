@@ -13,6 +13,8 @@ public class ResenaResponse {
 
     private Long productoId;
 
+    private String productoNombre;
+
     private Long usuarioId;
 
     private String usuarioNombre;
@@ -20,6 +22,10 @@ public class ResenaResponse {
     private Integer calificacion;
 
     private String comentario;
+
+    private String imagenUrl;
+
+    private String estado;
 
     private LocalDateTime creadoEn;
 

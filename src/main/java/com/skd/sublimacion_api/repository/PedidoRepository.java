@@ -15,6 +15,8 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
 
     List<Pedido> findByUsuarioId(Long usuarioId);
 
+    List<Pedido> findByEstadoIn(List<String> estados);
+
     boolean existsByEmpaqueId(Long empaqueId);
 
     Page<Pedido> findByEstado(String estado, Pageable pageable);

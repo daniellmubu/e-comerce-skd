@@ -1,5 +1,9 @@
 package com.skd.sublimacion_api.service.admin;
 
+import java.util.List;
+import java.util.Map;
+
+import com.skd.sublimacion_api.dto.pedido.PedidoKanbanResponse;
 import com.skd.sublimacion_api.dto.pedido.PedidoResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,4 +15,6 @@ public interface AdminPedidoService {
     PedidoResponse obtenerPorId(Long id);
 
     PedidoResponse cambiarEstado(Long id, String estado);
+
+    Map<String, List<PedidoKanbanResponse>> kanban();
 }

@@ -61,6 +61,8 @@ public class ResenaServiceImpl implements ResenaService {
                 .usuario(usuario)
                 .calificacion(request.getCalificacion())
                 .comentario(request.getComentario())
+                .imagenUrl(request.getImagenUrl())
+                .estado("pendiente")
                 .build();
 
         return convertir(resenaRepository.save(resena));
@@ -76,8 +78,9 @@ public class ResenaServiceImpl implements ResenaService {
                     "Producto no encontrado con id: " + productoId);
         }
 
+        // Solo se muestran reseñas aprobadas por moderación.
         Page<Resena> pagina = resenaRepository
-                .findByProducto_Id(productoId, pageable);
+                .findByProducto_IdAndEstado(productoId, "aprobada", pageable);
 
         List<ResenaResponse> contenido = pagina.getContent()
                 .stream()
@@ -115,10 +118,13 @@ public class ResenaServiceImpl implements ResenaService {
         return ResenaResponse.builder()
                 .id(resena.getId())
                 .productoId(resena.getProducto().getId())
+                .productoNombre(resena.getProducto().getNombre())
                 .usuarioId(resena.getUsuario().getId())
                 .usuarioNombre(resena.getUsuario().getNombre())
                 .calificacion(resena.getCalificacion())
                 .comentario(resena.getComentario())
+                .imagenUrl(resena.getImagenUrl())
+                .estado(resena.getEstado())
                 .creadoEn(resena.getCreadoEn())
                 .compraVerificada(true)
                 .build();

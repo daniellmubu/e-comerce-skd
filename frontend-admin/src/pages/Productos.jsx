@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaPlus,
   FaEdit,
@@ -10,6 +11,7 @@ import {
   FaCheckSquare,
   FaImage,
   FaUpload,
+  FaTshirt,
 } from "react-icons/fa";
 
 import Badge from "../components/Badge";
@@ -66,6 +68,8 @@ function construirParams(filtros, pagina, tamanio) {
 }
 
 function Productos() {
+  const navigate = useNavigate();
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -274,6 +278,14 @@ function Productos() {
     } catch (err) {
       setError(getErrorMessage(err));
     }
+  };
+
+  const irAVariantes = (producto) => {
+    navigate(
+      `/variantes?productoId=${producto.id}&nombre=${encodeURIComponent(
+        producto.nombre
+      )}`
+    );
   };
 
   const productos = data?.content ?? [];
@@ -598,6 +610,14 @@ function Productos() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => irAVariantes(producto)}
+                          leftIcon={<FaTshirt />}
+                        >
+                          Variantes
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"

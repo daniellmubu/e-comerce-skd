@@ -17,4 +17,7 @@ public class ResenaRequest {
     private Integer calificacion;
 
     private String comentario;
+
+    // URL opcional de una foto adjunta a la reseña.
+    private String imagenUrl;
 }

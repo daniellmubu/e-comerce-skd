@@ -271,10 +271,25 @@ Base: `/api/admin/pedidos`
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/admin/pedidos` | Listar paginado con filtros |
+| GET | `/api/admin/pedidos/kanban` | Tablero de producción agrupado por estado |
 | GET | `/api/admin/pedidos/{id}` | Detalle con productos y diseños |
 | PATCH | `/api/admin/pedidos/{id}/estado` | Cambiar estado |
 
-**Filtros del listado** (opcionales): `estado` (recibido, disenando, enviado, entregado, cancelado), `usuarioId` + paginación.
+**Filtros del listado** (opcionales): `estado` (recibido, disenando, imprimiendo, empacando, enviado, entregado, cancelado), `usuarioId` + paginación.
+
+**Estados de producción (kanban):** `recibido`, `disenando`, `imprimiendo`, `empacando`, `enviado`.
+
+**GET `/api/admin/pedidos/kanban`** — respuesta:
+
+```json
+{
+  "recibido":  [ { "id": 11, "usuarioId": 7, "usuario": "Daniel", "estado": "recibido", "total": 57000.00, "creadoEn": "2026-07-31T03:50:00", "cantidadItems": 3, "tieneDiseno": true, "guiaEnvio": null } ],
+  "disenando":  [],
+  "imprimiendo": [],
+  "empacando":  [],
+  "enviado":  []
+}
+```
 
 **CambiarEstadoPedidoRequest:**
 
@@ -365,7 +380,93 @@ Uso en el frontend: petición con `Authorization: Bearer <token>` y `responseTyp
 
 ---
 
-## 11. Códigos de error
+## 11. Variantes
+
+Base: `/api/admin/variantes`
+
+CRUD de variantes por producto (talla / color / stock / precio opcional).
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/admin/variantes/producto/{productoId}` | Listar variantes de un producto |
+| GET | `/api/admin/variantes/{id}` | Obtener por id |
+| POST | `/api/admin/variantes` | Crear (201) |
+| PUT | `/api/admin/variantes/{id}` | Actualizar |
+| DELETE | `/api/admin/variantes/{id}` | Eliminar (204) |
+
+**VarianteRequest (body):**
+
+```json
+{
+  "productoId": 3,
+  "talla": "M",
+  "color": "Azul",
+  "stock": 10,
+  "precio": 37000.00,
+  "activo": true
+}
+```
+
+`talla` y/o `color` son opcionales (al menos uno obligatorio). `precio` opcional: si se omite, se usa el precio base del producto.
+
+**VarianteResponse:**
+
+```json
+{
+  "id": 1,
+  "productoId": 3,
+  "productoNombre": "Camiseta Blanca Sublimable",
+  "talla": "M",
+  "color": "Azul",
+  "stock": 10,
+  "precio": 37000.00,
+  "activo": true
+}
+```
+
+**Regla de negocio:** no puede existir más de una variante con la misma combinación `talla + color` para el mismo producto (error 400).
+
+---
+
+## 12. Moderación de reseñas
+
+Base: `/api/admin/resenas`
+
+Aprueba o rechaza reseñas (incluidas las que traen foto) antes de que sean públicas.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/admin/resenas` | Listar paginado, filtro `estado` (opcional) |
+| GET | `/api/admin/resenas/{id}` | Obtener por id |
+| PATCH | `/api/admin/resenas/{id}/aprobar` | Aprobar (visible públicamente) |
+| PATCH | `/api/admin/resenas/{id}/rechazar` | Rechazar (oculta) |
+| DELETE | `/api/admin/resenas/{id}` | Eliminar (204) |
+
+**Estados:** `pendiente` (nueva, espera moderación), `aprobada`, `rechazada`.
+
+**ResenaResponse:**
+
+```json
+{
+  "id": 5,
+  "productoId": 3,
+  "productoNombre": "Camiseta Blanca Sublimable",
+  "usuarioId": 7,
+  "usuarioNombre": "Daniel",
+  "calificacion": 5,
+  "comentario": "Excelente calidad",
+  "imagenUrl": "https://.../resena.jpg",
+  "estado": "pendiente",
+  "creadoEn": "2026-08-20T10:00:00",
+  "compraVerificada": true
+}
+```
+
+**Nota:** el listado público `GET /api/resenas/producto/{productoId}` solo muestra reseñas `aprobada`; los promedios de calificación en el catálogo solo cuentan reseñas aprobadas. Las nuevas reseñas nacen en `pendiente`.
+
+---
+
+## 13. Códigos de error
 
 Formato de respuesta de error:
 

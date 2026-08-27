@@ -5,9 +5,12 @@ import AdminLayout from "../layouts/AdminLayout";
 import Login from "../pages/Login";
 import Dashboard from "../pages/Dashboard";
 import Productos from "../pages/Productos";
+import Variantes from "../pages/Variantes";
 import Categorias from "../pages/Categorias";
 import Usuarios from "../pages/Usuarios";
 import Pedidos from "../pages/Pedidos";
+import Produccion from "../pages/Produccion";
+import Resenas from "../pages/Resenas";
 import Cupones from "../pages/Cupones";
 import Empaques from "../pages/Empaques";
 import TarifasEnvio from "../pages/TarifasEnvio";
@@ -33,10 +36,13 @@ function AppRoutes() {
 
         {/* Módulos que se irán implementando por fase */}
         <Route path="productos" element={<Productos />} />
+        <Route path="variantes" element={<Variantes />} />
         <Route path="categorias" element={<Categorias />} />
         <Route path="cupones" element={<Cupones />} />
         <Route path="empaques" element={<Empaques />} />
         <Route path="pedidos" element={<Pedidos />} />
+        <Route path="produccion" element={<Produccion />} />
+        <Route path="resenas" element={<Resenas />} />
         <Route path="usuarios" element={<Usuarios />} />
         <Route path="tarifas-envio" element={<TarifasEnvio />} />
         <Route path="reportes" element={<Reportes />} />

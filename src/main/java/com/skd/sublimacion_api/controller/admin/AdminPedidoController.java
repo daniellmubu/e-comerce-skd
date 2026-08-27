@@ -1,6 +1,10 @@
 package com.skd.sublimacion_api.controller.admin;
 
+import java.util.List;
+import java.util.Map;
+
 import com.skd.sublimacion_api.dto.pedido.CambiarEstadoPedidoRequest;
+import com.skd.sublimacion_api.dto.pedido.PedidoKanbanResponse;
 import com.skd.sublimacion_api.dto.pedido.PedidoResponse;
 import com.skd.sublimacion_api.service.admin.AdminPedidoService;
 
@@ -53,6 +57,19 @@ public class AdminPedidoController {
             Pageable pageable) {
 
         return adminPedidoService.listar(estado, usuarioId, pageable);
+    }
+
+    @Operation(
+        summary = "Tablero kanban de producción",
+        description = "Obtiene los pedidos en producción agrupados por estado " +
+                "(recibido, disenando, imprimiendo, empacando, enviado)."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Tablero obtenido correctamente")
+    })
+    @GetMapping("/kanban")
+    public Map<String, List<PedidoKanbanResponse>> kanban() {
+        return adminPedidoService.kanban();
     }
 
     @Operation(

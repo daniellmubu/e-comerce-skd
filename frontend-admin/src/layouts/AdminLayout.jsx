@@ -10,6 +10,9 @@ import {
   FaUsers,
   FaTruck,
   FaFileAlt,
+  FaTshirt,
+  FaStarHalfAlt,
+  FaIndustry,
 } from "react-icons/fa";
 
 import Navbar from "../components/Navbar";
@@ -19,10 +22,13 @@ import { useAuth } from "../context/AuthContext";
 const NAV_ITEMS = [
   { label: "Dashboard", to: "/dashboard", icon: <FaChartLine />, end: true },
   { label: "Productos", to: "/productos", icon: <FaBoxOpen /> },
+  { label: "Variantes", to: "/variantes", icon: <FaTshirt /> },
   { label: "Categorías", to: "/categorias", icon: <FaTags /> },
   { label: "Cupones", to: "/cupones", icon: <FaTicketAlt /> },
   { label: "Empaques", to: "/empaques", icon: <FaBox /> },
   { label: "Pedidos", to: "/pedidos", icon: <FaClipboardList /> },
+  { label: "Producción", to: "/produccion", icon: <FaIndustry /> },
+  { label: "Reseñas", to: "/resenas", icon: <FaStarHalfAlt /> },
   { label: "Usuarios", to: "/usuarios", icon: <FaUsers /> },
   { label: "Tarifas de envío", to: "/tarifas-envio", icon: <FaTruck /> },
   { label: "Reportes", to: "/reportes", icon: <FaFileAlt /> },
@@ -32,10 +38,13 @@ const NAV_ITEMS = [
 const TITULOS = {
   "/dashboard": "Dashboard",
   "/productos": "Productos",
+  "/variantes": "Variantes",
   "/categorias": "Categorías",
   "/cupones": "Cupones",
   "/empaques": "Empaques",
   "/pedidos": "Pedidos",
+  "/produccion": "Producción",
+  "/resenas": "Reseñas",
   "/usuarios": "Usuarios",
   "/tarifas-envio": "Tarifas de envío",
   "/reportes": "Reportes",

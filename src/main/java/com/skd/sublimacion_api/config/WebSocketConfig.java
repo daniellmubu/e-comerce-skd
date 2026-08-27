@@ -30,7 +30,8 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  *   "timestamp": "2026-08-19T14:30:00.123"
  * }
  *
- * "estado" puede ser: recibido, disenando, enviado, entregado, cancelado.
+ * "estado" puede ser: recibido, disenando, imprimiendo, empacando, enviado,
+ * entregado, cancelado.
  */
 @Configuration
 @EnableWebSocketMessageBroker
