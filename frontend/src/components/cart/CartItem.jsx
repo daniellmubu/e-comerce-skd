@@ -17,6 +17,13 @@ function CartItem({ item, onAumentar, onDisminuir, onEliminar, disabled }) {
 
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold text-gray-900 dark:text-white">{item.producto}</p>
+        {item.talla || item.color ? (
+          <p className="text-xs text-gray-500 dark:text-slate-400">
+            {[item.talla && `Talla ${item.talla}`, item.color && `Color ${item.color}`]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        ) : null}
         <p className="text-sm text-gray-500 dark:text-slate-400">
           {formatPrice(item.precioUnitario)} c/u
         </p>

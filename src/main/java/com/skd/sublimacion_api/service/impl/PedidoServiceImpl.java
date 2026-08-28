@@ -13,6 +13,7 @@ import com.skd.sublimacion_api.dto.pedido.PedidoResponse;
 import com.skd.sublimacion_api.entity.Cupon;
 import com.skd.sublimacion_api.entity.Direccion;
 import com.skd.sublimacion_api.entity.Empaque;
+import com.skd.sublimacion_api.entity.Factura;
 import com.skd.sublimacion_api.entity.ItemPedido;
 import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.entity.Producto;
@@ -22,6 +23,7 @@ import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CuponRepository;
 import com.skd.sublimacion_api.repository.DireccionRepository;
 import com.skd.sublimacion_api.repository.EmpaqueRepository;
+import com.skd.sublimacion_api.repository.FacturaRepository;
 import com.skd.sublimacion_api.repository.ItemPedidoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
@@ -41,6 +43,7 @@ public class PedidoServiceImpl implements PedidoService {
     private final EmpaqueRepository empaqueRepository;
     private final CuponRepository cuponRepository;
     private final ProductoRepository productoRepository;
+    private final FacturaRepository facturaRepository;
 
     @Override
     public PedidoResponse obtenerPorId(Long id, Long usuarioId) {
@@ -177,6 +180,8 @@ public class PedidoServiceImpl implements PedidoService {
             .map(this::convertirItem)
             .toList();
 
+    Factura factura = facturaRepository.findByPedidoId(pedido.getId()).orElse(null);
+
     return PedidoResponse.builder()
             .id(pedido.getId())
             .usuarioId(pedido.getUsuario().getId())
@@ -188,6 +193,8 @@ public class PedidoServiceImpl implements PedidoService {
             .descuento(pedido.getDescuento())
             .total(pedido.getTotal())
             .items(items)
+            .facturaId(factura != null ? factura.getId() : null)
+            .numeroFactura(factura != null ? factura.getNumeroFactura() : null)
             .build();
 }
 

@@ -10,4 +10,6 @@ public interface DisenoService {
     DisenoResponse subir(byte[] contenido, String contentType, String nombreArchivo,
                          Long productoId, Long usuarioId);
     List<DisenoResponse> listarPorUsuario(Long usuarioId);
+    void eliminar(Long id, Long usuarioId);
+    int eliminarTodos(Long usuarioId);
 }

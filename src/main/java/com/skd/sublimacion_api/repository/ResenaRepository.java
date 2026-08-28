@@ -34,4 +34,6 @@ public interface ResenaRepository extends JpaRepository<Resena, Long> {
             "AND r.estado = 'aprobada'")
     List<Object[]> promedioYConteoPorProductoId(
             @Param("productoId") Long productoId);
+
+    Page<Resena> findByEstadoAndImagenUrlIsNotNull(String estado, Pageable pageable);
 }

@@ -13,6 +13,9 @@ import CheckoutResultado from "../pages/CheckoutResultado";
 import MisPedidos from "../pages/MisPedidos";
 import MisCupones from "../pages/MisCupones";
 import MisFavoritos from "../pages/MisFavoritos";
+import MisDisenos from "../pages/MisDisenos";
+import Bandeja from "../pages/Bandeja";
+import GaleriaClientes from "../pages/GaleriaClientes";
 import SolicitarDiseno from "../pages/SolicitarDiseno";
 import PanelDisenador from "../pages/PanelDisenador";
 import DetalleProducto from "../pages/DetalleProducto";
@@ -38,6 +41,7 @@ function AppRoutes() {
       />
       <Route path="/generador" element={<Generador />} />
       <Route path="/personalizador" element={<Personalizador />} />
+      <Route path="/galeria-clientes" element={<GaleriaClientes />} />
       <Route path="/creditos" element={<Creditos />} />
       <Route
         path="/carrito"
@@ -88,6 +92,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/mis-disenos"
+        element={
+          <RutaProtegida>
+            <MisDisenos />
+          </RutaProtegida>
+        }
+      />
+      <Route
         path="/solicitar-diseno"
         element={
           <RutaProtegida>
@@ -100,6 +112,14 @@ function AppRoutes() {
         element={
           <RutaProtegida>
             <PanelDisenador />
+          </RutaProtegida>
+        }
+      />
+      <Route
+        path="/bandeja"
+        element={
+          <RutaProtegida>
+            <Bandeja />
           </RutaProtegida>
         }
       />

@@ -1,17 +1,34 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt, FaHeart, FaBars, FaInbox } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import CartIcon from "../cart/CartIcon";
+import { contarNoLeidas } from "../../services/notificacionService";
 
 function Navbar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { usuario, cerrarSesion } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [busqueda, setBusqueda] = useState("");
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [noLeidas, setNoLeidas] = useState(0);
+
+  useEffect(() => {
+    if (!usuario) return undefined;
+
+    let activo = true;
+    contarNoLeidas()
+      .then((count) => {
+        if (activo) setNoLeidas(Number(count) || 0);
+      })
+      .catch(() => {});
+    return () => {
+      activo = false;
+    };
+  }, [usuario, location.pathname]);
 
   const handleLogout = () => {
     cerrarSesion();
@@ -129,14 +146,21 @@ function Navbar() {
                         <FaHeart className="text-indigo-500 dark:text-cyan-400" />
                         Favoritos
                       </Link>
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-gray-400 dark:text-slate-500"
-                        title="Próximamente"
+                      <Link
+                        to="/bandeja"
+                        onClick={cerrarMenu}
+                        className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
-                        <FaInbox className="text-gray-400 dark:text-slate-500" />
+                        <span className="relative">
+                          <FaInbox className="text-gray-400 dark:text-slate-500" />
+                          {noLeidas > 0 && (
+                            <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                              {noLeidas}
+                            </span>
+                          )}
+                        </span>
                         Bandeja de entrada
-                      </button>
+                      </Link>
                     </div>
                   </>
                 )}

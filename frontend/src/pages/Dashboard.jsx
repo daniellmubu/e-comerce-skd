@@ -5,15 +5,14 @@ import {
   FaShoppingBag,
   FaPalette,
   FaSignOutAlt,
-  FaDownload,
-  FaRobot,
-  FaPenNib,
+  FaGift,
+  FaUsers,
+  FaCopy,
+  FaShareAlt,
 } from "react-icons/fa";
 
 import { obtenerUsuarioActual, logout } from "../services/authService";
-import { listarDisenosPorUsuario } from "../services/disenoService";
-import { getErrorMessage } from "../services/api";
-import Loading from "../components/ui/Loading";
+import { obtenerMiCodigo } from "../services/referidoService";
 
 const ROL_LABELS = {
   cliente: "Cliente",
@@ -21,92 +20,21 @@ const ROL_LABELS = {
   disenador: "Diseñador",
 };
 
-// Descarga una imagen remota como archivo (el atributo `download` no funciona
-// cruzando dominios, por eso se trae como blob). Si el fetch falla (CORS, 404,
-// red...), cae a un enlace directo en nueva pestaña; se usa un ancla en vez de
-// window.open porque, tras un await, el popup blocker suele bloquearlo y la
-// descarga "no hace nada".
-async function descargarDiseno(diseno) {
-  const url = diseno?.imagenUrl;
-  if (!url) return;
-  const nombre = `diseno-skd-${diseno.id ?? Date.now()}`;
-  try {
-    const respuesta = await fetch(url);
-    if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
-    const blob = await respuesta.blob();
-    // Extensión según el tipo real del archivo (png/jpeg/webp).
-    const extension = blob.type.includes("jpeg")
-      ? ".jpg"
-      : blob.type.includes("webp")
-        ? ".webp"
-        : ".png";
-    const urlBlob = URL.createObjectURL(blob);
-    const enlace = document.createElement("a");
-    enlace.href = urlBlob;
-    enlace.download = `${nombre}${extension}`;
-    document.body.appendChild(enlace);
-    enlace.click();
-    enlace.remove();
-    URL.revokeObjectURL(urlBlob);
-  } catch (error) {
-    console.warn("Descarga por blob falló; abriendo en nueva pestaña:", error);
-    const enlace = document.createElement("a");
-    enlace.href = url;
-    enlace.target = "_blank";
-    enlace.rel = "noopener";
-    enlace.download = `${nombre}.png`;
-    document.body.appendChild(enlace);
-    enlace.click();
-    enlace.remove();
-  }
-}
-
 function Dashboard() {
   const navigate = useNavigate();
   const usuario = obtenerUsuarioActual();
 
-  const [disenos, setDisenos] = useState([]);
-  const [cargandoDisenos, setCargandoDisenos] = useState(true);
-  const [errorDisenos, setErrorDisenos] = useState(null);
+  const [referido, setReferido] = useState(null);
+  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     if (!usuario) return undefined;
-
     let activo = true;
-
-    listarDisenosPorUsuario()
-      .then((lista) => {
-        if (activo) setDisenos(Array.isArray(lista) ? lista : []);
-      })
-      .catch((err) => {
-        if (activo) {
-          setErrorDisenos(getErrorMessage(err));
-          setDisenos([]);
-        }
-      })
-      .finally(() => {
-        if (activo) setCargandoDisenos(false);
-      });
-
-    return () => {
-      activo = false;
-    };
+    obtenerMiCodigo()
+      .then((data) => { if (activo) setReferido(data); })
+      .catch(() => {});
+    return () => { activo = false; };
   }, [usuario]);
-
-  const reintentarCargarDisenos = () => {
-    setErrorDisenos(null);
-    setCargandoDisenos(true);
-    listarDisenosPorUsuario()
-      .then((lista) => {
-        setDisenos(Array.isArray(lista) ? lista : []);
-        setCargandoDisenos(false);
-      })
-      .catch((err) => {
-        setErrorDisenos(getErrorMessage(err));
-        setDisenos([]);
-        setCargandoDisenos(false);
-      });
-  };
 
   const handleLogout = () => {
     logout();
@@ -200,106 +128,84 @@ function Dashboard() {
           </button>
         </div>
 
-        {/* Mis diseños */}
+        {/* Mis diseños — resumen con botón al centro */}
         <section className="mb-10 rounded-3xl border border-gray-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900/60 dark:backdrop-blur">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                Mis diseños
-              </h2>
-              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                Tus diseños generados con IA o subidos desde el editor.
-              </p>
-            </div>
-            {disenos.length > 0 && (
-              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-500 dark:bg-slate-800 dark:text-slate-300">
-                {disenos.length} {disenos.length === 1 ? "diseño" : "diseños"}
-              </span>
-            )}
-          </div>
+          <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">
+            Mis diseños
+          </h2>
+          <p className="mb-6 text-sm text-gray-500 dark:text-slate-400">
+            Revisa tus diseños guardados.
+          </p>
 
-          {cargandoDisenos ? (
-            <div className="flex justify-center py-14">
-              <Loading label="Cargando tus diseños..." />
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 py-14 text-center dark:border-slate-700">
+            <FaPalette className="mb-4 text-3xl text-gray-400 dark:text-slate-600" />
+            <p className="text-gray-500 dark:text-slate-400">
+              Administra tus creaciones y descárgalas cuando quieras.
+            </p>
+            <button
+              onClick={() => navigate("/mis-disenos")}
+              className="mt-4 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:scale-[1.02] hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+            >
+              Ver mis diseños
+            </button>
+          </div>
+        </section>
+
+        {/* Referidos */}
+        <section className="mb-10 rounded-3xl border border-gray-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900/60 dark:backdrop-blur">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white">
+              <FaGift />
             </div>
-          ) : errorDisenos ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-red-300 py-14 text-center dark:border-red-500/30">
-              <p className="text-gray-500 dark:text-slate-400">{errorDisenos}</p>
-              <button
-                onClick={reintentarCargarDisenos}
-                className="mt-4 rounded-xl border border-gray-200 px-6 py-2.5 text-sm font-semibold text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-400"
-              >
-                Reintentar
-              </button>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Invita y gana</h2>
+              <p className="text-sm text-gray-500 dark:text-slate-400">Comparte tu código y gana recompensas por cada amigo que se registre.</p>
             </div>
-          ) : disenos.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 py-14 text-center dark:border-slate-700">
-              <FaPalette className="mb-4 text-3xl text-gray-400 dark:text-slate-600" />
-              <p className="text-gray-500 dark:text-slate-400">
-                Aún no tienes diseños guardados.
-              </p>
-              <button
-                onClick={() => navigate("/personalizador")}
-                className="mt-4 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:scale-[1.02] hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
-              >
-                Crear mi primer diseño
-              </button>
+          </div>
+          {referido ? (
+            <div className="mt-6">
+              <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-amber-400 bg-amber-50 p-5 dark:border-amber-400/40 dark:bg-amber-500/10 sm:flex-row sm:justify-between">
+                <div className="text-center sm:text-left">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-300">Tu código</p>
+                  <p className="mt-1 font-mono text-2xl font-black tracking-widest text-amber-700 dark:text-amber-300">{referido.codigo}</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{referido.totalReferidos} referidos · {referido.recompensas} recompensas</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(referido.codigo);
+                      setCopiado(true);
+                      setTimeout(() => setCopiado(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-amber-700 shadow hover:bg-amber-100 dark:bg-slate-800 dark:text-amber-300"
+                  >
+                    <FaCopy /> {copiado ? "¡Copiado!" : "Copiar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (navigator.share) navigator.share({ title: "Únete a SKD", text: "Usa mi código en SKD:", url: referido.link }).catch(() => {});
+                      else { navigator.clipboard.writeText(referido.link); setCopiado(true); setTimeout(() => setCopiado(false), 2000); }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+                  >
+                    <FaShareAlt /> Compartir
+                  </button>
+                </div>
+              </div>
+              <p className="mt-3 text-center text-xs text-gray-400 dark:text-slate-500">Link: <span className="font-mono">{referido.link}</span></p>
             </div>
           ) : (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {disenos.map((diseno) => (
-                <div
-                  key={diseno.id}
-                  className="group overflow-hidden rounded-2xl border border-gray-200 bg-white transition hover:shadow-lg dark:border-slate-700 dark:bg-slate-900"
-                >
-                  <div className="relative flex h-52 items-center justify-center overflow-hidden bg-gray-100 dark:bg-slate-800">
-                    {diseno.imagenUrl ? (
-                      <img
-                        src={diseno.imagenUrl}
-                        alt={diseno.prompt ?? "Diseño"}
-                        className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-105"
-                      />
-                    ) : (
-                      <FaPalette className="text-3xl text-gray-300 dark:text-slate-600" />
-                    )}
-                    <span
-                      className={`absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        diseno.origen === "USUARIO"
-                          ? "bg-indigo-100 text-indigo-700 dark:bg-cyan-500/20 dark:text-cyan-300"
-                          : "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300"
-                      }`}
-                    >
-                      {diseno.origen === "USUARIO" ? <FaPenNib /> : <FaRobot />}
-                      {diseno.origen === "USUARIO" ? "Tu diseño" : "IA"}
-                    </span>
-                  </div>
-
-                  <div className="p-4">
-                    {diseno.producto && (
-                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
-                        {diseno.producto}
-                      </p>
-                    )}
-                    {diseno.prompt && (
-                      <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-slate-400">
-                        {diseno.prompt}
-                      </p>
-                    )}
-                    <div className="mt-3 flex justify-end">
-                      {diseno.imagenUrl && (
-                        <button
-                          onClick={() => descargarDiseno(diseno)}
-                          className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
-                        >
-                          <FaDownload /> Descargar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <p className="mt-6 text-sm text-gray-500 dark:text-slate-400">Cargando tu código...</p>
           )}
+          <div className="mt-4 flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
+            <FaUsers className="text-amber-500" />
+            <button type="button" onClick={() => navigate("/galeria-clientes")} className="font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-300">
+              Ver galería de clientes
+            </button>
+            <span>· inspira a otros con tus reseñas con foto</span>
+          </div>
         </section>
 
         {/* Mis pedidos */}

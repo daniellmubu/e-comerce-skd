@@ -30,4 +30,6 @@ public class RegistroRequest {
     private String password;
 
     private Rol rol;
+
+    private String codigoReferido;
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaShoppingBag } from "react-icons/fa";
+import { FaShoppingBag, FaFilePdf } from "react-icons/fa";
 
+import api from "../services/api";
 import { listarPedidosPorUsuario } from "../services/pedidoService";
 import { getErrorMessage } from "../services/api";
 import Loading from "../components/ui/Loading";
@@ -52,6 +53,25 @@ function MisPedidos() {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function descargarFactura(facturaId) {
+    try {
+      const resp = await api.get(`/facturas/${facturaId}/pdf`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([resp.data], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `factura-${facturaId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("No se pudo descargar la factura: " + getErrorMessage(err));
     }
   }
 
@@ -125,7 +145,7 @@ function MisPedidos() {
                   </span>
                 </div>
 
-                <div className="mt-4 flex justify-end">
+                <div className="mt-4 flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => navigate(`/pedidos/${pedido.id}/seguimiento`)}
@@ -133,6 +153,15 @@ function MisPedidos() {
                   >
                     Ver detalles
                   </button>
+                  {pedido.facturaId && (
+                    <button
+                      type="button"
+                      onClick={() => descargarFactura(pedido.facturaId)}
+                      className="flex items-center gap-1.5 rounded-xl border border-red-200 px-4 py-2 text-sm text-red-600 transition hover:border-red-300 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+                    >
+                      <FaFilePdf /> Factura PDF
+                    </button>
+                  )}
                 </div>
 
                 <div className="mt-4 grid grid-cols-3 gap-4 border-t border-gray-200 pt-4 text-sm text-gray-500 dark:border-slate-800 dark:text-slate-400">

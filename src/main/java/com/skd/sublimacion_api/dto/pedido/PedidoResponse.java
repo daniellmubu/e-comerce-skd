@@ -31,4 +31,8 @@ public class PedidoResponse {
 
     private List<ItemPedidoResponse> items;
 
+    private Long facturaId;
+
+    private String numeroFactura;
+
 }

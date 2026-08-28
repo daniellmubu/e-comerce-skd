@@ -56,6 +56,13 @@ public class Usuario implements UserDetails {
     @Builder.Default
     private Rol rol = Rol.cliente;
 
+    @Column(name = "codigo_referido", unique = true, length = 20)
+    private String codigoReferido;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "referido_por_id")
+    private Usuario referidoPor;
+
     @Column(name = "creado_en", updatable = false, insertable = false)
     private LocalDateTime creadoEn;
 

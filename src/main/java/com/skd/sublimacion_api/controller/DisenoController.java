@@ -65,4 +65,18 @@ public class DisenoController {
     public List<DisenoResponse> listarPorUsuario(@AuthenticationPrincipal Usuario usuario) {
         return disenoService.listarPorUsuario(usuario.getId());
     }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void eliminar(@PathVariable Long id,
+                         @AuthenticationPrincipal Usuario usuario) {
+        disenoService.eliminar(id, usuario.getId());
+    }
+
+    @DeleteMapping
+    @ResponseStatus(HttpStatus.OK)
+    public java.util.Map<String, Object> eliminarTodos(@AuthenticationPrincipal Usuario usuario) {
+        int borrados = disenoService.eliminarTodos(usuario.getId());
+        return java.util.Map.of("borrados", borrados);
+    }
 }
