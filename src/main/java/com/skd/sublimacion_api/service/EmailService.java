@@ -10,4 +10,6 @@ public interface EmailService {
 
     void enviarRestablecerPassword(String correo, String nombre, String token);
 
+    void enviarNotificacion(String correo, String nombre, String titulo, String mensaje);
+
 }

@@ -6,6 +6,8 @@ import com.skd.sublimacion_api.entity.SolicitudDiseno;
 import com.skd.sublimacion_api.exeption.BadRequestException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.SolicitudDisenoRepository;
+import com.skd.sublimacion_api.service.EmailService;
+import com.skd.sublimacion_api.service.NotificacionService;
 import com.skd.sublimacion_api.service.SupabaseStorageService;
 import com.skd.sublimacion_api.service.WebSocketService;
 import com.skd.sublimacion_api.service.admin.AdminSolicitudDisenoService;
@@ -24,6 +26,8 @@ public class AdminSolicitudDisenoServiceImpl implements AdminSolicitudDisenoServ
     private final SolicitudDisenoRepository solicitudDisenoRepository;
     private final SupabaseStorageService supabaseStorageService;
     private final WebSocketService webSocketService;
+    private final NotificacionService notificacionService;
+    private final EmailService emailService;
 
     @Override
     public Page<SolicitudDisenoResponse> listar(EstadoSolicitudDiseno estado, Pageable pageable) {
@@ -97,7 +101,26 @@ public class AdminSolicitudDisenoServiceImpl implements AdminSolicitudDisenoServ
 
         SolicitudDisenoResponse response = convertir(solicitudDisenoRepository.save(solicitud));
         webSocketService.publicarEstadoSolicitud(response.getId(), response.getEstado());
+
+        notificarCliente(solicitud);
         return response;
+    }
+
+    private void notificarCliente(SolicitudDiseno solicitud) {
+
+        Long usuarioId = solicitud.getUsuario().getId();
+        String mensaje = "El diseñador envió una propuesta para tu solicitud #"
+                + solicitud.getId() + " (" + solicitud.getProducto().getNombre() + ")."
+                + " Revísala y aprueba o pide cambios.";
+
+        notificacionService.crear(
+                usuarioId, "PROPUESTA_ENVIADA", "Nueva propuesta de diseño", mensaje);
+
+        emailService.enviarNotificacion(
+                solicitud.getUsuario().getCorreo(),
+                solicitud.getUsuario().getNombre(),
+                "Nueva propuesta de diseño",
+                mensaje);
     }
 
     private SolicitudDiseno obtenerSolicitud(Long id) {

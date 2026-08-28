@@ -1,5 +1,6 @@
 package com.skd.sublimacion_api.service;
 
+import com.skd.sublimacion_api.dto.websocket.NotificacionEvent;
 import com.skd.sublimacion_api.dto.websocket.PedidoEstadoEvent;
 import com.skd.sublimacion_api.dto.websocket.SolicitudDisenoEvent;
 import lombok.RequiredArgsConstructor;
@@ -34,5 +35,9 @@ public class WebSocketService {
                 .build();
 
         messagingTemplate.convertAndSend("/topic/solicitudes/" + solicitudId, evento);
+    }
+
+    public void publicarNotificacion(Long usuarioId, NotificacionEvent evento) {
+        messagingTemplate.convertAndSend("/topic/notificaciones/" + usuarioId, evento);
     }
 }
