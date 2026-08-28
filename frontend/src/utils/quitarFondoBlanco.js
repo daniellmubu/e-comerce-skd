@@ -5,14 +5,28 @@ function colorDistancia(r1, g1, b1, r2, g2, b2) {
   return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
 }
 
+async function cargarImagenConFallback(url) {
+  const intentar = (conCors) =>
+    new Promise((resolve, reject) => {
+      const im = new Image();
+      if (conCors) im.crossOrigin = "anonymous";
+      im.onload = () => resolve(im);
+      im.onerror = reject;
+      im.src = url;
+    });
+  // data: URLs no necesitan CORS
+  if (url?.startsWith("data:")) {
+    return intentar(false);
+  }
+  try {
+    return await intentar(true);
+  } catch {
+    return await intentar(false);
+  }
+}
+
 async function procesarDisenoInterno(url) {
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.src = url;
-  await new Promise((resolve, reject) => {
-    img.onload = resolve;
-    img.onerror = reject;
-  });
+  const img = await cargarImagenConFallback(url);
 
   const canvas = document.createElement("canvas");
   canvas.width = img.width;
