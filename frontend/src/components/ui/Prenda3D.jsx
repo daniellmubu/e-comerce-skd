@@ -7,6 +7,9 @@ import {
   componerTexturaCamiseta,
 } from "../../utils/texturaPrenda";
 
+export const ESCALA_MIN_3D = 0.2;
+export const ESCALA_MAX_3D = 3;
+
 /* ------------------------------------------------------------------ */
 /* Modelos glTF por tipo de producto                                   */
 
@@ -185,10 +188,11 @@ function combinarGeometrias(partes) {
   return geo;
 }
 
-// Genera UVs de proyección plana lateral sobre la geometría (ya trasladada al
-// origen del modelo). Lado derecho (+X, visto desde ahí): u crece hacia -Z;
-// lado izquierdo (-X): u crece hacia +Z. v sigue a Y, así el lienzo 2D se
-// proyecta sin espejo y continuo entre manga y costado.
+// Genera UVs de proyección plana lateral preservando aspecto (sin estirar).
+// Antes u y v se mapeaban a 0-1 independientemente (anchoZ vs altoY) y el
+// lienzo cuadrado se estiraba al rectángulo de la manga -> imagen estirada
+// en laterales. Ahora se usa un cuadrado centrado (lado = max) y se centra
+// la proyección para mantener la forma original como en frente/espalda.
 function proyectarUvLateral(geo, ladoSigno) {
   const pos = geo.attributes.position;
   let minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -202,14 +206,16 @@ function proyectarUvLateral(geo, ladoSigno) {
   }
   const altoY = maxY - minY || 1;
   const anchoZ = maxZ - minZ || 1;
+  const lado = Math.max(anchoZ, altoY) || 1;
+  const offsetU = (lado - anchoZ) / 2;
+  const offsetV = (lado - altoY) / 2;
 
   for (let i = 0; i < pos.count; i++) {
-    const u =
-      ladoSigno > 0
-        ? (maxZ - pos.getZ(i)) / anchoZ
-        : (pos.getZ(i) - minZ) / anchoZ;
-    const v = (pos.getY(i) - minY) / altoY;
-    // Se guarda en un atributo uv de 2 componentes.
+    const z = pos.getZ(i);
+    const y = pos.getY(i);
+    const uRaw = ladoSigno > 0 ? maxZ - z : z - minZ;
+    const u = (uRaw + offsetU) / lado;
+    const v = (y - minY + offsetV) / lado;
     if (i === 0) {
       geo.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(pos.count * 2), 2));
     }
@@ -294,6 +300,8 @@ function prepararModeloCamiseta(escenaOriginal) {
     const material = base.clone();
     Object.assign(material, acabadoTela);
     material.map = null;
+    // Ligera separación visual para que el decal no se vea "pegado" plano
+    material.polygonOffset = false;
     return material;
   };
 
@@ -377,8 +385,8 @@ function prepararModeloCamiseta(escenaOriginal) {
     return combinarGeometrias(partes);
   };
 
-  const geoCapaIzq = extraerPartes({ mangaLado: -1, todo: true });
-  const geoCapaDer = extraerPartes({ mangaLado: 1, todo: true });
+  const geoCapaIzq = extraerPartes({ mangaLado: -1, todo: false });
+  const geoCapaDer = extraerPartes({ mangaLado: 1, todo: false });
   const geoFrente = extraerPartes({ triangulo: (c) => c.z >= centroZ });
   const geoEspalda = extraerPartes({ triangulo: (c) => c.z < centroZ });
 
@@ -403,8 +411,8 @@ function prepararModeloCamiseta(escenaOriginal) {
       alphaTest: 0.01,
       depthWrite: false,
       polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
     });
     material.map = null;
 
@@ -688,8 +696,8 @@ function prepararModeloMug(escenaOriginal) {
       alphaTest: 0.01,
       depthWrite: false,
       polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
     });
     material.map = null;
     const capa = new THREE.Mesh(uvPared, material);
@@ -776,6 +784,16 @@ function ModeloGltf({
   posicionTexto = { x: 50, y: 50 },
   rotacionTexto = 0,
   escalaTexto = 1,
+  interactivo = false,
+  imagenActivaId = null,
+  imagenPendiente = null,
+  onColocar,
+  onMover,
+  onSeleccionar,
+  caraCamara,
+  arrastrandoImagen = false,
+  onArrastrarImagen,
+  dragPreview = null,
 }) {
   const { scene } = useGLTF(url);
 
@@ -784,23 +802,29 @@ function ModeloGltf({
   const generacionRef = useRef(0);
 
   // Disenos efectivos: array del Personalizador o diseño único (Generador usa
-  // disenoUrl).
+  // disenoUrl). Durante arrastre se excluye la imagen arrastrada de la textura
+  // (se muestra vía preview sprite en alta calidad y sin regenerar canvas).
   const disenosEfectivos = useMemo(() => {
-    if (imagenes && imagenes.length) return imagenes;
-    if (disenoUrl) {
-      return [{ url: disenoUrl, x: 50, y: 45, escala: 1, rotacion: 0 }];
+    let lista = null;
+    if (imagenes && imagenes.length) lista = imagenes;
+    else if (disenoUrl) return [{ url: disenoUrl, x: 50, y: 45, escala: 1, rotacion: 0 }];
+    else return [];
+    if (dragPreview?.id) {
+      lista = lista.filter((im) => im.id !== dragPreview.id);
     }
-    return [];
-  }, [imagenes, disenoUrl]);
+    return lista;
+  }, [imagenes, disenoUrl, dragPreview]);
 
   // Color + estampados en un solo efecto:
   //  - superficie sin contenido → color liso vía material.color,
   //  - superficie con contenido → su capa de proyección se hace visible con
   //    una textura transparente (solo el estampado es opaco); el color de la
   //    prenda vive siempre en los materiales base.
+  // Sincrónico para seguimiento 1:1 del cursor; durante el arrastre se usa
+  // baja resolución (256) + cache de imágenes para mantener 60fps sin retraso.
   useEffect(() => {
-    const generacion = ++generacionRef.current;
     let cancelado = false;
+    const generacion = ++generacionRef.current;
 
     const aplicarColorLiso = (material) => {
       if (!material) return;
@@ -821,8 +845,6 @@ function ModeloGltf({
       };
     }
 
-    // Configs de texto por capa: el texto principal + cada emoji independiente.
-    // Cada uno conserva su posición, escala, rotación y tamaño propios.
     const textosConfig = [];
     if (texto && texto.trim()) {
       textosConfig.push({
@@ -855,25 +877,65 @@ function ModeloGltf({
     preparado.materialesLisos.forEach(aplicarColorLiso);
 
     const grupos = agruparDisenosPorCara(disenosEfectivos, unaSuperficie);
+    // 512 siempre para nitidez (256 se veía borroso en mangas/laterales y se
+    // corrompía por filtrado). El cache + sin shadowBlur mantiene 60fps
+    // incluso en drag; bajar a 256 no compensaba el blur.
+    const tamanoTextura = 512;
 
-    for (const superficie of preparado.superficies) {
-      const material = superficie.material;
-      if (!material) continue;
+      for (const superficie of preparado.superficies) {
+        const material = superficie.material;
+        if (!material) continue;
 
-      const disenosSup = grupos[superficie.clave] ?? [];
-      const textosSup = superficie.conTexto ? textosConfig : [];
-      const hayContenidoSup = disenosSup.length > 0 || textosSup.length > 0;
+        const disenosSup = grupos[superficie.clave] ?? [];
+        const textosSup = superficie.conTexto ? textosConfig : [];
+        const hayContenidoSup = disenosSup.length > 0 || textosSup.length > 0;
 
-      // Capas de proyección (frente, espalda, mangas): material transparente,
-      // se muestran solo cuando su ubicación tiene contenido.
-      if (superficie.transparencia) {
-        const capa = superficie.mesh;
-        if (!hayContenidoSup) {
-          if (material.map != null) {
-            material.map = null;
-            material.needsUpdate = true;
+        if (superficie.transparencia) {
+          const capa = superficie.mesh;
+          if (!hayContenidoSup) {
+            if (material.map != null) {
+              material.map = null;
+              material.needsUpdate = true;
+            }
+            if (capa) capa.visible = false;
+            continue;
           }
-          if (capa) capa.visible = false;
+
+          componerTexturaCamiseta({
+            color,
+            disenos: disenosSup,
+            textos: textosSup,
+            tamano: tamanoTextura,
+            recortarSilueta: superficie.silueta,
+            espejoX: superficie.espejoX,
+            espejoY: superficie.espejoY,
+            fondoTransparente: true,
+            anchoBase: superficie.anchoBase,
+          })
+            .then((textura) => {
+              if (cancelado || generacion !== generacionRef.current) {
+                textura.dispose();
+                return;
+              }
+              material.transparent = true;
+              material.alphaTest = 0.01;
+              material.opacity = 1;
+              material.map = textura;
+              textura.minFilter = THREE.LinearFilter;
+              textura.magFilter = THREE.LinearFilter;
+              material.color.set("#ffffff");
+              material.needsUpdate = true;
+              if (capa) capa.visible = true;
+              const anterior = texturasRef.current[superficie.clave];
+              texturasRef.current[superficie.clave] = textura;
+              if (anterior) anterior.dispose();
+            })
+            .catch(() => {});
+          continue;
+        }
+
+        if (!hayContenidoSup) {
+          aplicarColorLiso(material);
           continue;
         }
 
@@ -881,10 +943,11 @@ function ModeloGltf({
           color,
           disenos: disenosSup,
           textos: textosSup,
+          tamano: tamanoTextura,
           recortarSilueta: superficie.silueta,
           espejoX: superficie.espejoX,
           espejoY: superficie.espejoY,
-          fondoTransparente: true,
+          mapearTorso: superficie.mapearTorso,
           anchoBase: superficie.anchoBase,
         })
           .then((textura) => {
@@ -892,58 +955,22 @@ function ModeloGltf({
               textura.dispose();
               return;
             }
-            // Garantiza que la capa renderice el decal con alpha real: el
-            // fondo de la textura es transparente (alpha 0) y debe descartarse
-            // para no pintar un recuadro sólido detrás del diseño.
-            material.transparent = true;
-            material.alphaTest = 0.01;
-            material.opacity = 1;
             material.map = textura;
+            textura.minFilter = THREE.LinearFilter;
+            textura.magFilter = THREE.LinearFilter;
             material.color.set("#ffffff");
             material.needsUpdate = true;
-            if (capa) capa.visible = true;
             const anterior = texturasRef.current[superficie.clave];
             texturasRef.current[superficie.clave] = textura;
             if (anterior) anterior.dispose();
           })
           .catch(() => {});
-        continue;
       }
-
-      if (!hayContenidoSup) {
-        aplicarColorLiso(material);
-        continue;
-      }
-
-      componerTexturaCamiseta({
-        color,
-        disenos: disenosSup,
-        textos: textosSup,
-        recortarSilueta: superficie.silueta,
-        espejoX: superficie.espejoX,
-        espejoY: superficie.espejoY,
-        mapearTorso: superficie.mapearTorso,
-        anchoBase: superficie.anchoBase,
-      })
-        .then((textura) => {
-          if (cancelado || generacion !== generacionRef.current) {
-            textura.dispose();
-            return;
-          }
-          material.map = textura;
-          material.color.set("#ffffff");
-          material.needsUpdate = true;
-          const anterior = texturasRef.current[superficie.clave];
-          texturasRef.current[superficie.clave] = textura;
-          if (anterior) anterior.dispose();
-        })
-        .catch(() => {});
-    }
 
     return () => {
       cancelado = true;
     };
-  }, [color, disenosEfectivos, emojis, texto, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado, posicionTexto, rotacionTexto, escalaTexto, preparado, unaSuperficie]);
+  }, [color, disenosEfectivos, emojis, texto, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado, posicionTexto, rotacionTexto, escalaTexto, preparado, unaSuperficie, arrastrandoImagen]);
 
   // Limpieza: solo lo creado por esta instancia (materiales, texturas y
   // geometrías de las capas de proyección). Las geometrías del glTF
@@ -962,9 +989,94 @@ function ModeloGltf({
   const texturaSombra = useMemo(() => crearTexturaSombra(), []);
   useEffect(() => () => texturaSombra.dispose(), [texturaSombra]);
 
+  // Preview en alta calidad durante arrastre: sprite que sigue al cursor sin
+  // regenerar CanvasTexture (0.1ms vs 8ms), se commitea a la textura final al soltar.
+  const dragPreviewImagen = useMemo(() => {
+    if (!dragPreview?.id || !imagenes?.length) return null;
+    return imagenes.find((im) => im.id === dragPreview.id) ?? null;
+  }, [dragPreview, imagenes]);
+
+  const dragTexture = useMemo(() => {
+    if (!dragPreview?.id) return null;
+    const url = dragPreviewImagen?.url;
+    if (!url) return null;
+    const tex = new THREE.TextureLoader().load(url);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    tex.needsUpdate = true;
+    return tex;
+  }, [dragPreview?.id, dragPreviewImagen?.url]);
+
+  useEffect(() => () => { if (dragTexture) dragTexture.dispose(); }, [dragTexture]);
+
+  // Superficies clicables para colocar/mover diseños. Se usa la matriz mundial
+  // completa (matrixWorld) en vez de position/scale locales para que la malla
+  // invisible de raycasting coincida exactamente con el modelo visible
+  // (preparado.raiz) incluso con jerarquías rotadas (mug) o escaladas.
+  const superficiesVisibles = useMemo(
+    () => preparado.superficies.filter((s) => s.mesh && s.mesh.geometry),
+    [preparado.superficies]
+  );
+
+  const alPresionarSuperficie = (e, superficie) => {
+    if (!interactivo) return;
+    e.stopPropagation();
+    // e.uv viene del raycaster de R3F; si no hay UV no se puede posicionar
+    const uv = e.uv;
+    if (!uv) return;
+    // Normal en espacio mundo para orientar el preview pegado a la superficie
+    let normal = null;
+    if (e.face?.normal && e.object?.matrixWorld) {
+      normal = new THREE.Vector3().copy(e.face.normal).transformDirection(e.object.matrixWorld).normalize().toArray();
+    }
+    const detalle = {
+      uv: { u: uv.x, v: 1 - uv.y },
+      posicion: e.point ? [e.point.x, e.point.y, e.point.z] : [0, 0, 0.18],
+      normal,
+      cara: superficie.clave,
+    };
+    // Prioridad: si hay imagen pendiente (plantilla/subida/IA), colocarla primero
+    // aunque haya una imagen activa seleccionada. Antes el orden inverso hacía que
+    // "aplicar plantilla" no funcionara si había una imagen activa.
+    if (imagenPendiente && onColocar) {
+      onColocar(detalle);
+      return;
+    }
+    if (imagenActivaId && onMover) {
+      if (onArrastrarImagen && e.type === "pointerdown") {
+        onArrastrarImagen(true);
+      }
+      onMover(imagenActivaId, detalle);
+    } else if (onSeleccionar) {
+      onSeleccionar(superficie.clave);
+    }
+  };
+
   return (
     <group>
       <primitive object={preparado.raiz} />
+      {/* Mallas invisibles para raycasting: usan matrixWorld completa para estar
+          alineadas con el modelo visible, no solo position/scale locales */}
+      {interactivo &&
+        superficiesVisibles.map((s) => {
+          s.mesh.updateWorldMatrix(true, false);
+          return (
+            <mesh
+              key={s.clave}
+              geometry={s.mesh.geometry}
+              matrix={s.mesh.matrixWorld}
+              matrixAutoUpdate={false}
+              onPointerDown={(e) => alPresionarSuperficie(e, s)}
+              onPointerMove={(e) => {
+                if (arrastrandoImagen && imagenActivaId && onMover) {
+                  alPresionarSuperficie(e, s);
+                }
+              }}
+            >
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
+          );
+        })}
       {/* Sombra de contacto suave debajo del producto */}
       <mesh
         rotation-x={-Math.PI / 2}
@@ -974,6 +1086,20 @@ function ModeloGltf({
         <planeGeometry args={[3.2, 3.2]} />
         <meshBasicMaterial map={texturaSombra} transparent depthWrite={false} />
       </mesh>
+      {/* Preview pegado a la superficie durante drag: plano orientado a la normal, sin regenerar canvas */}
+      {dragPreview?.posicion && dragTexture && dragPreviewImagen && (() => {
+        const w = 0.55 * (dragPreviewImagen.escala ?? 1);
+        const h = w * ((dragPreviewImagen.naturalHeight || 1) / (dragPreviewImagen.naturalWidth || 1));
+        const n = dragPreview.normal ? new THREE.Vector3(...dragPreview.normal) : new THREE.Vector3(0,0,1);
+        const pos = new THREE.Vector3(...dragPreview.posicion).addScaledVector(n, 0.015);
+        const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), n.clone().normalize());
+        return (
+          <mesh position={pos} quaternion={quat} scale={[1,1,1]} renderOrder={3}>
+            <planeGeometry args={[w, h]} />
+            <meshBasicMaterial map={dragTexture} transparent opacity={0.98} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+          </mesh>
+        );
+      })()}
     </group>
   );
 }
@@ -1010,7 +1136,7 @@ function IndicadorCarga() {
 /* ------------------------------------------------------------------ */
 /* Visor 3D compartido (canvas, luces y órbita)                        */
 
-function Visor3D({ children }) {
+function Visor3D({ children, arrastrandoImagen = false }) {
   return (
     <div
       style={{
@@ -1023,7 +1149,13 @@ function Visor3D({ children }) {
       <Canvas
         flat
         dpr={[1, 2]}
-        gl={{ antialias: true, alpha: true }}
+        gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+        onCreated={({ gl }) => {
+          gl.domElement.addEventListener("webglcontextlost", (e) => {
+            e.preventDefault();
+            console.warn("WebGL context perdido, recuperando...");
+          }, false);
+        }}
         camera={{ position: [0, 0.15, 4.15], fov: 45, near: 0.1, far: 100 }}
         style={{ touchAction: "none" }}
       >
@@ -1035,6 +1167,7 @@ function Visor3D({ children }) {
 
         <OrbitControls
           makeDefault
+          enabled={!arrastrandoImagen}
           enablePan={false}
           enableDamping
           dampingFactor={0.08}
@@ -1051,7 +1184,7 @@ function Visor3D({ children }) {
 
 function VistaCamiseta(props) {
   return (
-    <Visor3D>
+    <Visor3D arrastrandoImagen={props.arrastrandoImagen}>
       <Suspense fallback={null}>
         <ModeloGltf
           url={MODELOS_3D.camiseta}
@@ -1065,7 +1198,7 @@ function VistaCamiseta(props) {
 
 function VistaMugGltf(props) {
   return (
-    <Visor3D>
+    <Visor3D arrastrandoImagen={props.arrastrandoImagen}>
       <Suspense fallback={null}>
         <ModeloGltf
           url={MODELOS_3D.mug}

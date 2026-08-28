@@ -2,9 +2,7 @@ import * as THREE from "three";
 import procesarDiseno from "./quitarFondoBlanco";
 import { cargarFuenteParaCanvas } from "./fuentesTexto";
 
-// Contorno de la camiseta (tipo "buzo") en unidades del mundo (caja de 2.6 x
-// 2.6). Se usa tanto para la geometría extruida (grosor real con bisel) como
-// para recortar el "decal" de los diseños a la silueta.
+// Contorno de la camiseta en unidades del mundo (caja de 2.6 x 2.6).
 const CAMISETA = {
   puntos: [
     [-0.95, -1.25],
@@ -25,39 +23,45 @@ const CAMISETA = {
   cuelloControl: [0, 0.75],
 };
 
-// Ancho base de cada imagen insertada (fracción del contenedor), igual que en
-// PrendaMockup, para que la vista 3D coincida con el mockup 2D.
 const ANCHO_IMAGEN_BASE = 0.38;
 
-// El editor 2D coloca el diseño en un contenedor CUADRADO (x/y = % del cuadrado),
-// mientras que la textura 3D del torso solo cubre la zona de la camiseta dentro
-// de ese cuadrado. Este rectángulo describe el torso dentro del cuadrado 2D
-// (fracciones) para re-mapear posición y tamaño del diseño y que el estampado se
-// vea igual de grande y en el mismo sitio que en el editor.
-//
-// Valores medidos sobre camiseta-base.png (recorte al cuadrado central) y el
-// modelo tshirt.gltf normalizado: el torso mide ~63.5% del ancho y ~96% del alto
-// de la camiseta completa.
 const AREA_IMPRIMIBLE_TORSO = {
-  x0: 0.302, // borde izquierdo del torso (fracción del cuadrado)
-  y0: 0.181, // borde superior del torso (fracción del cuadrado)
-  ancho: 0.398, // ancho del torso (fracción del cuadrado)
-  alto: 0.636, // alto del torso (fracción del cuadrado)
+  x0: 0.302,
+  y0: 0.181,
+  ancho: 0.398,
+  alto: 0.636,
 };
 
+const cacheImagenes = new Map(); // url -> Promise<HTMLImageElement>
+
 function cargarImagen(src, crossOrigin) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    if (crossOrigin) img.crossOrigin = crossOrigin;
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
+  // Cachea por URL para no recargar la misma imagen en cada frame del arrastre.
+  // La promesa se comparte entre llamadas concurrentes (muy frecuente al arrastrar).
+  const clave = `${src}::${crossOrigin ?? ""}`;
+  if (cacheImagenes.has(clave)) return cacheImagenes.get(clave);
+
+  const intentar = (conCors) =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      if (conCors && crossOrigin) img.crossOrigin = crossOrigin;
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+
+  const promesa = (!crossOrigin || src?.startsWith("data:"))
+    ? intentar(false)
+    : intentar(true).catch(() => intentar(false));
+
+  // Guarda en cache y limpia en error para permitir reintento
+  promesa.catch(() => cacheImagenes.delete(clave));
+  if (cacheImagenes.size > 80) {
+    cacheImagenes.delete(cacheImagenes.keys().next().value);
+  }
+  cacheImagenes.set(clave, promesa);
+  return promesa;
 }
 
-// Construye el contorno de la camiseta usando un objeto con las mismas
-// operaciones de un path 2D (canvas) o un THREE.Shape, para no duplicar las
-// coordenadas. El segmento entre el índice 6 y 7 es la curva del cuello.
 function construirContorno(p) {
   p.moveTo(CAMISETA.puntos[0][0], CAMISETA.puntos[0][1]);
   for (let i = 1; i < CAMISETA.puntos.length; i++) {
@@ -71,7 +75,6 @@ function construirContorno(p) {
   p.closePath();
 }
 
-// Devuelve un THREE.Shape con la silueta de la camiseta (para extruir).
 export function crearShapeCamiseta() {
   const shape = new THREE.Shape();
   construirContorno({
@@ -83,7 +86,6 @@ export function crearShapeCamiseta() {
   return shape;
 }
 
-// Dibuja el contorno de la camiseta sobre un canvas 2D (para recortar el decal).
 function dibujarContornoCamiseta(ctx, tamano) {
   const escala = tamano / 2.6;
   const cx = tamano / 2;
@@ -97,9 +99,6 @@ function dibujarContornoCamiseta(ctx, tamano) {
   });
 }
 
-// Convierte una coordenada del editor 2D (x/y en % del contenedor cuadrado) al
-// rectángulo de impresión dentro del lienzo de la textura. Devuelve el centro
-// (cx/cy) en px y los factores de escala fx/fy para ancho y alto del contenido.
 function mapearPorArea(x, y, tamano, area) {
   if (!area) {
     return { cx: (x / 100) * tamano, cy: (y / 100) * tamano, fx: 1, fy: 1 };
@@ -114,12 +113,6 @@ function mapearPorArea(x, y, tamano, area) {
   };
 }
 
-// Dibuja el texto del personalizador en el canvas. Aplica la misma cadena de
-// transformaciones (trasladar → rotar → escalar) que el editor 2D y la imagen
-// final guardada, para que las tres vistas coincidan. `area` re-mapea las
-// coordenadas al rectángulo imprimible del torso (solo camiseta frente/espalda).
-// Espera la descarga de la fuente web elegida: sin esto, el canvas dibujaría
-// con el fallback mientras el editor 2D ya muestra la fuente real.
 async function dibujarTexto(ctx, texto, w, h, area = null) {
   if (!texto || !texto.contenido || !texto.contenido.trim()) return;
 
@@ -132,7 +125,7 @@ async function dibujarTexto(ctx, texto, w, h, area = null) {
   ctx.rotate(((texto.rotacion ?? 0) * Math.PI) / 180);
   ctx.scale(texto.escala ?? 1, texto.escala ?? 1);
   ctx.fillStyle = texto.color || "#111111";
-  // Formato: peso (negrita), estilo (cursiva) y subrayado (línea manual).
+  
   const peso = texto.negrita ? "700" : "600";
   const estilo = texto.cursiva ? "italic " : "";
   const tamDibujo = Math.round((texto.tamano || 32) * (w / 500) * fx);
@@ -140,6 +133,7 @@ async function dibujarTexto(ctx, texto, w, h, area = null) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(texto.contenido, 0, 0);
+
   if (texto.subrayado) {
     const ancho = ctx.measureText(texto.contenido).width;
     ctx.strokeStyle = texto.color || "#111111";
@@ -152,22 +146,15 @@ async function dibujarTexto(ctx, texto, w, h, area = null) {
   ctx.restore();
 }
 
-// Dibuja una lista de configs de texto (texto principal + emojis como capas
-// independientes), cada uno con su propia posición/escala/rotación/tamaño.
 async function dibujarTextos(ctx, textos, w, h, area = null) {
   for (const config of textos ?? []) {
     await dibujarTexto(ctx, config, w, h, area);
   }
 }
 
-// Carga un diseño igual que se ve en el editor 2D: con el fondo blanco
-// conectado a las esquinas vuelto transparente (procesarDiseno). Sin esto, en
-// 3D se veía la caja blanca alrededor del diseño mientras el editor no.
 async function cargarDiseno(url) {
   if (!url) return null;
   try {
-    // procesarDiseno nunca rechaza: devuelve { ok:false, dataUrl:url } si no
-    // aplica (o falló), así que siempre hay URL utilizable.
     const procesada = await procesarDiseno(url);
     return await cargarImagen(procesada?.dataUrl ?? url, "anonymous");
   } catch {
@@ -175,21 +162,12 @@ async function cargarDiseno(url) {
   }
 }
 
-// Textura completa para la prenda: rellena con el color elegido y dibuja
-// encima los diseños y el texto (sin tintarlos). Al ser opaca evita el problema
-// de los píxeles transparentes (RGB negro) que oscurecían la prenda al
-// multiplicarse con material.color.
-//
-// espejoX/espejoY compensan modelos cuyos UVs están invertidos respecto a los
-// ejes del mundo (detectado por correlación posición↔UV en Prenda3D): se dibuja
-// todo el contenido espejado para que en el modelo se vea derecho y en la misma
-// posición que en el editor 2D.
 export async function componerTexturaCamiseta({
   color = "#ffffff",
   disenos = [],
   texto = null,
   textos = null,
-  tamano = 1024,
+  tamano = 512,
   recortarSilueta = false,
   espejoX = false,
   espejoY = false,
@@ -202,11 +180,6 @@ export async function componerTexturaCamiseta({
   canvas.height = tamano;
   const ctx = canvas.getContext("2d");
 
-  // 1. Color sólido base de toda la prenda. En capas de proyección (frente,
-  //    espalda, mangas) se deja el fondo TRANSPARENTE: se limpia el lienzo y
-  //    no se pinta ningún color, para que el decal conserve el canal alpha y
-  //    solo el estampado sea opaco. Cualquier fillRect aquí produciría el
-  //    recuadro sólido (gris/blanco) alrededor del diseño en el modelo 3D.
   if (!fondoTransparente) {
     ctx.fillStyle = color || "#ffffff";
     ctx.fillRect(0, 0, tamano, tamano);
@@ -215,7 +188,6 @@ export async function componerTexturaCamiseta({
     ctx.globalCompositeOperation = "source-over";
   }
 
-  // 2. Diseños + texto, opcionalmente recortados a la silueta del torso.
   ctx.save();
   if (recortarSilueta) {
     dibujarContornoCamiseta(ctx, tamano);
@@ -234,22 +206,26 @@ export async function componerTexturaCamiseta({
     const img = await cargarDiseno(d.url);
     if (!img) continue;
 
-    const baseW = tamano * anchoBase * (d.escalaX ?? d.escala ?? 1);
-    const baseH =
-      baseW *
-      (img.naturalHeight / img.naturalWidth) *
-      (d.escalaY ?? d.escala ?? 1);
+    const aspectRatio = img.naturalHeight / img.naturalWidth;
+    // Inset 12% + borde sutil para romper efecto "pegado" sin shadowBlur costoso.
+    // El inset deja aire respecto a costuras y el borde fino separa visualmente.
+    const INSET = 0.88;
+    const baseW = tamano * anchoBase * (d.escala ?? 1) * INSET;
+    const baseH = baseW * aspectRatio;
+
     const { cx, cy, fx, fy } = mapearPorArea(d.x, d.y, tamano, area);
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(((d.rotacion ?? 0) * Math.PI) / 180);
     ctx.drawImage(img, (-baseW * fx) / 2, (-baseH * fy) / 2, baseW * fx, baseH * fy);
+    // Borde muy sutil (1px) para que no se confunda con la tela, barato y sin blur
+    ctx.strokeStyle = "rgba(0,0,0,0.09)";
+    ctx.lineWidth = Math.max(1, tamano * 0.003);
+    ctx.strokeRect((-baseW * fx) / 2, (-baseH * fy) / 2, baseW * fx, baseH * fy);
     ctx.restore();
   }
 
-  // Texto + emojis: `textos` (lista de capas) tiene prioridad; `texto` se
-  // mantiene para llamadas de un único texto (compatibilidad).
   const listaTextos = textos ?? (texto ? [texto] : []);
   await dibujarTextos(ctx, listaTextos, tamano, tamano, area);
   ctx.restore();
@@ -257,39 +233,40 @@ export async function componerTexturaCamiseta({
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;
-  // El canvas usa alpha no-premultiplicado (RGBA estándar); dejar el flag en
-  // false evita que los píxeles transparentes se interpreten como sólidos.
   textura.premultiplyAlpha = false;
+  textura.wrapS = THREE.ClampToEdgeWrapping;
+  textura.wrapT = THREE.ClampToEdgeWrapping;
+  textura.anisotropy = 4;
   textura.needsUpdate = true;
   return textura;
 }
 
-// Textura para prendas cilíndricas (mug): cilindro de color sólido con los
-// diseños dibujados encima. `disenos` (o `disenoUrl` para un único diseño) se
-// pre-distorsionan para compensar el envolver del cilindro.
 export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null, textos = null, disenos = null }) {
-  const texW = 1024;
-  const texH = 1024;
+  const texW = 512;
+  const texH = 512;
 
   const canvas = document.createElement("canvas");
   canvas.width = texW;
   canvas.height = texH;
   const ctx = canvas.getContext("2d");
 
-  // 1. Color sólido de la prenda (el color real elegido por el usuario).
   ctx.fillStyle = color;
   ctx.fillRect(0, 0, texW, texH);
 
-  // 2. Diseños, pre-distorsionados para compensar el envolver del cilindro.
   const dibujarUnDiseno = async (d, anchoFraccionPropio) => {
     const diseno = await cargarDiseno(d.url);
     if (!diseno) return;
 
     const aspect = diseno.naturalHeight / diseno.naturalWidth;
-    const anchoFisico = anchoFraccionPropio * (d.escalaX ?? d.escala ?? 1) * circunferencia;
-    const altoFisico = anchoFisico * aspect * (d.escalaY ?? d.escala ?? 1);
+    const escX = d.escalaX ?? d.escala ?? 1;
+    const escY = d.escalaY ?? d.escala ?? 1;
 
-    const dw = anchoFisico / circunferencia * texW;
+    const anchoFisico = anchoFraccionPropio * escX * circunferencia;
+    const altoFisico = d.escalaY 
+      ? anchoFraccionPropio * escY * altura 
+      : anchoFisico * aspect;
+
+    const dw = (anchoFisico / circunferencia) * texW;
     const dh = (altoFisico / altura) * texH;
     const cx = (d.x / 100) * texW;
     const cy = (d.y / 100) * texH;
@@ -297,14 +274,17 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(((d.rotacion ?? 0) * Math.PI) / 180);
-    ctx.drawImage(diseno, -dw / 2, -dh / 2, dw, dh);
+    // Inset 12% + borde sutil, sin blur para mantener nitidez y performance
+    const INSET_MUG = 0.88;
+    ctx.drawImage(diseno, -dw * INSET_MUG / 2, -dh * INSET_MUG / 2, dw * INSET_MUG, dh * INSET_MUG);
+    ctx.strokeStyle = "rgba(0,0,0,0.07)";
+    ctx.lineWidth = Math.max(1, texW * 0.003);
+    ctx.strokeRect(-dw * INSET_MUG / 2, -dh * INSET_MUG / 2, dw * INSET_MUG, dh * INSET_MUG);
     ctx.restore();
   };
 
   if (disenos && disenos.length) {
     for (const d of disenos) {
-      // La escala del usuario se aplica dentro de dibujarUnDiseno; aquí solo
-      // pasa el ancho base para no multiplicarla dos veces.
       await dibujarUnDiseno(d, ANCHO_IMAGEN_BASE);
     }
   } else if (disenoUrl) {
@@ -314,15 +294,15 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
     );
   }
 
-  // 3. Texto + emojis del personalizador, dibujados encima del diseño como
-  //    capas independientes (`textos` tiene prioridad; `texto` es un único
-  //    texto para compatibilidad).
   const listaTextos = textos ?? (texto ? [texto] : []);
   await dibujarTextos(ctx, listaTextos, texW, texH);
 
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;
   textura.premultiplyAlpha = false;
+  textura.wrapS = THREE.ClampToEdgeWrapping;
+  textura.wrapT = THREE.ClampToEdgeWrapping;
+  textura.anisotropy = 4;
   textura.needsUpdate = true;
   return textura;
 }

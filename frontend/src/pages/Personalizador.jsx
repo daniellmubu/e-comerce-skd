@@ -10,9 +10,6 @@ import {
   FaPalette,
   FaTrash,
   FaExpand,
-  FaCompress,
-  FaMinus,
-  FaPlus,
   FaTimes,
   FaExclamationTriangle,
   FaPrint,
@@ -26,13 +23,16 @@ import { guardarPersonalizacion } from "../services/personalizacionService";
 import { generarDiseno, subirDiseno } from "../services/disenoService";
 import { listarPlantillas } from "../services/plantillaService";
 import { getErrorMessage } from "../services/api";
-import PrendaMockup, {
-  ANCHO_IMAGEN_BASE,
-  ESCALA_MIN,
-  ESCALA_MAX,
-  obtenerBaseMockup,
-} from "../components/ui/PrendaMockup";
-import Prenda3D from "../components/ui/Prenda3D";
+import camisetaBase from "../assets/images/products/base/camiseta-base.png";
+import camisetaEspalda from "../assets/images/products/base/camiseta-espalda.png";
+import camisetaMangaIzquierda from "../assets/images/products/base/camiseta-manga-izquierda.png";
+import camisetaMangaDerecha from "../assets/images/products/base/camiseta-manga-derecha.png";
+import pocilloFrente from "../assets/images/products/base/pocillo-frente.png";
+import pocilloAsa from "../assets/images/products/base/pocillo-asa.png";
+import Prenda3D, {
+  ESCALA_MIN_3D,
+  ESCALA_MAX_3D,
+} from "../components/ui/Prenda3D";
 import { removeBackground } from "@imgly/background-removal";
 import procesarDiseno from "../utils/quitarFondoBlanco";
 import {
@@ -49,6 +49,39 @@ const TAMANO_LIENZO = 1000;
 // El mockup de referencia mide 500px; el texto y las imágenes se escalan a este
 // lienzo más grande para que la imagen guardada se vea nítida.
 const FACTOR_LIENZO = TAMANO_LIENZO / 500;
+
+// Ancho base de una imagen al aplanarla en el lienzo final (fracción del
+// cuadrado). Se usa para estimar el DPI y para dibujar el diseño en la imagen
+// guardada; el editor 3D usa su propio ancho en unidades de mundo.
+const ANCHO_IMAGEN_BASE = 0.38;
+
+// Mockups base (foto de la prenda con fondo transparente) usados solo para
+// componer la imagen final que se guarda como miniatura.
+const IMAGENES_MOCKUP = {
+  camiseta: camisetaBase,
+  mug: pocilloFrente,
+};
+
+const BASES_MOCKUP_POR_CARA = {
+  camiseta: {
+    frente: camisetaBase,
+    espalda: camisetaEspalda,
+    mangaIzquierda: camisetaMangaIzquierda,
+    mangaDerecha: camisetaMangaDerecha,
+  },
+  mug: {
+    frente: pocilloFrente,
+    atras: pocilloAsa,
+  },
+};
+
+function obtenerBaseMockup(tipo, cara) {
+  return (
+    (cara && BASES_MOCKUP_POR_CARA[tipo]?.[cara]) ||
+    IMAGENES_MOCKUP[tipo] ||
+    camisetaBase
+  );
+}
 
 // Categoría del backend -> tipo de mockup interno del personalizador.
 const TIPO_POR_CATEGORIA = {
@@ -165,10 +198,10 @@ function calcularDpi(naturalWidth, anchoRenderizadoPx) {
   return pulgadas > 0 ? naturalWidth / pulgadas : 0;
 }
 
-// DPI efectivo de una imagen ya colocada en el lienzo, con su escala actual.
+// DPI efectivo de una imagen ya colocada, con su escala actual.
 function dpiDeImagen(img) {
   const ancho =
-    TAMANO_LIENZO * ANCHO_IMAGEN_BASE * (img.escalaX ?? img.escala ?? 1);
+    TAMANO_LIENZO * ANCHO_IMAGEN_BASE * (img.escala ?? 1);
   return calcularDpi(img.naturalWidth, ancho);
 }
 
@@ -209,10 +242,14 @@ function Personalizador() {
     () => TIPO_POR_CATEGORIA[productoOrigen?.categoria] ?? "camiseta"
   );
 
-  // Lista de imágenes insertadas (subidas o generadas por IA). Cada una guarda
-  // la cara/superficie de la prenda, su posición (%), rotación (grados) y
-  // escala para poder arrastrarla y redimensionarla libremente.
-  const [imagenes, setImagenes] = useState([]); // { id, url, cara, x, y, escala, rotacion }
+  // Lista de imágenes insertadas (subidas, IA o plantillas). Cada una guarda la
+  // cara de la prenda, su posición en coordenadas UV [0,1] (de la capa de
+  // proyección 3D), la posición local del modelo (para el <Decal>), la rotación
+  // (grados) y la escala. Se colocan/arrastran directamente sobre el modelo 3D.
+  const [imagenes, setImagenes] = useState([]);
+  // Imagen lista para colocar: cuando existe, el siguiente clic sobre el modelo
+  // la coloca en ese punto (en vez de editarse en un lienzo 2D).
+  const [imagenPendiente, setImagenPendiente] = useState(null); // { url, naturalWidth, naturalHeight }
   const [imagenActivaId, setImagenActivaId] = useState(null);
   const [caraActiva, setCaraActiva] = useState("frente");
 
@@ -252,9 +289,10 @@ function Personalizador() {
   // fondo original.
   const [recorteInteligente, setRecorteInteligente] = useState(true);
   const [vista3DAbierta, setVista3DAbierta] = useState(false);
-  // Zoom del lienzo de edición (0.5x - 3x) y modo pantalla completa del mismo.
-  const [zoomLienzo, setZoomLienzo] = useState(1);
-  const [lienzoMaximizado, setLienzoMaximizado] = useState(false);
+  const [arrastrandoImagen, setArrastrandoImagen] = useState(false);
+  const [dragPreview, setDragPreview] = useState(null); // preview durante arrastre para 60fps sin regenerar textura
+  const arrastrandoRef = useRef(false);
+  useEffect(() => { arrastrandoRef.current = arrastrandoImagen; }, [arrastrandoImagen]);
 
   // Galería de plantillas prediseñadas: se carga la primera vez que se abre
   // la pestaña y se filtra en cliente por categoría y compatibilidad.
@@ -278,11 +316,7 @@ function Personalizador() {
   );
 
   const caraDe = (img) => img.cara ?? "frente";
-  // Imágenes de la cara activa (las que se editan en el mockup grande).
-  const imagenesEnCaraActiva = imagenes.filter(
-    (img) => caraDe(img) === caraActiva
-  );
-  // Emojis de la cara activa (misma regla que las imágenes).
+  // Emojis de la cara activa (se dibujan en la imagen final guardada).
   const emojisEnCaraActiva = emojis.filter((e) => (e.cara ?? "frente") === caraActiva);
 
   const hayDiseno = Boolean(
@@ -384,12 +418,12 @@ function Personalizador() {
         return;
       }
 
-      // Función real del archivo que agrega capas al lienzo y las vuelve
-      // seleccionables/arrastrables con el editor normal.
-      await agregarImagen(url);
+      // Función real del archivo que deja la plantilla lista para colocarse
+      // con un clic sobre el modelo 3D (igual que subir una imagen).
+      await prepararImagenPendiente(url);
       setMensaje({
         tipo: "ok",
-        texto: `Plantilla "${plantilla.nombre}" agregada. Muévela y ajústala a tu gusto.`,
+        texto: `Plantilla "${plantilla.nombre}" lista. Haz clic sobre la prenda para colocarla.`,
       });
     } catch (err) {
       console.error("Error cargando la plantilla en el canvas:", err);
@@ -400,12 +434,10 @@ function Personalizador() {
     }
   };
 
-  const agregarImagen = async (url) => {
-    const id = crearIdImagen();
-    const offset = desplazamientoAleatorio();
-
-    // Dimensiones originales de la imagen, para poder estimar el DPI al
-    // escalarla y avisar si quedará pixelada al imprimir.
+  // Deja una imagen lista para colocar sobre el modelo 3D. Almacena sus
+  // dimensiones naturales (para conservar el aspect ratio del Decal) y avisa
+  // al usuario de que haga clic sobre la prenda.
+  const prepararImagenPendiente = async (url) => {
     let naturalWidth = 0;
     let naturalHeight = 0;
     try {
@@ -415,45 +447,99 @@ function Personalizador() {
         naturalHeight = el.naturalHeight;
       }
     } catch {
-      // Sin dimensiones: se trata como desconocidas y no se muestra aviso.
+      // Sin dimensiones
     }
+    // Deselecciona cualquier imagen/emoji/texto activo para que el siguiente
+    // clic coloque la nueva imagen en vez de mover la seleccionada (bug
+    // "no aplica la imagen" cuando había activa).
+    setImagenActivaId(null);
+    setEmojiActivoId(null);
+    setTextoActivo(false);
+    setImagenPendiente({ url, naturalWidth, naturalHeight });
+    setMensaje({
+      tipo: "ok",
+      texto: "Haz clic sobre la prenda para colocar la imagen.",
+    });
+  };
 
+  // Coloca la imagen pendiente en el punto donde el usuario hizo clic en el 3D.
+  const colocarImagen = (ubicacion) => {
+    if (!imagenPendiente) return;
+    const { uv, posicion, cara } = ubicacion;
+    const u = uv?.u ?? 0.5;
+    const v = uv?.v ?? 0.5;
     const nueva = {
-      id,
-      url,
-      cara: caraActiva,
-      x: 50 + offset,
-      y: 45 + offset,
-      escalaX: 1,
-      escalaY: 1,
+      id: crearIdImagen(),
+      url: imagenPendiente.url,
+      naturalWidth: imagenPendiente.naturalWidth ?? 0,
+      naturalHeight: imagenPendiente.naturalHeight ?? 0,
+      cara: cara ?? "frente",
+      uv: { u, v },
+      // x/y en % para compatibilidad con componerTexturaCamiseta / componerImagenFinal legacy
+      x: u * 100,
+      y: v * 100,
+      posicion: posicion ?? [0, 0, 0.18],
+      escala: 1,
       rotacion: 0,
-      naturalWidth,
-      naturalHeight,
     };
     setImagenes((prev) => [...prev, nueva]);
-    setImagenActivaId(id);
+    setImagenActivaId(nueva.id);
+    setEmojiActivoId(null);
     setTextoActivo(false);
+    setImagenPendiente(null);
+    setMensaje({
+      tipo: "ok",
+      texto: "Imagen colocada. Arrástrala, escálala o rótala desde el panel.",
+    });
   };
 
   const actualizarImagen = (id, patch) => {
     setImagenes((prev) => prev.map((img) => (img.id === id ? { ...img, ...patch } : img)));
   };
 
+  // Actualiza la posición (UV + local) de una imagen durante el arrastre en 3D.
+  // Durante el arrastre solo actualiza dragPreview (overlay 3D barato, 60fps
+  // sin regenerar CanvasTexture). Al soltar se hace el commit real a imagenes
+  // en alta calidad (512/1024 + 0.88 inset).
+  const moverImagen = (id, ubicacion) => {
+    if (arrastrandoRef.current) {
+      setDragPreview({ id, ...ubicacion });
+      return;
+    }
+    const patch = {};
+    if (ubicacion.uv) {
+      patch.uv = { u: ubicacion.uv.u, v: ubicacion.uv.v };
+      patch.x = ubicacion.uv.u * 100;
+      patch.y = ubicacion.uv.v * 100;
+    }
+    if (ubicacion.posicion) patch.posicion = ubicacion.posicion;
+    if (ubicacion.cara) patch.cara = ubicacion.cara;
+    setImagenes((prev) => prev.map((img) => (img.id === id ? { ...img, ...patch } : img)));
+  };
+
+  const commitDragPreview = () => {
+    if (!dragPreview?.id) return;
+    const { id, uv, posicion, cara } = dragPreview;
+    const patch = {};
+    if (uv) {
+      patch.uv = { u: uv.u, v: uv.v };
+      patch.x = uv.u * 100;
+      patch.y = uv.v * 100;
+    }
+    if (posicion) patch.posicion = posicion;
+    if (cara) patch.cara = cara;
+    setImagenes((prev) => prev.map((img) => (img.id === id ? { ...img, ...patch } : img)));
+    setDragPreview(null);
+  };
+
   const seleccionarImagen = (id) => {
     setImagenActivaId(id);
     setEmojiActivoId(null);
-    if (id) setTextoActivo(false);
-  };
-
-  const seleccionarTexto = () => {
-    setImagenActivaId(null);
-    setEmojiActivoId(null);
-    setTextoActivo(true);
-  };
-
-  const handleTextoTransform = (patch) => {
-    if (patch.rotacion !== undefined) setRotacionTexto(patch.rotacion);
-    if (patch.escala !== undefined) setEscalaTexto(patch.escala);
+    if (id) {
+      setTextoActivo(false);
+      const img = imagenes.find((i) => i.id === id);
+      if (img?.cara) setCaraActiva(img.cara);
+    }
   };
 
   // Añade un emoji como CAPA INDEPENDIENTE del lienzo (no se concatena al
@@ -540,48 +626,160 @@ function Personalizador() {
     };
     window.addEventListener("keydown", alTeclado);
     return () => window.removeEventListener("keydown", alTeclado);
-  });
+  }, [imagenActivaId, emojiActivoId, textoActivo]); // 👈 Arreglo de dependencias agregado
 
-  const handleSubirImagen = async (e) => {
-    const archivos = Array.from(e.target.files ?? []);
+  useEffect(() => {
+    const finArrastre = () => {
+      if (dragPreview?.id) {
+        const { id, uv, posicion, cara } = dragPreview;
+        const patch = {};
+        if (uv) {
+          patch.uv = { u: uv.u, v: uv.v };
+          patch.x = uv.u * 100;
+          patch.y = uv.v * 100;
+        }
+        if (posicion) patch.posicion = posicion;
+        if (cara) patch.cara = cara;
+        setImagenes((prev) => prev.map((img) => (img.id === id ? { ...img, ...patch } : img)));
+        setDragPreview(null);
+      }
+      setArrastrandoImagen(false);
+    };
+    window.addEventListener("pointerup", finArrastre);
+    window.addEventListener("pointercancel", finArrastre);
+    return () => {
+      window.removeEventListener("pointerup", finArrastre);
+      window.removeEventListener("pointercancel", finArrastre);
+    };
+  }, [dragPreview]);
+
+  // Coloca una imagen directamente en el centro de la cara activa (sin
+  // requerir clic), usada para subidas múltiples donde sería tedioso pedir
+  // un clic por imagen.
+  const agregarImagenDirecta = async (url) => {
+    let naturalWidth = 0;
+    let naturalHeight = 0;
+    try {
+      const el = await cargarImagenElemento(url);
+      if (el) {
+        naturalWidth = el.naturalWidth;
+        naturalHeight = el.naturalHeight;
+      }
+    } catch {
+      // sin dimensiones
+    }
+    const offset = desplazamientoAleatorio() / 100;
+    const u = Math.min(0.92, Math.max(0.08, 0.5 + offset));
+    const v = Math.min(0.92, Math.max(0.08, 0.5 + offset));
+    const nueva = {
+      id: crearIdImagen(),
+      url,
+      naturalWidth,
+      naturalHeight,
+      cara: caraActiva,
+      uv: { u, v },
+      x: u * 100,
+      y: v * 100,
+      posicion: [0, 0, 0.18],
+      escala: 1,
+      rotacion: 0,
+    };
+    setImagenes((prev) => [...prev, nueva]);
+    setImagenActivaId(nueva.id);
+    setEmojiActivoId(null);
+    setTextoActivo(false);
+  };
+
+  // Procesa archivos de imagen (subida, paste, drop) para colocarlos en 3D
+  const procesarArchivosImagen = async (archivos) => {
     if (!archivos.length) return;
-
     setProcesandoImagen(true);
     setMensaje(null);
-
-    // Procesa todas las imágenes seleccionadas, una por una.
+    // Si son varios archivos, los agregamos directamente al centro con offset;
+    // si es uno solo, lo dejamos pendiente para que el usuario elija dónde
+    // hacer clic sobre el modelo (experiencia más precisa).
+    const esMultiple = archivos.length > 1;
     for (const archivo of archivos) {
+      let dataUrl = null;
       try {
-        let dataUrl;
         if (recorteInteligente) {
-          // Quita el fondo automáticamente (persona, animal, objeto) para
-          // dejar solo el sujeto. La primera vez descarga el modelo en el
-          // navegador.
           const blob = await removeBackground(archivo);
           dataUrl = await blobToDataURL(blob);
         } else {
-          // Recorte apagado: la imagen se sube tal cual, con su fondo.
           dataUrl = await blobToDataURL(archivo);
         }
-        agregarImagen(dataUrl);
       } catch {
-        // Si el recorte falla (sin conexión, navegador sin soporte, etc.),
-        // usamos la imagen original tal cual para no bloquear al usuario.
-        const lector = new FileReader();
-        await new Promise((resolve) => {
-          lector.onload = () => {
-            agregarImagen(lector.result);
-            resolve();
-          };
-          lector.onerror = () => resolve();
+        // Fallback: usa el archivo original si removeBackground falla
+        dataUrl = await new Promise((resolve) => {
+          const lector = new FileReader();
+          lector.onload = () => resolve(lector.result);
+          lector.onerror = () => resolve(null);
           lector.readAsDataURL(archivo);
         });
       }
+      if (!dataUrl) continue;
+      if (esMultiple) {
+        await agregarImagenDirecta(dataUrl);
+      } else {
+        await prepararImagenPendiente(dataUrl);
+      }
     }
-
     setProcesandoImagen(false);
-    // Limpia el input para poder volver a subir el mismo archivo si se quiere.
+    if (esMultiple && archivos.length > 1) {
+      setMensaje({ tipo: "ok", texto: `${archivos.length} imágenes agregadas. Selecciona una para moverla/escalarla.` });
+    }
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleSubirImagen = async (e) => {
+    const archivos = Array.from(e.target.files ?? []);
+    await procesarArchivosImagen(archivos);
+  };
+
+  // Pegar con Ctrl+V: si el portapapeles trae imágenes (screenshot, copy-image),
+  // se procesan igual que una subida para colocarlas en el modelo 3D
+  useEffect(() => {
+    const alPegar = async (e) => {
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const archivosImagen = items
+        .filter((it) => it.type.startsWith("image/"))
+        .map((it) => it.getAsFile())
+        .filter(Boolean);
+      // Fallback: files del clipboard (algunos navegadores)
+      const filesFallback = Array.from(e.clipboardData?.files ?? []).filter((f) =>
+        f.type.startsWith("image/")
+      );
+      const archivos = archivosImagen.length ? archivosImagen : filesFallback;
+      if (!archivos.length) return;
+      e.preventDefault();
+      await procesarArchivosImagen(archivos);
+      setMensaje({
+        tipo: "ok",
+        texto: "Imagen pegada. Haz clic sobre la prenda para colocarla en 3D.",
+      });
+    };
+    window.addEventListener("paste", alPegar);
+    return () => window.removeEventListener("paste", alPegar);
+  }, [recorteInteligente]);
+
+  const handleDropEnEditor = async (e) => {
+    e.preventDefault();
+    const archivos = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    if (!archivos.length) return;
+    await procesarArchivosImagen(archivos);
+    setMensaje({
+      tipo: "ok",
+      texto: "Imagen soltada. Haz clic sobre la prenda para colocarla.",
+    });
+  };
+
+  const handleDragOverEnEditor = (e) => {
+    if (Array.from(e.dataTransfer?.types ?? []).includes("Files")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
   };
 
   const handleGenerarIA = async () => {
@@ -605,9 +803,8 @@ function Personalizador() {
         resultado.imagenUrl ?? resultado.url ?? resultado.imagen ?? null;
 
       if (imagenUrl) {
-        // El resultado de IA se agrega como una imagen más, para poder
-        // combinarlo con las que ya se hayan subido.
-        agregarImagen(imagenUrl);
+        // El resultado de IA queda listo para colocar con un clic en el 3D.
+        prepararImagenPendiente(imagenUrl);
       } else {
         setMensaje({
           tipo: "error",
@@ -628,6 +825,7 @@ function Personalizador() {
   const handleQuitarDiseno = () => {
     setImagenes([]);
     setImagenActivaId(null);
+    setImagenPendiente(null);
     setEmojis([]);
     setEmojiActivoId(null);
     setTextoActivo(false);
@@ -648,11 +846,10 @@ function Personalizador() {
     setMensaje(null);
   };
 
-  // Aplana el mockup de la vista activa (producto + color) junto con las
-  // imágenes y el texto en una sola imagen PNG, idéntica a lo que se ve en el
-  // lienzo 2D: así la personalización guardada muestra la prenda de fondo y
-  // no solo el diseño suelto. La posición de cada elemento es libre ({x, y}
-  // en %), la misma que usa el editor con react-moveable.
+  // Aplana la vista activa (producto + color) junto con las imágenes y el texto
+  // en una sola imagen PNG para guardarla como miniatura en "Mis diseños" / el
+  // carrito. La posición de cada imagen viene en coordenadas UV [0,1] (las
+  // mismas que se guardan en el payload).
   const componerImagenFinal = async () => {
     if (!imagenes.length && !emojis.length && !textoDiseno.trim()) return null;
 
@@ -661,9 +858,9 @@ function Personalizador() {
     canvas.height = TAMANO_LIENZO;
     const ctx = canvas.getContext("2d");
 
-    // 1. Producto de fondo: misma imagen base y encuadre que PrendaMockup
-    //    (a alto completo del lienzo, centrada horizontalmente; si es más
-    //    ancha que el cuadrado, se recorta por los lados como en pantalla).
+    // 1. Producto de fondo: misma imagen base de mockup que se usa en el
+    //    visor (a alto completo del lienzo, centrada horizontalmente; si es
+    //    más ancha que el cuadrado, se recorta por los lados).
     const baseImg = await cargarImagenElemento(
       obtenerBaseMockup(selectedProduct, caraActiva)
     );
@@ -714,16 +911,13 @@ function Personalizador() {
       const el = await cargarImagenElemento(procesada?.dataUrl ?? imagen.url);
       if (!el) continue;
 
-      const baseW =
-        TAMANO_LIENZO *
-        ANCHO_IMAGEN_BASE *
-        (imagen.escalaX ?? imagen.escala ?? 1);
-      const baseH =
-        baseW *
-        (el.naturalHeight / el.naturalWidth) *
-        (imagen.escalaY ?? imagen.escala ?? 1);
-      const cx = (imagen.x / 100) * TAMANO_LIENZO;
-      const cy = (imagen.y / 100) * TAMANO_LIENZO;
+      // Se utiliza directamente el aspect ratio natural sin multiplicar escalas duplicadas
+      const baseW = TAMANO_LIENZO * ANCHO_IMAGEN_BASE * (imagen.escala ?? 1);
+      const baseH = baseW * (el.naturalHeight / el.naturalWidth);
+      // Posición en coordenadas UV [0,1]; si viniera de un diseño antiguo en
+      // %, se usa ese valor como respaldo.
+      const cx = (imagen.uv ? imagen.uv.u : (imagen.x ?? 50) / 100) * TAMANO_LIENZO;
+      const cy = (imagen.uv ? imagen.uv.v : (imagen.y ?? 50) / 100) * TAMANO_LIENZO;
 
       ctxDiseno.save();
       ctxDiseno.translate(cx, cy);
@@ -849,10 +1043,14 @@ function Personalizador() {
       const procesada = await procesarDiseno(imagen.url);
       const el = await cargarImagenElemento(procesada?.dataUrl ?? imagen.url);
       if (!el) continue;
-      const baseW = PRINT_SIZE * ANCHO_IMAGEN_BASE * (imagen.escalaX ?? imagen.escala ?? 1);
-      const baseH = baseW * (el.naturalHeight / el.naturalWidth) * (imagen.escalaY ?? imagen.escala ?? 1);
-      const cx = bleed + (imagen.x / 100) * PRINT_SIZE;
-      const cy = bleed + (imagen.y / 100) * PRINT_SIZE;
+      const escalaUniforme = imagen.escala ?? 1;
+      const escalaX = imagen.escalaX ?? escalaUniforme;
+      const escalaY = imagen.escalaY ?? escalaUniforme;
+      const baseW = PRINT_SIZE * ANCHO_IMAGEN_BASE * escalaX;
+      const baseH = baseW * (el.naturalHeight / el.naturalWidth) * (escalaY / escalaX || 1);
+      // Soporte uv (3D) con fallback a x/y legado
+      const cx = bleed + (imagen.uv ? imagen.uv.u : (imagen.x ?? 50) / 100) * PRINT_SIZE;
+      const cy = bleed + (imagen.uv ? imagen.uv.v : (imagen.y ?? 50) / 100) * PRINT_SIZE;
       ctxDiseno.save();
       ctxDiseno.translate(cx, cy);
       ctxDiseno.rotate(((imagen.rotacion ?? 0) * Math.PI) / 180);
@@ -1011,7 +1209,18 @@ function Personalizador() {
       if (item?.id) {
         const notas = [
           `Producto: ${selectedProduct === "camiseta" ? "Camiseta" : "Mug"}`,
-          imagenes.length ? `Imágenes insertadas: ${imagenes.length}` : null,
+          imagenes.length
+            ? `Imágenes: ${imagenes
+                .map(
+                  (img, i) =>
+                    `#${i + 1} ${img.cara ?? "frente"} uv(${(
+                      img.uv?.u ?? 0.5
+                    ).toFixed(2)},${(img.uv?.v ?? 0.5).toFixed(2)}) escala ${(
+                      img.escala ?? 1
+                    ).toFixed(2)} rot ${img.rotacion ?? 0}°`
+                )
+                .join(" | ")}`
+            : null,
           emojis.length ? `Emojis insertados: ${emojis.length}` : null,
           colorSeleccionado ? `Color elegido: ${colorSeleccionado}` : null,
           textoDiseno.trim()
@@ -1042,84 +1251,53 @@ function Personalizador() {
     }
   };
 
-  // Lienzo de edición: se reutiliza en el panel central y en el modo
-  // maximizado (pantalla completa del editor 2D).
-  const lienzoMockup = (
-    <PrendaMockup
-      tipo={selectedProduct}
-      cara={caraActiva}
-      color={colorSeleccionado}
-      imagenes={imagenesEnCaraActiva}
-      imagenActivaId={imagenActivaId}
-      onImagenChange={actualizarImagen}
-      onSeleccionarImagen={seleccionarImagen}
-      emojis={emojisEnCaraActiva}
-      emojiActivoId={emojiActivoId}
-      onEmojiChange={actualizarEmoji}
-      onSeleccionarEmoji={seleccionarEmoji}
-      texto={caraActiva === "frente" ? textoDiseno : ""}
-      colorTexto={colorTexto}
-      fuenteTexto={fuenteTexto}
-      tamanoTexto={tamanoTexto}
-      esNegrita={esNegrita}
-      esCursiva={esCursiva}
-      esSubrayado={esSubrayado}
-      posicionTexto={posicionTexto}
-      onPosicionTextoChange={setPosicionTexto}
-      rotacionTexto={rotacionTexto}
-      escalaTexto={escalaTexto}
-      onTextoTransformChange={handleTextoTransform}
-      textoActivo={textoActivo && caraActiva === "frente"}
-      onSeleccionarTexto={seleccionarTexto}
-    />
-  );
-
-  // Controles de zoom (+/-) y maximizar/minimizar del lienzo.
-  const controlZoom = (
-    <div className="flex items-center gap-1 rounded-xl border border-gray-300 bg-white p-1 shadow-sm dark:border-slate-600 dark:bg-slate-900">
-      <button
-        type="button"
-        onClick={() =>
-          setZoomLienzo((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))
-        }
-        aria-label="Alejar el lienzo"
-        className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800"
-      >
-        <FaMinus className="text-xs" />
-      </button>
-      <span className="w-12 text-center text-xs font-semibold text-gray-600 dark:text-slate-300">
-        {Math.round(zoomLienzo * 100)}%
-      </span>
-      <button
-        type="button"
-        onClick={() =>
-          setZoomLienzo((z) => Math.min(3, Math.round((z + 0.25) * 100) / 100))
-        }
-        aria-label="Acercar el lienzo"
-        className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800"
-      >
-        <FaPlus className="text-xs" />
-      </button>
-      <button
-        type="button"
-        onClick={() => setLienzoMaximizado((m) => !m)}
-        aria-label={
-          lienzoMaximizado ? "Minimizar el lienzo" : "Maximizar el lienzo"
-        }
-        title={
-          lienzoMaximizado ? "Minimizar el lienzo" : "Maximizar el lienzo"
-        }
-        className="ml-1 flex h-7 w-7 items-center justify-center rounded-lg border-l border-gray-200 pl-1 text-gray-600 transition hover:bg-gray-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-      >
-        {lienzoMaximizado ? <FaCompress /> : <FaExpand />}
-      </button>
-    </div>
-  );
-
   const carasProducto = CARAS_POR_TIPO[selectedProduct] ?? CARAS_CAMISETA;
 
   const etiquetaCaraActiva =
     carasProducto.find((cara) => cara.id === caraActiva)?.label ?? "";
+
+  // Al cambiar de producto las posiciones UV/3D de las imágenes ya no son
+  // válidas (el modelo cambia), así que se limpia el diseño.
+  const cambiarProducto = (tipo) => {
+    setSelectedProduct(tipo);
+    setCaraActiva("frente");
+    setImagenes([]);
+    setImagenActivaId(null);
+    setImagenPendiente(null);
+    setEmojis([]);
+    setEmojiActivoId(null);
+    setTextoDiseno("");
+    setTextoActivo(false);
+    setColorSeleccionado(null);
+  };
+
+  // Props compartidas del visor 3D interactivo (editor principal y modal).
+  const props3D = {
+    interactivo: true,
+    tipo: selectedProduct,
+    color: colorSeleccionado ?? "#ffffff",
+    imagenes,
+    imagenActivaId,
+    imagenPendiente: imagenPendiente ? imagenPendiente.url : null,
+    emojis,
+    texto: textoDiseno,
+    colorTexto,
+    fuenteTexto,
+    tamanoTexto,
+    esNegrita,
+    esCursiva,
+    esSubrayado,
+    posicionTexto,
+    rotacionTexto,
+    escalaTexto,
+    onColocar: colocarImagen,
+    onMover: moverImagen,
+    onSeleccionar: seleccionarImagen,
+    caraCamara: caraActiva,
+    arrastrandoImagen,
+    onArrastrarImagen: setArrastrandoImagen,
+    dragPreview,
+  };
 
   return (
     <>
@@ -1143,10 +1321,7 @@ function Personalizador() {
           <div className="grid max-w-md grid-cols-2 gap-4">
             <button
               type="button"
-              onClick={() => {
-                setSelectedProduct("camiseta");
-                setCaraActiva("frente");
-              }}
+              onClick={() => cambiarProducto("camiseta")}
               className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-5 transition ${
                 selectedProduct === "camiseta"
                   ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-200 dark:ring-cyan-500/40"
@@ -1158,10 +1333,7 @@ function Personalizador() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setSelectedProduct("mug");
-                setCaraActiva("frente");
-              }}
+              onClick={() => cambiarProducto("mug")}
               className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-5 transition ${
                 selectedProduct === "mug"
                   ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-200 dark:ring-cyan-500/40"
@@ -1236,11 +1408,11 @@ function Personalizador() {
 
             {herramienta === "imagen" ? (
               <>
-                {/* Ubicación del estampado. La posición dentro de cada
-                    ubicación es libre, arrastrando en el mockup grande. */}
+                {/* Vistas de la prenda: al elegir una, la cámara del visor 3D
+                    gira hacia esa cara automáticamente. */}
                 <>
                   <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
-                    Ubicación del diseño
+                    Vista de la prenda
                   </p>
                   <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-gray-200 p-1 dark:border-slate-700">
                     {carasProducto.map((cara) => (
@@ -1315,6 +1487,9 @@ function Personalizador() {
                   onChange={handleSubirImagen}
                   className="hidden"
                 />
+                <p className="mt-2 text-center text-[11px] text-gray-400 dark:text-slate-500">
+                  O pega una imagen con <kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-[10px] dark:border-slate-600 dark:bg-slate-800">Ctrl+V</kbd> / arrástrala al visor 3D
+                </p>
 
                 <div className="my-5 border-t border-gray-200 dark:border-slate-800" />
 
@@ -1374,10 +1549,7 @@ function Personalizador() {
                           <button
                             key={img.id}
                             type="button"
-                            onClick={() => {
-                              setImagenActivaId(img.id);
-                              setCaraActiva(caraDe(img));
-                            }}
+                            onClick={() => seleccionarImagen(img.id)}
                             title={`Ubicación: ${etiquetaCara ?? "Frente"}`}
                             className={`relative flex h-16 w-14 flex-col items-center justify-center overflow-hidden rounded-lg border-2 bg-gray-50 transition dark:bg-slate-800 ${
                               img.id === imagenActivaId
@@ -1413,59 +1585,36 @@ function Personalizador() {
                           </p>
                         )}
 
-                        <>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
-                            Ubicación
-                          </label>
-                          <div className="grid grid-cols-2 gap-1">
-                            {carasProducto.map((cara) => (
-                              <button
-                                key={cara.id}
-                                type="button"
-                                onClick={() => {
-                                  actualizarImagen(imagenActiva.id, { cara: cara.id });
-                                  setCaraActiva(cara.id);
-                                }}
-                                className={`rounded-lg border py-1.5 text-[10px] font-semibold transition ${
-                                  caraDe(imagenActiva) === cara.id
-                                    ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
-                                    : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400"
-                                }`}
-                              >
-                                {cara.label}
-                              </button>
-                            ))}
-                          </div>
-                        </>
+                        <p className="text-xs font-medium text-gray-500 dark:text-slate-400">
+                          Ubicación:{" "}
+                          {carasProducto.find((c) => c.id === caraDe(imagenActiva))
+                            ?.label ?? "Frente"}
+                          {imagenActiva.uv
+                            ? ` · UV (${imagenActiva.uv.u.toFixed(2)}, ${imagenActiva.uv.v.toFixed(2)})`
+                            : ""}
+                        </p>
 
                         <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
                           Tamaño:{" "}
-                          {Math.round(
-                            (imagenActiva.escalaX ?? imagenActiva.escala ?? 1) *
-                              100
-                          )}
-                          %
+                          {Math.round((imagenActiva.escala ?? 1) * 100)}%
                         </label>
                         <input
                           type="range"
-                          min={ESCALA_MIN}
-                          max={ESCALA_MAX}
+                          min={ESCALA_MIN_3D}
+                          max={ESCALA_MAX_3D}
                           step={0.05}
-                          value={
-                            imagenActiva.escalaX ?? imagenActiva.escala ?? 1
-                          }
+                          value={imagenActiva.escala ?? 1}
                           onChange={(e) => {
                             const valor = Number(e.target.value);
                             actualizarImagen(imagenActiva.id, {
-                              escalaX: valor,
-                              escalaY: valor,
+                              escala: valor,
                             });
                           }}
                           className="w-full accent-indigo-600 dark:accent-cyan-500"
                         />
                         <p className="text-[10px] text-gray-400 dark:text-slate-500">
-                          Para estirar el ancho o alto por separado, usa los
-                          puntos del marco en el lienzo.
+                          Arrastra la imagen sobre la prenda para moverla; usa
+                          este deslizador para escalarla.
                         </p>
 
                         <div className="flex gap-2">
@@ -1917,121 +2066,76 @@ function Personalizador() {
 
             {herramienta !== "imagen" && (
               <p className="mt-5 border-t border-gray-200 pt-4 text-xs text-gray-400 dark:border-slate-800 dark:text-slate-500">
-                Consejo: arrastra el texto o las imágenes sobre la prenda para
-                moverlos, y usa las esquinas del elemento seleccionado para
-                redimensionar o rotar.
+                Consejo: selecciona una imagen en el panel y arrástrala sobre la
+                prenda para moverla; usa el deslizador para escalarla y el botón
+                de rotar para girarla.
               </p>
             )}
           </div>
 
-          {/* Zona de diseño: mockup editable (arrastrar, redimensionar y
-              rotar con react-moveable) de la ubicación activa, con zoom y
-              modo maximizado. Se oculta mientras está maximizado. */}
-          {!lienzoMaximizado && (
-            <div className="relative flex min-h-[540px] flex-1 flex-col rounded-2xl border border-gray-200 bg-gray-200 p-6 dark:border-slate-700 dark:bg-slate-800">
+          {/* Editor 3D: las imágenes se colocan y arrastran directamente sobre
+              el modelo. */}
+          <div className="flex min-h-[560px] flex-1 flex-col rounded-2xl border border-gray-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400">
+                Editor 3D · {etiquetaCaraActiva}
+              </h2>
               {hayDiseno && (
                 <button
                   type="button"
                   onClick={handleQuitarDiseno}
-                  aria-label="Quitar diseño"
-                  className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-sm transition hover:border-red-300 hover:text-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:text-red-400"
+                  className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:border-red-300 hover:text-red-500 dark:border-slate-700 dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:text-red-400"
                 >
                   <FaTrash /> Quitar diseño
                 </button>
               )}
-
-              <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
-                {controlZoom}
-                <button
-                  type="button"
-                  onClick={() => setMostrarGuiasImpresion((v) => !v)}
-                  aria-pressed={mostrarGuiasImpresion}
-                  title={mostrarGuiasImpresion ? "Ocultar guías de impresión" : "Mostrar sangrado y área segura"}
-                  className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold shadow-sm transition ${
-                    mostrarGuiasImpresion
-                      ? "border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300"
-                      : "border-gray-300 bg-white text-gray-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
-                  }`}
-                >
-                  <span className="h-2 w-2 rounded-full bg-red-500" />
-                  Sangrado
-                </button>
-              </div>
-
-              <div className="flex flex-1 items-center justify-center overflow-auto rounded-xl">
-                <div
-                  className="relative min-w-[280px]"
-                  style={{ width: `${zoomLienzo * 100}%` }}
-                >
-                  {lienzoMockup}
-                  {mostrarGuiasImpresion && (
-                    <>
-                      <div
-                        className="pointer-events-none absolute inset-0 rounded-xl border border-dashed border-red-400/80"
-                        title={`Sangrado ${BLEED_PX}px · se imprime y recorta`}
-                      />
-                      <div
-                        className="pointer-events-none absolute rounded-xl border border-dashed border-emerald-500/70"
-                        style={{
-                          inset: `${((MARGEN_SEGURO_PX / TAMANO_LIENZO) * 100).toFixed(2)}%`,
-                        }}
-                        title="Área segura · lo importante debe quedar dentro"
-                      />
-                      <span className="pointer-events-none absolute left-1/2 top-1.5 -translate-x-1/2 rounded bg-red-500 px-1.5 py-0.5 text-[9px] font-bold tracking-widest text-white">
-                        SANGRADO {BLEED_PX}px · {DPI_OBJETIVO} DPI
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <p className="pt-3 text-center text-xs text-gray-400 dark:text-slate-500">
-                Editando: {etiquetaCaraActiva}
-                {caraActiva.startsWith("manga") && " (incluye el costado)"}
-                {" · "}arrastra para mover, esquinas para escalar y rotar ·
-                usa − / + para acercar o alejar el lienzo
-              </p>
-            </div>
-          )}
-
-          {/* Vista previa 3D (rotable, con zoom) + acceso a pantalla completa */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 lg:w-[300px] lg:shrink-0">
-            <h2 className="mb-4 text-sm font-semibold text-gray-500 dark:text-slate-400">
-              Vista previa 3D
-            </h2>
-
-            <div className="mb-4 flex items-center justify-center overflow-hidden rounded-xl bg-gray-100 p-4 dark:bg-slate-800">
-              <div className="relative h-80 w-full" style={{ aspectRatio: "220 / 260" }}>
-                <Prenda3D
-                  key={selectedProduct}
-                  tipo={selectedProduct}
-                  color={colorSeleccionado ?? "#ffffff"}
-                  imagenes={imagenes}
-                  emojis={emojis}
-                  texto={textoDiseno}
-                  colorTexto={colorTexto}
-                  fuenteTexto={fuenteTexto}
-                  tamanoTexto={tamanoTexto}
-                  esNegrita={esNegrita}
-                  esCursiva={esCursiva}
-                  esSubrayado={esSubrayado}
-                  posicionTexto={posicionTexto}
-                  rotacionTexto={rotacionTexto}
-                  escalaTexto={escalaTexto}
-                />
-              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setVista3DAbierta(true)}
-              className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50 dark:border-cyan-500/40 dark:text-cyan-300 dark:hover:bg-cyan-500/10"
+            <div
+              className="relative flex flex-1 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-slate-800"
+              onDragOver={handleDragOverEnEditor}
+              onDrop={handleDropEnEditor}
             >
-              <FaExpand /> Ver en 3D a pantalla completa
-            </button>
+              {imagenPendiente && (
+                <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white shadow">
+                  Haz clic sobre la prenda para colocar la imagen
+                </div>
+              )}
+              <div
+                className="h-full w-full"
+                style={{ cursor: imagenPendiente ? "crosshair" : "default" }}
+                onDragOver={handleDragOverEnEditor}
+                onDrop={handleDropEnEditor}
+              >
+                <Prenda3D key={selectedProduct} {...props3D} />
+              </div>
+            </div>
 
-            <button
-              type="button"
+            <p className="pt-3 text-center text-xs text-gray-400 dark:text-slate-500">
+              {imagenPendiente
+                ? "Haz clic en el modelo para colocar la imagen."
+                : imagenActivaId
+                  ? "Arrastra sobre la prenda para mover la imagen seleccionada."
+                  : "Gira el modelo y selecciona una imagen en el panel para editarla."}
+            </p>
+          </div>
+
+            {/* Acciones y resumen del diseño */}
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 lg:w-[300px] lg:shrink-0">
+              <h2 className="mb-4 text-sm font-semibold text-gray-500 dark:text-slate-400">
+                Acciones
+              </h2>
+
+              <button
+                type="button"
+                onClick={() => setVista3DAbierta(true)}
+                className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50 dark:border-cyan-500/40 dark:text-cyan-300 dark:hover:bg-cyan-500/10"
+              >
+                <FaExpand /> Ver en 3D a pantalla completa
+              </button>
+
+              <button
+                type="button"
               onClick={handleGuardarDiseno}
               disabled={guardandoDiseno}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:border-indigo-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
@@ -2100,37 +2204,7 @@ function Personalizador() {
       </div>
       </section>
 
-      {/* Lienzo maximizado: pantalla completa del editor 2D */}
-      {lienzoMaximizado && (
-        <div className="fixed inset-0 z-40 flex flex-col bg-slate-950/95 backdrop-blur">
-          <div className="flex items-center justify-between px-6 py-4">
-            <h2 className="text-lg font-bold text-white">
-              Editando: {selectedProduct === "camiseta" ? etiquetaCaraActiva : `Mug · ${etiquetaCaraActiva}`}
-            </h2>
-            <div className="flex items-center gap-3">
-              {controlZoom}
-              <button
-                type="button"
-                onClick={() => setLienzoMaximizado(false)}
-                aria-label="Minimizar el lienzo"
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white"
-              >
-                <FaTimes />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-1 items-center justify-center overflow-auto px-6 pb-6">
-            <div
-              className="min-w-[320px]"
-              style={{ width: `${zoomLienzo * 100}%` }}
-            >
-              {lienzoMockup}
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Lienzo maximizado: pantalla completa del editor 3D */}
       {vista3DAbierta && (
         <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur">
           <div className="flex items-center justify-between px-6 py-4">
@@ -2145,30 +2219,20 @@ function Personalizador() {
             </button>
           </div>
 
+          {imagenPendiente && (
+            <p className="pb-2 text-center text-sm font-semibold text-cyan-300">
+              Haz clic sobre la prenda para colocar la imagen.
+            </p>
+          )}
+
           <div className="flex flex-1 items-center justify-center px-6 pb-2">
             <div className="aspect-square w-full max-w-[560px]">
-              <Prenda3D
-                key={`modal-${selectedProduct}`}
-                tipo={selectedProduct}
-                color={colorSeleccionado ?? "#ffffff"}
-                imagenes={imagenes}
-                emojis={emojis}
-                texto={textoDiseno}
-                colorTexto={colorTexto}
-                fuenteTexto={fuenteTexto}
-                tamanoTexto={tamanoTexto}
-                esNegrita={esNegrita}
-                esCursiva={esCursiva}
-                esSubrayado={esSubrayado}
-                posicionTexto={posicionTexto}
-                rotacionTexto={rotacionTexto}
-                escalaTexto={escalaTexto}
-              />
+              <Prenda3D key={`modal-${selectedProduct}`} {...props3D} />
             </div>
           </div>
 
           <p className="pb-6 text-center text-sm text-slate-400">
-            Arrastra para rotar · Usa la rueda para acercar o alejar
+            Arrastra para rotar · Haz clic para colocar o arrastra la imagen seleccionada
           </p>
         </div>
       )}
