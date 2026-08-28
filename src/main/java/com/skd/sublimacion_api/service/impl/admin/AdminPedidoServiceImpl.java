@@ -8,6 +8,7 @@ import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.ItemPedidoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
+import com.skd.sublimacion_api.service.NotificacionService;
 import com.skd.sublimacion_api.service.WebSocketService;
 import com.skd.sublimacion_api.service.admin.AdminPedidoService;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
     private final PedidoRepository pedidoRepository;
     private final ItemPedidoRepository itemPedidoRepository;
     private final WebSocketService webSocketService;
+    private final NotificacionService notificacionService;
 
     @Override
     public Page<PedidoResponse> listar(String estado, Long usuarioId, Pageable pageable) {
@@ -83,6 +85,12 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
 
         if (!estadoAnterior.equals(pedido.getEstado())) {
             webSocketService.publicarEstadoPedido(pedido.getId(), pedido.getEstado());
+            notificacionService.crear(
+                    pedido.getUsuario().getId(),
+                    "PEDIDO_" + pedido.getEstado().toUpperCase(),
+                    "Tu pedido cambió de estado",
+                    "Tu pedido #" + pedido.getId()
+                            + " ahora está en estado: " + pedido.getEstado() + ".");
         }
 
         return response;

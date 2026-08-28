@@ -113,6 +113,16 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
             if (!solicitud.getUsuario().getId().equals(usuario.getId())) {
                 throw new AccessDeniedException("No tienes permiso para suscribirte a esta solicitud");
             }
+            return;
+        }
+
+        if (destino.matches("^/topic/notificaciones/\\d+$")) {
+            Long destinatarioId = Long.parseLong(destino.substring(destino.lastIndexOf('/') + 1));
+
+            if (!destinatarioId.equals(usuario.getId())) {
+                throw new AccessDeniedException(
+                        "No tienes permiso para suscribirte a las notificaciones de otro usuario");
+            }
         }
     }
 

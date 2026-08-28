@@ -99,4 +99,26 @@ public class EmailServiceImpl implements EmailService {
                     correo, e.getMessage(), e);
         }
     }
+
+    @Async
+    @Override
+    public void enviarNotificacion(String correo, String nombre, String titulo, String mensaje) {
+
+        try {
+            MimeMessage mime = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mime, false, "UTF-8");
+
+            helper.setTo(correo);
+            helper.setSubject("SKD - " + titulo);
+            helper.setText("Hola " + nombre + ",\n\n" + mensaje + "\n\n"
+                    + "Puedes ver el detalle desde tu bandeja de entrada en SKD.");
+
+            mailSender.send(mime);
+            log.info("Notificación enviada por correo a {}", correo);
+
+        } catch (MessagingException | RuntimeException e) {
+            log.error("No se pudo enviar la notificación a {}: {}",
+                    correo, e.getMessage(), e);
+        }
+    }
 }
