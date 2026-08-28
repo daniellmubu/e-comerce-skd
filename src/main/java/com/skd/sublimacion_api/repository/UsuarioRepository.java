@@ -17,4 +17,8 @@ public interface UsuarioRepository extends
     boolean existsByUsername(String username);
 
     boolean existsByCorreo(String correo);
+
+    Optional<Usuario> findByCodigoReferido(String codigoReferido);
+
+    long countByReferidoPorId(Long referidoPorId);
 }

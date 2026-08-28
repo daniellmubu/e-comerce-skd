@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { FaGift } from "react-icons/fa";
 
 import Input from "../components/ui/Input";
@@ -19,7 +19,9 @@ function formatearFecha(iso) {
 
 function Registro() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { actualizarSesion } = useAuth();
+  const refCode = searchParams.get("ref");
 
   const [form, setForm] = useState({
     nombre: "",
@@ -83,6 +85,7 @@ function Registro() {
         username: form.username.trim(),
         correo: form.correo.trim(),
         password: form.password,
+        codigoReferido: refCode || undefined,
       });
       actualizarSesion();
       if (respuesta.cuponBienvenida) {
@@ -127,6 +130,11 @@ function Registro() {
         <p className="mt-2 text-center text-gray-500 dark:text-slate-400">
           Empieza a diseñar productos únicos con IA.
         </p>
+        {refCode && (
+          <p className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-center text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+            Te invitaron con el código <span className="font-bold">{refCode}</span>
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5" noValidate>
           <Input

@@ -43,13 +43,14 @@ export async function login(username, password) {
   return data;
 }
 
-export async function registrarse({ nombre, username, correo, password, rol }) {
+export async function registrarse({ nombre, username, correo, password, rol, codigoReferido }) {
   const { data } = await api.post("/auth/registro", {
     nombre,
     username,
     correo,
     password,
     rol,
+    codigoReferido,
   });
   guardarSesion(data);
   return data;

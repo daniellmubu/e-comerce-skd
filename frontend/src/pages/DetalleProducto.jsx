@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { FaStar, FaShoppingCart, FaMagic, FaArrowLeft } from "react-icons/fa";
+import { FaStar, FaShoppingCart, FaMagic, FaArrowLeft, FaUpload, FaSpinner } from "react-icons/fa";
 
 import camiseta from "../assets/images/products/camiseta.png";
 import mug from "../assets/images/products/mug.png";
 import { obtenerProductoPorId, obtenerVariantesDeProducto, listarProductos } from "../services/productService";
-import { listarResenasPorProducto } from "../services/resenaService";
+import { listarResenasPorProducto, crearResena, subirImagenResena } from "../services/resenaService";
 import { listarCaracteristicasPorProducto } from "../services/caracteristicaService";
 import { getErrorMessage } from "../services/api";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
 import Loading from "../components/ui/Loading";
 
 // Igual que en Catalogo.jsx: el backend solo da el nombre de la categoría,
@@ -42,6 +43,7 @@ function DetalleProducto() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { agregarProducto } = useCart();
+  const { usuario } = useAuth();
 
   const [producto, setProducto] = useState(null);
   const [resenas, setResenas] = useState([]);
@@ -52,6 +54,15 @@ function DetalleProducto() {
   const [colorSel, setColorSel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Formulario de reseña
+  const [calificacionSel, setCalificacionSel] = useState(0);
+  const [comentarioSel, setComentarioSel] = useState("");
+  const [archivoResena, setArchivoResena] = useState(null);
+  const [archivoResenaPreview, setArchivoResenaPreview] = useState(null);
+  const [enviandoResena, setEnviandoResena] = useState(false);
+  const [mensajeResena, setMensajeResena] = useState(null);
+  const resenaFileInputRef = useRef(null);
 
   useEffect(() => {
     let activo = true;
@@ -129,6 +140,77 @@ function DetalleProducto() {
 
   const handlePersonalizar = () => {
     navigate("/personalizador", { state: producto });
+  };
+
+  const recargarResenas = () => {
+    listarResenasPorProducto(id)
+      .then((data) => {
+        const lista = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.contenido)
+            ? data.contenido
+            : [];
+        setResenas(lista);
+      })
+      .catch(() => {});
+  };
+
+  const handleSeleccionarArchivoResena = (e) => {
+    const file = e.target.files?.[0] ?? null;
+    if (!file) return;
+    setArchivoResena(file);
+    if (archivoResenaPreview) URL.revokeObjectURL(archivoResenaPreview);
+    setArchivoResenaPreview(URL.createObjectURL(file));
+  };
+
+  const handleQuitarArchivoResena = () => {
+    setArchivoResena(null);
+    if (archivoResenaPreview) URL.revokeObjectURL(archivoResenaPreview);
+    setArchivoResenaPreview(null);
+    if (resenaFileInputRef.current) resenaFileInputRef.current.value = "";
+  };
+
+  const handleEnviarResena = async () => {
+    if (!usuario) {
+      navigate("/login");
+      return;
+    }
+    if (calificacionSel === 0) {
+      setMensajeResena({ tipo: "error", texto: "Elige una calificación (1 a 5)." });
+      return;
+    }
+
+    setEnviandoResena(true);
+    setMensajeResena(null);
+    try {
+      let imagenUrl = null;
+      if (archivoResena) {
+        const subida = await subirImagenResena(archivoResena);
+        imagenUrl = subida?.imagenUrl ?? null;
+      }
+
+      await crearResena({
+        productoId: producto.id,
+        calificacion: calificacionSel,
+        comentario: comentarioSel.trim() || null,
+        imagenUrl,
+      });
+
+      setCalificacionSel(0);
+      setComentarioSel("");
+      setArchivoResena(null);
+      setArchivoResenaPreview(null);
+      if (resenaFileInputRef.current) resenaFileInputRef.current.value = "";
+      setMensajeResena({
+        tipo: "ok",
+        texto: "Gracias por tu reseña. Se publicará cuando sea aprobada.",
+      });
+      recargarResenas();
+    } catch (err) {
+      setMensajeResena({ tipo: "error", texto: getErrorMessage(err) });
+    } finally {
+      setEnviandoResena(false);
+    }
   };
 
   if (loading) {
@@ -336,9 +418,103 @@ function DetalleProducto() {
         </div>
 
         {/* Reseñas */}
-        {resenas.length > 0 && (
-          <div className="mt-20">
-            <h2 className="mb-6 text-2xl font-bold">Reseñas de clientes</h2>
+        <div className="mt-20">
+          <h2 className="mb-6 text-2xl font-bold">Reseñas de clientes</h2>
+
+          {/* Formulario para crear una reseña */}
+          <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60">
+            <p className="mb-3 font-semibold text-gray-900 dark:text-white">
+              ¿Cómo te pareció este producto?
+            </p>
+
+            <div className="mb-4 flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setCalificacionSel(n)}
+                  aria-label={`${n} estrella${n > 1 ? "s" : ""}`}
+                  className="text-2xl transition hover:scale-110"
+                >
+                  <FaStar className={n <= calificacionSel ? "text-amber-400" : "text-gray-300 dark:text-slate-600"} />
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={comentarioSel}
+              onChange={(e) => setComentarioSel(e.target.value)}
+              rows={3}
+              placeholder="Cuéntanos tu experiencia (opcional)"
+              className="mb-4 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 placeholder:text-gray-400 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
+            />
+
+            <div className="mb-4 flex items-center gap-3">
+              {archivoResenaPreview ? (
+                <div className="flex items-center gap-3 rounded-xl border border-gray-200 p-2 dark:border-slate-700">
+                  <img
+                    src={archivoResenaPreview}
+                    alt="Foto de la reseña"
+                    className="h-14 w-14 rounded-lg object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleQuitarArchivoResena}
+                    className="text-xs font-medium text-red-500 transition hover:text-red-400"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => resenaFileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
+                >
+                  <FaUpload /> Agregar foto (opcional)
+                </button>
+              )}
+              <input
+                ref={resenaFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleSeleccionarArchivoResena}
+                className="hidden"
+              />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleEnviarResena}
+                disabled={enviandoResena || !usuario}
+                className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+              >
+                {enviandoResena ? (
+                  <span className="inline-flex items-center gap-2">
+                    <FaSpinner className="animate-spin" /> Enviando...
+                  </span>
+                ) : usuario ? (
+                  "Publicar reseña"
+                ) : (
+                  "Inicia sesión para reseñar"
+                )}
+              </button>
+              {mensajeResena && (
+                <p
+                  className={`text-sm ${
+                    mensajeResena.tipo === "error"
+                      ? "text-red-500"
+                      : "text-emerald-600 dark:text-emerald-400"
+                  }`}
+                >
+                  {mensajeResena.texto}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {resenas.length > 0 ? (
             <div className="space-y-4">
               {resenas.map((r) => (
                 <div
@@ -346,17 +522,28 @@ function DetalleProducto() {
                   className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="font-semibold">{r.usuario}</p>
+                    <p className="font-semibold">{r.usuarioNombre ?? r.usuario}</p>
                     <Estrellas calificacion={r.calificacion} />
                   </div>
                   {r.comentario && (
                     <p className="mt-2 text-gray-500 dark:text-slate-400">{r.comentario}</p>
                   )}
+                  {r.imagenUrl && (
+                    <img
+                      src={r.imagenUrl}
+                      alt="Foto de la reseña"
+                      className="mt-3 h-40 w-40 rounded-xl border border-gray-200 object-cover dark:border-slate-700"
+                    />
+                  )}
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="rounded-2xl border border-dashed border-gray-300 p-8 text-center text-gray-500 dark:border-slate-700 dark:text-slate-400">
+              Aún no hay reseñas para este producto. Sé el primero en opinar.
+            </p>
+          )}
+        </div>
 
         {/* Productos relacionados */}
         {relacionados.length > 0 && (

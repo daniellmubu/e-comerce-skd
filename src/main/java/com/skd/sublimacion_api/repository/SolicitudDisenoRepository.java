@@ -13,4 +13,6 @@ public interface SolicitudDisenoRepository extends JpaRepository<SolicitudDiseno
     List<SolicitudDiseno> findByUsuarioIdOrderByCreadoEnDesc(Long usuarioId);
 
     Page<SolicitudDiseno> findByEstado(EstadoSolicitudDiseno estado, Pageable pageable);
+
+    boolean existsByDisenoId(Long disenoId);
 }

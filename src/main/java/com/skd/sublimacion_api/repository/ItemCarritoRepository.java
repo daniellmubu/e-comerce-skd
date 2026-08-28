@@ -9,4 +9,6 @@ public interface ItemCarritoRepository extends JpaRepository<ItemCarrito, Long> 
 
     List<ItemCarrito> findByCarritoId(Long carritoId);
 
+    boolean existsByDisenoId(Long disenoId);
+
 }

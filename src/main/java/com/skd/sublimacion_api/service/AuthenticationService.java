@@ -47,12 +47,19 @@ public class AuthenticationService {
             throw new IllegalArgumentException("Ya existe un usuario con ese correo");
         }
 
+        Usuario referidoPor = null;
+        if (request.getCodigoReferido() != null && !request.getCodigoReferido().isBlank()) {
+            referidoPor = usuarioRepository.findByCodigoReferido(request.getCodigoReferido().trim().toUpperCase()).orElse(null);
+        }
+
         Usuario usuario = Usuario.builder()
                 .nombre(request.getNombre())
                 .username(request.getUsername())
                 .correo(request.getCorreo())
                 .contrasenaHash(passwordEncoder.encode(request.getPassword()))
                 .rol(request.getRol() != null ? request.getRol() : Rol.cliente)
+                .referidoPor(referidoPor)
+                .codigoReferido(generarCodigoReferido(request.getUsername()))
                 .build();
 
         usuarioRepository.save(usuario);
@@ -100,6 +107,23 @@ public class AuthenticationService {
                 .build());
 
         return cupon;
+    }
+
+    private String generarCodigoReferido(String username) {
+        String base = username.replaceAll("[^A-Za-z0-9]", "").toUpperCase();
+        base = base.length() >= 3 ? base.substring(0, 3) : String.format("%-3s", base).replace(' ', 'X');
+        String alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        String codigo;
+        int intentos = 0;
+        do {
+            StringBuilder sb = new StringBuilder("SKD-").append(base).append("-");
+            for (int i = 0; i < 4; i++) sb.append(alfabeto.charAt(random.nextInt(alfabeto.length())));
+            codigo = sb.toString();
+            intentos++;
+            if (intentos > 10) throw new IllegalStateException("No se pudo generar código referido");
+        } while (usuarioRepository.findByCodigoReferido(codigo).isPresent());
+        return codigo;
     }
 
     public AuthResponse login(LoginRequest request) {

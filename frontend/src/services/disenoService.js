@@ -49,3 +49,12 @@ export async function agregarDisenoAlCarrito({
   });
   return data;
 }
+
+export async function eliminarDiseno(id) {
+  await api.delete(`/disenos/${id}`);
+}
+
+export async function eliminarTodosDisenos() {
+  const { data } = await api.delete("/disenos");
+  return data;
+}

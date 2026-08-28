@@ -15,6 +15,7 @@ import {
   FaPlus,
   FaTimes,
   FaExclamationTriangle,
+  FaPrint,
   FaImages,
 } from "react-icons/fa";
 import { Shirt, Coffee } from "lucide-react";
@@ -152,6 +153,11 @@ function dataUrlToFile(dataUrl, nombre) {
 // estimar el DPI efectivo de cada imagen una vez escalada.
 const PRINT_WIDTH_INCHES = 12;
 const DPI_MINIMO = 150;
+const DPI_OBJETIVO = 300;
+// Sangrado para sublimación (se imprime más allá del corte y se recorta).
+const BLEED_PX = 36;
+// Margen seguro: lo que nunca se corta, aunque haya desalineación.
+const MARGEN_SEGURO_PX = 80;
 
 function calcularDpi(naturalWidth, anchoRenderizadoPx) {
   if (!naturalWidth || !anchoRenderizadoPx) return 0;
@@ -164,6 +170,15 @@ function dpiDeImagen(img) {
   const ancho =
     TAMANO_LIENZO * ANCHO_IMAGEN_BASE * (img.escalaX ?? img.escala ?? 1);
   return calcularDpi(img.naturalWidth, ancho);
+}
+
+function descargarDataUrl(dataUrl, nombreArchivo) {
+  const enlace = document.createElement("a");
+  enlace.href = dataUrl;
+  enlace.download = nombreArchivo;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
 }
 
 // Normaliza un HEX (con o sin '#', 3 o 6 dígitos) a la forma #rrggbb que
@@ -228,6 +243,8 @@ function Personalizador() {
   const [guardando, setGuardando] = useState(false);
   // Guardado del diseño compuesto en "Mis diseños" (endpoint /disenos/subir).
   const [guardandoDiseno, setGuardandoDiseno] = useState(false);
+  const [descargandoPrint, setDescargandoPrint] = useState(false);
+  const [mostrarGuiasImpresion, setMostrarGuiasImpresion] = useState(true);
   const [mensaje, setMensaje] = useState(null);
   const [procesandoImagen, setProcesandoImagen] = useState(false);
   // Recorte inteligente de fondo al subir imágenes (@imgly): activado por
@@ -775,6 +792,160 @@ function Personalizador() {
     ctx.drawImage(capaDiseno, 0, 0);
 
     return canvas.toDataURL("image/png");
+  };
+
+  // Versión print-ready: mismo contenido pero con sangrado, marcas de corte y a
+  // resolución de impresión (300 DPI). No recorta por máscara, deja el sangrado
+  // imprimible para la prensa de sublimación.
+  const componerImagenPrintReady = async () => {
+    if (!imagenes.length && !emojis.length && !textoDiseno.trim()) return null;
+
+    const PRINT_SIZE = 3000;
+    const escala = PRINT_SIZE / TAMANO_LIENZO;
+    const bleed = Math.round(BLEED_PX * escala);
+    const size = PRINT_SIZE + bleed * 2;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, size, size);
+
+    const baseImg = await cargarImagenElemento(
+      obtenerBaseMockup(selectedProduct, caraActiva)
+    );
+    let encuadreBase = null;
+    if (baseImg) {
+      const anchoBase = PRINT_SIZE * (baseImg.naturalWidth / baseImg.naturalHeight);
+      encuadreBase = { dx: bleed + (PRINT_SIZE - anchoBase) / 2, dw: anchoBase };
+      ctx.drawImage(baseImg, encuadreBase.dx, bleed, encuadreBase.dw, PRINT_SIZE);
+    }
+
+    if (baseImg && colorSeleccionado) {
+      const capaColor = document.createElement("canvas");
+      capaColor.width = size;
+      capaColor.height = size;
+      const ctxColor = capaColor.getContext("2d");
+      ctxColor.drawImage(baseImg, encuadreBase.dx, bleed, encuadreBase.dw, PRINT_SIZE);
+      ctxColor.globalCompositeOperation = "source-in";
+      ctxColor.fillStyle = colorSeleccionado;
+      ctxColor.fillRect(0, 0, size, size);
+      ctx.globalCompositeOperation = "multiply";
+      ctx.drawImage(capaColor, 0, 0);
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    const permitirDesborde =
+      selectedProduct === "camiseta" &&
+      (caraActiva === "mangaIzquierda" || caraActiva === "mangaDerecha");
+
+    const capaDiseno = document.createElement("canvas");
+    capaDiseno.width = size;
+    capaDiseno.height = size;
+    const ctxDiseno = capaDiseno.getContext("2d");
+
+    for (const imagen of imagenes) {
+      const procesada = await procesarDiseno(imagen.url);
+      const el = await cargarImagenElemento(procesada?.dataUrl ?? imagen.url);
+      if (!el) continue;
+      const baseW = PRINT_SIZE * ANCHO_IMAGEN_BASE * (imagen.escalaX ?? imagen.escala ?? 1);
+      const baseH = baseW * (el.naturalHeight / el.naturalWidth) * (imagen.escalaY ?? imagen.escala ?? 1);
+      const cx = bleed + (imagen.x / 100) * PRINT_SIZE;
+      const cy = bleed + (imagen.y / 100) * PRINT_SIZE;
+      ctxDiseno.save();
+      ctxDiseno.translate(cx, cy);
+      ctxDiseno.rotate(((imagen.rotacion ?? 0) * Math.PI) / 180);
+      ctxDiseno.drawImage(el, -baseW / 2, -baseH / 2, baseW, baseH);
+      ctxDiseno.restore();
+    }
+
+    if (textoDiseno.trim()) {
+      await cargarFuenteParaCanvas(fuenteTexto);
+      ctxDiseno.save();
+      ctxDiseno.translate(
+        bleed + (posicionTexto.x / 100) * PRINT_SIZE,
+        bleed + (posicionTexto.y / 100) * PRINT_SIZE
+      );
+      ctxDiseno.rotate(((rotacionTexto ?? 0) * Math.PI) / 180);
+      ctxDiseno.scale(escalaTexto ?? 1, escalaTexto ?? 1);
+      ctxDiseno.fillStyle = colorTexto;
+      const peso = esNegrita ? "700" : "600";
+      const estiloFuente = esCursiva ? "italic " : "";
+      ctxDiseno.font = `${estiloFuente}${peso} ${Math.round(tamanoTexto * FACTOR_LIENZO * escala)}px ${fuenteTexto}`;
+      ctxDiseno.textAlign = "center";
+      ctxDiseno.textBaseline = "middle";
+      ctxDiseno.fillText(textoDiseno, 0, 0);
+      if (esSubrayado) {
+        const anchoTexto = ctxDiseno.measureText(textoDiseno).width;
+        const tamDibujo = Math.round(tamanoTexto * FACTOR_LIENZO * escala);
+        ctxDiseno.strokeStyle = colorTexto;
+        ctxDiseno.lineWidth = Math.max(2, tamDibujo * 0.08);
+        ctxDiseno.beginPath();
+        ctxDiseno.moveTo(-anchoTexto / 2, tamDibujo * 0.45);
+        ctxDiseno.lineTo(anchoTexto / 2, tamDibujo * 0.45);
+        ctxDiseno.stroke();
+      }
+      ctxDiseno.restore();
+    }
+
+    for (const emoji of emojisEnCaraActiva) {
+      const tamDibujo = Math.round((emoji.tamano ?? 48) * FACTOR_LIENZO * escala * (emoji.escala ?? 1));
+      ctxDiseno.save();
+      ctxDiseno.translate(
+        bleed + (emoji.x / 100) * PRINT_SIZE,
+        bleed + (emoji.y / 100) * PRINT_SIZE
+      );
+      ctxDiseno.rotate(((emoji.rotacion ?? 0) * Math.PI) / 180);
+      ctxDiseno.font = `${tamDibujo}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+      ctxDiseno.textAlign = "center";
+      ctxDiseno.textBaseline = "middle";
+      ctxDiseno.fillText(emoji.emoji, 0, 0);
+      ctxDiseno.restore();
+    }
+
+    if (baseImg && !permitirDesborde) {
+      ctxDiseno.globalCompositeOperation = "destination-in";
+      ctxDiseno.drawImage(baseImg, encuadreBase.dx, bleed, encuadreBase.dw, PRINT_SIZE);
+      ctxDiseno.globalCompositeOperation = "source-over";
+    }
+    ctx.drawImage(capaDiseno, 0, 0);
+
+    // Marcas de corte en las esquinas del sangrado.
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.lineWidth = 2;
+    const m = 18 * escala;
+    const b = bleed;
+    const s = size;
+    // Sup. izq.
+    ctx.beginPath(); ctx.moveTo(b, m); ctx.lineTo(b, b); ctx.lineTo(m, b); ctx.stroke();
+    // Sup. der.
+    ctx.beginPath(); ctx.moveTo(s - m, b); ctx.lineTo(s - b, b); ctx.lineTo(s - b, m); ctx.stroke();
+    // Inf. izq.
+    ctx.beginPath(); ctx.moveTo(b, s - m); ctx.lineTo(b, s - b); ctx.lineTo(m, s - b); ctx.stroke();
+    // Inf. der.
+    ctx.beginPath(); ctx.moveTo(s - b, s - m); ctx.lineTo(s - b, s - b); ctx.lineTo(s - m, s - b); ctx.stroke();
+
+    return canvas.toDataURL("image/png");
+  };
+
+  const handleDescargarPrintReady = async () => {
+    if (!hayDiseno) {
+      setMensaje({ tipo: "error", texto: "No hay diseño para exportar." });
+      return;
+    }
+    setDescargandoPrint(true);
+    try {
+      const dataUrl = await componerImagenPrintReady();
+      if (!dataUrl) return;
+      const sufijo = selectedProduct === "camiseta" ? caraActiva : caraActiva;
+      descargarDataUrl(dataUrl, `skd-print-${sufijo}.png`);
+      setMensaje({ tipo: "ok", texto: `Archivo print-ready (${DPI_OBJETIVO} DPI + sangrado) descargado.` });
+    } catch {
+      setMensaje({ tipo: "error", texto: "No se pudo generar el archivo de impresión." });
+    } finally {
+      setDescargandoPrint(false);
+    }
   };
 
   // Guarda el mockup compuesto (producto + color + diseño estampado) como un
@@ -1769,14 +1940,48 @@ function Personalizador() {
                 </button>
               )}
 
-              <div className="absolute left-4 top-4 z-10">{controlZoom}</div>
+              <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
+                {controlZoom}
+                <button
+                  type="button"
+                  onClick={() => setMostrarGuiasImpresion((v) => !v)}
+                  aria-pressed={mostrarGuiasImpresion}
+                  title={mostrarGuiasImpresion ? "Ocultar guías de impresión" : "Mostrar sangrado y área segura"}
+                  className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold shadow-sm transition ${
+                    mostrarGuiasImpresion
+                      ? "border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300"
+                      : "border-gray-300 bg-white text-gray-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-red-500" />
+                  Sangrado
+                </button>
+              </div>
 
               <div className="flex flex-1 items-center justify-center overflow-auto rounded-xl">
                 <div
-                  className="min-w-[280px]"
+                  className="relative min-w-[280px]"
                   style={{ width: `${zoomLienzo * 100}%` }}
                 >
                   {lienzoMockup}
+                  {mostrarGuiasImpresion && (
+                    <>
+                      <div
+                        className="pointer-events-none absolute inset-0 rounded-xl border border-dashed border-red-400/80"
+                        title={`Sangrado ${BLEED_PX}px · se imprime y recorta`}
+                      />
+                      <div
+                        className="pointer-events-none absolute rounded-xl border border-dashed border-emerald-500/70"
+                        style={{
+                          inset: `${((MARGEN_SEGURO_PX / TAMANO_LIENZO) * 100).toFixed(2)}%`,
+                        }}
+                        title="Área segura · lo importante debe quedar dentro"
+                      />
+                      <span className="pointer-events-none absolute left-1/2 top-1.5 -translate-x-1/2 rounded bg-red-500 px-1.5 py-0.5 text-[9px] font-bold tracking-widest text-white">
+                        SANGRADO {BLEED_PX}px · {DPI_OBJETIVO} DPI
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -1837,6 +2042,21 @@ function Personalizador() {
                 <FaSave />
               )}
               {guardandoDiseno ? "Guardando..." : "Guardar diseño"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDescargarPrintReady}
+              disabled={descargandoPrint || !hayDiseno}
+              title="PNG a 3000px con sangrado y marcas de corte para imprenta"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
+            >
+              {descargandoPrint ? (
+                <FaSpinner className="animate-spin" />
+              ) : (
+                <FaPrint />
+              )}
+              {descargandoPrint ? "Generando print..." : "Descargar print-ready"}
             </button>
 
             <button

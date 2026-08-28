@@ -41,6 +41,8 @@ public class SecurityConfig {
                         // Galería de plantillas prediseñadas del personalizador
                         // (solo lectura; la gestión se hace directo en BD).
                         .requestMatchers("/api/plantillas/**").permitAll()
+                        // Galería de clientes (reseñas con foto) — social proof público.
+                        .requestMatchers("/api/galeria-clientes/**").permitAll()
                         // Las reseñas por producto son públicas; crearlas exige
                         // autenticación (queda cubierta por anyRequest()).
                         .requestMatchers("/api/resenas/producto/**").permitAll()

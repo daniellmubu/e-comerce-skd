@@ -12,6 +12,8 @@ public interface ItemPedidoRepository extends JpaRepository<ItemPedido, Long> {
 
     List<ItemPedido> findByPedidoId(Long pedidoId);
 
+    boolean existsByDisenoId(Long disenoId);
+
     @Query("SELECT COUNT(ip) > 0 FROM ItemPedido ip " +
             "JOIN ip.pedido p JOIN Pago pag ON pag.pedido = p " +
             "WHERE ip.producto.id = :productoId " +

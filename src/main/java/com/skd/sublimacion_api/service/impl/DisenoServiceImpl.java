@@ -9,7 +9,10 @@ import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.exeption.BadRequestException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.DisenoRepository;
+import com.skd.sublimacion_api.repository.ItemCarritoRepository;
+import com.skd.sublimacion_api.repository.ItemPedidoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
+import com.skd.sublimacion_api.repository.SolicitudDisenoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.service.DisenoService;
 import com.skd.sublimacion_api.service.SupabaseStorageService;
@@ -46,6 +49,9 @@ public class DisenoServiceImpl implements DisenoService {
     private final DisenoRepository disenoRepository;
     private final UsuarioRepository usuarioRepository;
     private final ProductoRepository productoRepository;
+    private final SolicitudDisenoRepository solicitudDisenoRepository;
+    private final ItemPedidoRepository itemPedidoRepository;
+    private final ItemCarritoRepository itemCarritoRepository;
     private final WebClient.Builder webClientBuilder;
     private final SupabaseStorageService supabaseStorageService;
 
@@ -162,6 +168,46 @@ public class DisenoServiceImpl implements DisenoService {
                 .stream()
                 .map(this::convertir)
                 .toList();
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void eliminar(Long id, Long usuarioId) {
+
+        Diseno diseno = disenoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Diseño no encontrado"));
+
+        if (!diseno.getUsuario().getId().equals(usuarioId)) {
+            throw new BadRequestException("No puedes borrar un diseño que no te pertenece.");
+        }
+
+        if (Boolean.TRUE.equals(diseno.getUsado())
+                || solicitudDisenoRepository.existsByDisenoId(id)
+                || itemPedidoRepository.existsByDisenoId(id)
+                || itemCarritoRepository.existsByDisenoId(id)) {
+            throw new BadRequestException("No se puede borrar: el diseño ya está usado en un pedido o solicitud.");
+        }
+
+        disenoRepository.delete(diseno);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public int eliminarTodos(Long usuarioId) {
+
+        List<Diseno> propios = disenoRepository.findByUsuarioId(usuarioId);
+        int borrados = 0;
+        for (Diseno d : propios) {
+            boolean usado = Boolean.TRUE.equals(d.getUsado())
+                    || solicitudDisenoRepository.existsByDisenoId(d.getId())
+                    || itemPedidoRepository.existsByDisenoId(d.getId())
+                    || itemCarritoRepository.existsByDisenoId(d.getId());
+            if (!usado) {
+                disenoRepository.delete(d);
+                borrados++;
+            }
+        }
+        return borrados;
     }
 
     private void validarLimiteDiario(Long usuarioId) {
