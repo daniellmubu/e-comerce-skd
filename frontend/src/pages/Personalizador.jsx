@@ -2075,17 +2075,6 @@ function Personalizador() {
                           </div>
                           <input type="range" min={12} max={80} step={2} value={textoActivoLayer.tamano ?? 32} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { tamano: Number(e.target.value) })} className="w-full accent-indigo-600" />
                         </div>
-                        {/* Escala con minimizar/maximizar */}
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <label className="text-xs text-gray-500">Escala {((textoActivoLayer.escala ?? 1) * 100).toFixed(0)}%</label>
-                            <div className="flex items-center gap-1">
-                              <button type="button" onClick={() => actualizarCapaTexto(textoActivoLayer.id, { escala: Math.max(0.5, Number(((textoActivoLayer.escala ?? 1) - 0.1).toFixed(1))) })} className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-xs hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900" title="Minimizar"><FaExpand size={10} style={{ transform: "scale(0.7)" }} /></button>
-                              <button type="button" onClick={() => actualizarCapaTexto(textoActivoLayer.id, { escala: Math.min(3, Number(((textoActivoLayer.escala ?? 1) + 0.1).toFixed(1))) })} className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-xs hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900" title="Maximizar"><FaExpand size={10} /></button>
-                            </div>
-                          </div>
-                          <input type="range" min={0.5} max={3} step={0.1} value={textoActivoLayer.escala ?? 1} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { escala: Number(e.target.value) })} className="w-full accent-indigo-600" />
-                        </div>
                         <label className="block text-xs text-gray-500">Rotación {textoActivoLayer.rotacion ?? 0}°
                           <input type="range" min={0} max={360} step={5} value={textoActivoLayer.rotacion ?? 0} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { rotacion: Number(e.target.value) })} className="w-full accent-indigo-600" />
                         </label>
