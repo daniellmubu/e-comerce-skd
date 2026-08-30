@@ -10,6 +10,8 @@ const ROLES_DISENADOR = ["admin", "disenador"];
 const Home = lazy(() => import("../pages/Home"));
 const Login = lazy(() => import("../pages/Login"));
 const Registro = lazy(() => import("../pages/Registro"));
+const OlvidePassword = lazy(() => import("../pages/OlvidePassword"));
+const RestablecerPassword = lazy(() => import("../pages/RestablecerPassword"));
 const Catalogo = lazy(() => import("../pages/Catalogo"));
 const Dashboard = lazy(() => import("../pages/Dashboard"));
 const Generador = lazy(() => import("../pages/Generador"));
@@ -41,6 +43,8 @@ function AppRoutes() {
       <Route path="/productos/:id" element={<Pagina><DetalleProducto /></Pagina>} />
       <Route path="/login" element={<Pagina><Login /></Pagina>} />
       <Route path="/registro" element={<Pagina><Registro /></Pagina>} />
+      <Route path="/olvide-password" element={<Pagina><OlvidePassword /></Pagina>} />
+      <Route path="/restablecer-password" element={<Pagina><RestablecerPassword /></Pagina>} />
       <Route
         path="/dashboard"
         element={

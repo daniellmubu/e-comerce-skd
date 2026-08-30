@@ -102,6 +102,15 @@ function Login() {
           <Button type="submit" fullWidth loading={loading}>
             {loading ? "Ingresando..." : "Iniciar sesión"}
           </Button>
+
+          <p className="text-center">
+            <Link
+              to="/olvide-password"
+              className="text-sm font-medium text-indigo-600 transition hover:text-indigo-700 dark:text-cyan-400 dark:hover:text-cyan-300"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </p>
         </form>
 
         <p className="mt-8 text-center text-gray-500 dark:text-slate-400">
