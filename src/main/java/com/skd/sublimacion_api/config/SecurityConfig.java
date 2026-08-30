@@ -56,6 +56,23 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("admin")
                         // Endpoints del diseñador (por si el equipo lo separa en un módulo propio).
                         .requestMatchers("/api/disenador/**").hasAnyRole("disenador", "admin")
+                        // Flujo de compra y cuenta del cliente: solo clientes y admins.
+                        // Un diseñador es empleado de la empresa y NO debe comprar ni
+                        // gestionar carrito, pedidos, pagos, facturas, cupones, favoritos,
+                        // direcciones ni referidos desde la tienda.
+                        .requestMatchers(
+                                "/api/carritos/**",
+                                "/api/detalle-carrito/**",
+                                "/api/checkout/**",
+                                "/api/pedidos/**",
+                                "/api/cupones/**",
+                                "/api/favoritos/**",
+                                "/api/direcciones/**",
+                                "/api/pagos/**",
+                                "/api/facturas/**",
+                                "/api/referidos/**",
+                                "/api/resenas/**"
+                        ).hasAnyRole("admin", "cliente")
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

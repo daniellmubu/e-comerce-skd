@@ -46,10 +46,6 @@ export function CartProvider({ children }) {
 
       const detalles = await listarItemsDelCarrito(carrito.id);
 
-      // 👇 PARA SABER QUÉ ESTÁ DEVOLVIENDO EL BACKEND
-      console.log("DETALLES DEL BACKEND:", detalles);
-
-      // 👇 EVITA QUE REACT SE ROMPA
       if (Array.isArray(detalles)) {
         setItems(detalles);
       } else if (Array.isArray(detalles?.data)) {

@@ -3,6 +3,8 @@ package com.skd.sublimacion_api.service.impl;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
@@ -59,9 +61,19 @@ public class PedidoServiceImpl implements PedidoService {
     @Override
     public List<PedidoResponse> listarPorUsuario(Long usuarioId) {
 
-        return pedidoRepository.findByUsuarioId(usuarioId)
-                .stream()
-                .map(this::convertir)
+        List<Pedido> pedidos = pedidoRepository.findByUsuarioId(usuarioId);
+        List<Long> ids = pedidos.stream().map(Pedido::getId).toList();
+
+        Map<Long, List<ItemPedido>> itemsPorPedido = itemPedidoRepository
+                .findByPedidoIdIn(ids).stream()
+                .collect(Collectors.groupingBy(i -> i.getPedido().getId()));
+
+        Map<Long, Factura> facturaPorPedido = facturaRepository
+                .findByPedidoIdIn(ids).stream()
+                .collect(Collectors.toMap(f -> f.getPedido().getId(), f -> f));
+
+        return pedidos.stream()
+                .map(p -> convertir(p, itemsPorPedido.getOrDefault(p.getId(), List.of()), facturaPorPedido.get(p.getId())))
                 .toList();
     }
 
@@ -173,30 +185,34 @@ public class PedidoServiceImpl implements PedidoService {
         }
     }
 
-    private PedidoResponse convertir(Pedido pedido){
+    private PedidoResponse convertir(Pedido pedido) {
 
-    List<ItemPedidoResponse> items = itemPedidoRepository.findByPedidoId(pedido.getId())
-            .stream()
-            .map(this::convertirItem)
-            .toList();
+        List<ItemPedido> items = itemPedidoRepository.findByPedidoId(pedido.getId());
+        Factura factura = facturaRepository.findByPedidoId(pedido.getId()).orElse(null);
+        return convertir(pedido, items, factura);
+    }
 
-    Factura factura = facturaRepository.findByPedidoId(pedido.getId()).orElse(null);
+    private PedidoResponse convertir(Pedido pedido, List<ItemPedido> items, Factura factura) {
 
-    return PedidoResponse.builder()
-            .id(pedido.getId())
-            .usuarioId(pedido.getUsuario().getId())
-            .usuario(pedido.getUsuario().getNombre())
-            .creadoEn(pedido.getCreadoEn())
-            .estado(pedido.getEstado())
-            .subtotal(pedido.getSubtotal())
-            .costoEnvio(pedido.getCostoEnvio())
-            .descuento(pedido.getDescuento())
-            .total(pedido.getTotal())
-            .items(items)
-            .facturaId(factura != null ? factura.getId() : null)
-            .numeroFactura(factura != null ? factura.getNumeroFactura() : null)
-            .build();
-}
+        List<ItemPedidoResponse> respuestas = items.stream()
+                .map(this::convertirItem)
+                .toList();
+
+        return PedidoResponse.builder()
+                .id(pedido.getId())
+                .usuarioId(pedido.getUsuario().getId())
+                .usuario(pedido.getUsuario().getNombre())
+                .creadoEn(pedido.getCreadoEn())
+                .estado(pedido.getEstado())
+                .subtotal(pedido.getSubtotal())
+                .costoEnvio(pedido.getCostoEnvio())
+                .descuento(pedido.getDescuento())
+                .total(pedido.getTotal())
+                .items(respuestas)
+                .facturaId(factura != null ? factura.getId() : null)
+                .numeroFactura(factura != null ? factura.getNumeroFactura() : null)
+                .build();
+    }
 
     private ItemPedidoResponse convertirItem(ItemPedido item) {
 

@@ -1,134 +1,168 @@
+import { Suspense, lazy } from "react";
 import { Routes, Route } from "react-router-dom";
 
-import Home from "../pages/Home";
-import Login from "../pages/Login";
-import Registro from "../pages/Registro";
-import Catalogo from "../pages/Catalogo";
-import Dashboard from "../pages/Dashboard";
-import Generador from "../pages/Generador";
-import Personalizador from "../pages/Personalizador";
-import Carrito from "../pages/Carrito";
-import Checkout from "../pages/Checkout";
-import CheckoutResultado from "../pages/CheckoutResultado";
-import MisPedidos from "../pages/MisPedidos";
-import MisCupones from "../pages/MisCupones";
-import MisFavoritos from "../pages/MisFavoritos";
-import MisDisenos from "../pages/MisDisenos";
-import Bandeja from "../pages/Bandeja";
-import GaleriaClientes from "../pages/GaleriaClientes";
-import SolicitarDiseno from "../pages/SolicitarDiseno";
-import PanelDisenador from "../pages/PanelDisenador";
-import DetalleProducto from "../pages/DetalleProducto";
-import SeguimientoPedido from "../pages/SeguimientoPedido";
-import Creditos from "../pages/Creditos";
+import Loading from "../components/ui/Loading";
 import RutaProtegida from "./RutaProtegida";
+
+const ROLES_CLIENTE = ["admin", "cliente"];
+const ROLES_DISENADOR = ["admin", "disenador"];
+
+const Home = lazy(() => import("../pages/Home"));
+const Login = lazy(() => import("../pages/Login"));
+const Registro = lazy(() => import("../pages/Registro"));
+const Catalogo = lazy(() => import("../pages/Catalogo"));
+const Dashboard = lazy(() => import("../pages/Dashboard"));
+const Generador = lazy(() => import("../pages/Generador"));
+const Personalizador = lazy(() => import("../pages/Personalizador"));
+const Carrito = lazy(() => import("../pages/Carrito"));
+const Checkout = lazy(() => import("../pages/Checkout"));
+const CheckoutResultado = lazy(() => import("../pages/CheckoutResultado"));
+const MisPedidos = lazy(() => import("../pages/MisPedidos"));
+const MisCupones = lazy(() => import("../pages/MisCupones"));
+const MisFavoritos = lazy(() => import("../pages/MisFavoritos"));
+const MisDisenos = lazy(() => import("../pages/MisDisenos"));
+const Bandeja = lazy(() => import("../pages/Bandeja"));
+const GaleriaClientes = lazy(() => import("../pages/GaleriaClientes"));
+const SolicitarDiseno = lazy(() => import("../pages/SolicitarDiseno"));
+const PanelDisenador = lazy(() => import("../pages/PanelDisenador"));
+const DetalleProducto = lazy(() => import("../pages/DetalleProducto"));
+const SeguimientoPedido = lazy(() => import("../pages/SeguimientoPedido"));
+const Creditos = lazy(() => import("../pages/Creditos"));
+
+function Pagina({ children }) {
+  return <Suspense fallback={<Loading label="Cargando…" />}>{children}</Suspense>;
+}
 
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/catalogo" element={<Catalogo />} />
-      <Route path="/productos/:id" element={<DetalleProducto />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/registro" element={<Registro />} />
+      <Route path="/" element={<Pagina><Home /></Pagina>} />
+      <Route path="/catalogo" element={<Pagina><Catalogo /></Pagina>} />
+      <Route path="/productos/:id" element={<Pagina><DetalleProducto /></Pagina>} />
+      <Route path="/login" element={<Pagina><Login /></Pagina>} />
+      <Route path="/registro" element={<Pagina><Registro /></Pagina>} />
       <Route
         path="/dashboard"
         element={
-          <RutaProtegida>
-            <Dashboard />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida roles={ROLES_CLIENTE}>
+              <Dashboard />
+            </RutaProtegida>
+          </Pagina>
         }
       />
-      <Route path="/generador" element={<Generador />} />
-      <Route path="/personalizador" element={<Personalizador />} />
-      <Route path="/galeria-clientes" element={<GaleriaClientes />} />
-      <Route path="/creditos" element={<Creditos />} />
+      <Route path="/generador" element={<Pagina><Generador /></Pagina>} />
+      <Route path="/personalizador" element={<Pagina><Personalizador /></Pagina>} />
+      <Route path="/galeria-clientes" element={<Pagina><GaleriaClientes /></Pagina>} />
+      <Route path="/creditos" element={<Pagina><Creditos /></Pagina>} />
       <Route
         path="/carrito"
         element={
-          <RutaProtegida>
-            <Carrito />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida roles={ROLES_CLIENTE}>
+              <Carrito />
+            </RutaProtegida>
+          </Pagina>
         }
       />
       <Route
         path="/checkout"
         element={
-          <RutaProtegida>
-            <Checkout />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida roles={ROLES_CLIENTE}>
+              <Checkout />
+            </RutaProtegida>
+          </Pagina>
         }
       />
       <Route
         path="/checkout/resultado"
         element={
-          <RutaProtegida>
-            <CheckoutResultado />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida roles={ROLES_CLIENTE}>
+              <CheckoutResultado />
+            </RutaProtegida>
+          </Pagina>
         }
       />
       <Route
         path="/mis-pedidos"
         element={
-          <RutaProtegida>
-            <MisPedidos />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida roles={ROLES_CLIENTE}>
+              <MisPedidos />
+            </RutaProtegida>
+          </Pagina>
         }
       />
       <Route
         path="/mis-cupones"
         element={
-          <RutaProtegida>
-            <MisCupones />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida roles={ROLES_CLIENTE}>
+              <MisCupones />
+            </RutaProtegida>
+          </Pagina>
         }
       />
       <Route
         path="/mis-favoritos"
         element={
-          <RutaProtegida>
-            <MisFavoritos />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida roles={ROLES_CLIENTE}>
+              <MisFavoritos />
+            </RutaProtegida>
+          </Pagina>
         }
       />
       <Route
         path="/mis-disenos"
         element={
-          <RutaProtegida>
-            <MisDisenos />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida>
+              <MisDisenos />
+            </RutaProtegida>
+          </Pagina>
         }
       />
       <Route
         path="/solicitar-diseno"
         element={
-          <RutaProtegida>
-            <SolicitarDiseno />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida>
+              <SolicitarDiseno />
+            </RutaProtegida>
+          </Pagina>
         }
       />
       <Route
         path="/disenador"
         element={
-          <RutaProtegida>
-            <PanelDisenador />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida roles={ROLES_DISENADOR}>
+              <PanelDisenador />
+            </RutaProtegida>
+          </Pagina>
         }
       />
       <Route
         path="/bandeja"
         element={
-          <RutaProtegida>
-            <Bandeja />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida>
+              <Bandeja />
+            </RutaProtegida>
+          </Pagina>
         }
       />
       <Route
         path="/pedidos/:id/seguimiento"
         element={
-          <RutaProtegida>
-            <SeguimientoPedido />
-          </RutaProtegida>
+          <Pagina>
+            <RutaProtegida roles={ROLES_CLIENTE}>
+              <SeguimientoPedido />
+            </RutaProtegida>
+          </Pagina>
         }
       />
     </Routes>

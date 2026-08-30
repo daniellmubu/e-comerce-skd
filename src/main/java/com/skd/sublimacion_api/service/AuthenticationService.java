@@ -57,7 +57,10 @@ public class AuthenticationService {
                 .username(request.getUsername())
                 .correo(request.getCorreo())
                 .contrasenaHash(passwordEncoder.encode(request.getPassword()))
-                .rol(request.getRol() != null ? request.getRol() : Rol.cliente)
+                // El registro público SIEMPRE crea clientes. El rol nunca se toma
+                // del request (escalamiento de privilegios): admin/disenador solo
+                // pueden crearse por un admin autenticado en /api/admin/usuarios.
+                .rol(Rol.cliente)
                 .referidoPor(referidoPor)
                 .codigoReferido(generarCodigoReferido(request.getUsername()))
                 .build();
