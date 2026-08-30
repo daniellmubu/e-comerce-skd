@@ -12,7 +12,7 @@ public interface ItemPedidoRepository extends JpaRepository<ItemPedido, Long> {
 
     List<ItemPedido> findByPedidoId(Long pedidoId);
 
-    @Query("SELECT i FROM ItemPedido i WHERE i.pedido.id IN :pedidoIds")
+    @Query("SELECT i FROM ItemPedido i JOIN FETCH i.producto WHERE i.pedido.id IN :pedidoIds")
     List<ItemPedido> findByPedidoIdIn(@Param("pedidoIds") List<Long> pedidoIds);
 
     boolean existsByDisenoId(Long disenoId);

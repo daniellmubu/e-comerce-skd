@@ -9,6 +9,7 @@ import com.skd.sublimacion_api.entity.CuponUsuario;
 import com.skd.sublimacion_api.entity.PasswordResetToken;
 import com.skd.sublimacion_api.entity.Rol;
 import com.skd.sublimacion_api.entity.Usuario;
+import com.skd.sublimacion_api.exeption.ForbiddenException;
 import com.skd.sublimacion_api.repository.CuponRepository;
 import com.skd.sublimacion_api.repository.CuponUsuarioRepository;
 import com.skd.sublimacion_api.repository.PasswordResetTokenRepository;
@@ -16,6 +17,8 @@ import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,6 +31,9 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class AuthenticationService {
+
+    /** Nº de intentos de login fallidos antes de bloquear la cuenta. */
+    private static final int MAX_INTENTOS_FALLIDOS = 5;
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
@@ -131,15 +137,40 @@ public class AuthenticationService {
 
     public AuthResponse login(LoginRequest request) {
 
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getUsername(),
-                        request.getPassword()
-                )
-        );
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getUsername(),
+                            request.getPassword()
+                    )
+            );
+        } catch (LockedException ex) {
+            // isAccountNonLocked() -> false cuando el usuario está bloqueado.
+            throw new ForbiddenException(
+                    "Cuenta bloqueada por múltiples intentos fallidos. Contacta al administrador."
+            );
+        } catch (BadCredentialsException ex) {
+            // Registramos el intento fallido del usuario (si existe), y lo
+            // bloqueamos al superar el máximo permitido. Se relanza el 401.
+            usuarioRepository.findByUsername(request.getUsername()).ifPresent(u -> {
+                int intentos = (u.getIntentosFallidos() == null ? 0 : u.getIntentosFallidos()) + 1;
+                u.setIntentosFallidos(intentos);
+                if (intentos >= MAX_INTENTOS_FALLIDOS) {
+                    u.setBloqueado(true);
+                }
+                usuarioRepository.save(u);
+            });
+            throw ex;
+        }
 
         Usuario usuario = usuarioRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        // Login exitoso: reiniciamos el contador si quedó con intentos previos.
+        if (usuario.getIntentosFallidos() != null && usuario.getIntentosFallidos() > 0) {
+            usuario.setIntentosFallidos(0);
+            usuarioRepository.save(usuario);
+        }
 
         String token = jwtService.generateToken(usuario);
         String refreshToken = jwtService.generateRefreshToken(usuario);

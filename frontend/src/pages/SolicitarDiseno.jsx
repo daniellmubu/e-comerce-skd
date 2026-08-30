@@ -20,6 +20,7 @@ import {
 } from "../services/solicitudDisenoService";
 import { obtenerOCrearCarrito } from "../services/carritoService";
 import { agregarDisenoAlCarrito } from "../services/disenoService";
+import { useCart } from "../context/CartContext";
 import { useTopicRealtime } from "../hooks/useTopicRealtime";
 import { getErrorMessage } from "../services/api";
 import Loading from "../components/ui/Loading";
@@ -53,6 +54,7 @@ const ESTADOS = {
 };
 
 function SolicitarDiseno() {
+  const { abrirCarrito, recargarCarrito } = useCart();
   const [productos, setProductos] = useState([]);
   const [productoId, setProductoId] = useState("");
   const [descripcion, setDescripcion] = useState("");
@@ -118,6 +120,8 @@ function SolicitarDiseno() {
         disenoId: s.disenoId,
         cantidad: 1,
       });
+      await recargarCarrito();
+      abrirCarrito();
       setMensaje({ tipo: "ok", texto: "Diseño agregado al carrito." });
     } catch (err) {
       setMensaje({ tipo: "error", texto: getErrorMessage(err) });
