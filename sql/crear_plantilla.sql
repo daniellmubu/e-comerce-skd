@@ -4,7 +4,7 @@
 -- en blanco. La gestión (crear/editar) se hace por ahora directo en BD:
 -- solo existe lectura pública vía GET /api/plantillas.
 --
--- producto_tipo_compatible: 'camiseta' | 'mug' | 'ambos'
+-- producto_tipo_compatible: 'mug' | 'mug_magico' | 'jarra_cervecera' | 'ambos'
 -- Idempotente: la tabla y las filas de ejemplo solo se crean si no existen.
 
 CREATE TABLE IF NOT EXISTS plantilla (
@@ -27,12 +27,12 @@ CREATE INDEX IF NOT EXISTS idx_plantilla_activo ON plantilla (activo);
 INSERT INTO plantilla (nombre, categoria, imagen_url, producto_tipo_compatible)
 SELECT * FROM (VALUES
     ('Feliz Cumpleanos',   'Fechas especiales', 'https://placehold.co/800x800/png?text=Feliz%20Cumplea%C3%B1os',        'ambos'),
-    ('Navidad SKD',        'Fechas especiales', 'https://placehold.co/800x800/png?text=Navidad%20SKD',                  'camiseta'),
+    ('Navidad SKD',        'Fechas especiales', 'https://placehold.co/800x800/png?text=Navidad%20SKD',                  'mug'),
     ('Dia de la Madre',    'Fechas especiales', 'https://placehold.co/800x800/png?text=Dia%20de%20la%20Madre',          'mug'),
     ('Cafe con Actitud',   'Frases',            'https://placehold.co/800x800/png?text=Cafe%20con%20Actitud',           'mug'),
     ('Hecho a Mano',       'Frases',            'https://placehold.co/800x800/png?text=Hecho%20a%20Mano',               'ambos'),
-    ('Equipo Ganador',     'Deportes',          'https://placehold.co/800x800/png?text=Equipo%20Ganador',               'camiseta'),
-    ('Lobo Salvaje',       'Animales',          'https://placehold.co/800x800/png?text=Lobo%20Salvaje',                 'camiseta'),
+    ('Equipo Ganador',     'Deportes',          'https://placehold.co/800x800/png?text=Equipo%20Ganador',               'jarra_cervecera'),
+    ('Lobo Salvaje',       'Animales',          'https://placehold.co/800x800/png?text=Lobo%20Salvaje',                 'jarra_cervecera'),
     ('Gato Minimalista',   'Animales',          'https://placehold.co/800x800/png?text=Gato%20Minimalista',             'mug')
 ) AS datos(nombre, categoria, imagen_url, producto_tipo_compatible)
 WHERE NOT EXISTS (

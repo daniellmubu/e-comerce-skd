@@ -10,7 +10,7 @@ function Hero() {
           Personaliza tus productos
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-indigo-100 dark:text-slate-200">
-          Crea diseños únicos en pocillos, camisetas y más
+          Crea diseños únicos en mugs, jarras y más
         </p>
         <button
           type="button"

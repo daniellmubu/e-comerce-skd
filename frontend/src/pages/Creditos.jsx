@@ -1,27 +1,24 @@
 import { Link } from "react-router-dom";
 
 // ─────────────────────────────────────────────────────────────────────
-// CRÉDITOS DE MODELOS 3D
-// Completa aquí los datos reales de cada modelo (autor y enlace original).
-// La licencia Creative Commons Attribution exige dar crédito visible,
-// así que mantén esta página enlazada desde el footer.
+// CRÉDITOS DE MODELOS 3D - CC-BY-4.0 requiere atribución visible
+// Mantener esta página enlazada desde el footer (Footer.jsx -> /creditos)
+// Ver también frontend/public/models/license.txt y jarra-cervecera.gltf asset.extras
 // ─────────────────────────────────────────────────────────────────────
 const MODELOS_CREDITOS = [
   {
-    nombre: "T-Shirt",
-    autor: "funlab117",
-    fuente: "Sketchfab",
-    // TODO: reemplazar por el enlace real del modelo en Sketchfab.
-    enlace: "https://sketchfab.com/3d-models/t-shirt-c1a3e5eb9b5445f4b7d4be82f1127eba",
-    licencia: "Creative Commons Attribution (CC BY)",
+    nombre: "Mug / Mug Mágico",
+    autor: "Modelo base mug.gltf (mismo objeto para Mug y Mug Mágico)",
+    fuente: "Proyecto SKD / Sketchfab (ver historial)",
+    enlace: "https://sketchfab.com/3d-models/plain-mug-19c8fe5702b544d0a1409d3dac1cf90e",
+    licencia: "CC-BY-4.0 (si aplica) - ver archivo del modelo",
   },
   {
-    nombre: "Coffee Mug",
-    autor: "[autor pendiente]",
+    nombre: "Beer Jar / Jarra Cervecera 500ml",
+    autor: "Pxto (https://sketchfab.com/joselargo8)",
     fuente: "Sketchfab",
-    // TODO: reemplazar por el enlace real del modelo en Sketchfab.
-    enlace: "https://sketchfab.com/3d-models/plain-mug-19c8fe5702b544d0a1409d3dac1cf90e",
-    licencia: "Creative Commons Attribution (CC BY)",
+    enlace: "https://sketchfab.com/3d-models/beer-jar-ff7bf48e13fe44a5b2476d382f345507",
+    licencia: "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
   },
 ];
 

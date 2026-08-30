@@ -1,17 +1,16 @@
 import { FaStar } from "react-icons/fa";
 import { Link } from "react-router-dom";
 
-import camiseta from "../../assets/images/products/camiseta.png";
 import mug from "../../assets/images/products/mug.png";
 
 const products = [
   {
     id: 1,
-    name: "Camiseta Oversize",
+    name: "Mug Personalizado",
     price: "$49.900",
     rating: 5,
-    category: "Camisetas",
-    image: camiseta,
+    category: "Mugs",
+    image: mug,
   },
   {
     id: 2,

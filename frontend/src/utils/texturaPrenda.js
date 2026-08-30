@@ -24,6 +24,8 @@ const CAMISETA = {
 };
 
 const ANCHO_IMAGEN_BASE = 0.38;
+// Debe coincidir con ANCHO_IMAGEN_MUG de Prenda3D.jsx (tras ajuste 0.15→0.22)
+export const ANCHO_IMAGEN_MUG_TEX = 0.22;
 
 const AREA_IMPRIMIBLE_TORSO = {
   x0: 0.302,
@@ -31,6 +33,33 @@ const AREA_IMPRIMIBLE_TORSO = {
   ancho: 0.398,
   alto: 0.636,
 };
+
+// --- Parámetros físicos para alta resolución print-ready (300 DPI) ---
+// El visor usa 512px como textura base. Para 300 DPI reales sobre 12 pulgadas
+// de ancho físico (PRINT_WIDTH_INCHES en Personalizador.jsx), la resolución
+// alta es 3600px (12*300). Se expone como constante para que print-ready use
+// la MISMA composición solo que escalada.
+export const DPI_PRINT = 300;
+export const PRINT_WIDTH_INCHES_TEX = 12; // debe coincidir con Personalizador.jsx
+export const TAMANO_TEX_ALTA_RESOLUCION = Math.round(PRINT_WIDTH_INCHES_TEX * DPI_PRINT); // 3600
+// Bleed 3mm a 300 DPI ≈ 35px (3/25.4*300)
+export const BLEED_MM_DEFECTO = 3;
+export const BLEED_PX_300DPI = Math.round((BLEED_MM_DEFECTO / 25.4) * DPI_PRINT); // 35
+
+// --- Parámetros print-ready cilíndrico (mug 11oz) ---
+// Un mug es un cilindro perfecto: el área de sublimación es un rectángulo
+// panorámico 20cm x 9cm. A 300 DPI => 2362 x 1063 px.
+// A diferencia de la camiseta (cuadrada 3600x3600), el mug usa rectángulo.
+// Ver frontend/src/utils/texturaPrenda.js:2362x1063
+export const MUG_PRINT_WIDTH_CM = 20;
+export const MUG_PRINT_HEIGHT_CM = 9;
+export const MUG_PRINT_WIDTH_PX = Math.round((MUG_PRINT_WIDTH_CM / 2.54) * DPI_PRINT); // 2362
+export const MUG_PRINT_HEIGHT_PX = Math.round((MUG_PRINT_HEIGHT_CM / 2.54) * DPI_PRINT); // 1063
+// Jarra cervecera 500ml es más grande: 24cm x 12cm aprox.
+export const JARRA_PRINT_WIDTH_CM = 24;
+export const JARRA_PRINT_HEIGHT_CM = 12;
+export const JARRA_PRINT_WIDTH_PX = Math.round((JARRA_PRINT_WIDTH_CM / 2.54) * DPI_PRINT); // 2835
+export const JARRA_PRINT_HEIGHT_PX = Math.round((JARRA_PRINT_HEIGHT_CM / 2.54) * DPI_PRINT); // 1417
 
 const cacheImagenes = new Map(); // url -> Promise<HTMLImageElement>
 
@@ -162,7 +191,12 @@ async function cargarDiseno(url) {
   }
 }
 
-export async function componerTexturaCamiseta({
+// Núcleo reutilizable: compone el canvas 2D con la MISMA lógica de posicionamiento
+// que usa el visor 3D. Retorna el canvas para que el llamante decida si crea
+// una THREE.CanvasTexture (visor) o un dataURL PNG de alta resolución (print-ready).
+// Mantiene proporciones, posiciones relativas (mapearPorArea/AREA_IMPRIMIBLE_TORSO),
+// escalas y rotaciones idénticas; solo cambia el tamaño del canvas.
+async function componerCanvasCamisetaInterno({
   color = "#ffffff",
   disenos = [],
   texto = null,
@@ -207,11 +241,27 @@ export async function componerTexturaCamiseta({
     if (!img) continue;
 
     const aspectRatio = img.naturalHeight / img.naturalWidth;
-    // Inset 12% + borde sutil para romper efecto "pegado" sin shadowBlur costoso.
-    // El inset deja aire respecto a costuras y el borde fino separa visualmente.
     const INSET = 0.88;
-    const baseW = tamano * anchoBase * (d.escala ?? 1) * INSET;
-    const baseH = baseW * aspectRatio;
+    let baseW = tamano * anchoBase * (d.escala ?? 1) * INSET;
+    let baseH = baseW * aspectRatio;
+    // Corrección cilíndrica para mug: la textura 512×512 mapea circ≈6.91 a ancho
+    // y altura≈2.0 a alto → 1px horizontal = 3.45× más ancho físico que vertical.
+    // Sin esto el diseño se ve muy ancho (estirado). Se compensa haciendo
+    // baseH más alta para que el rectángulo físico quede proporcional.
+    const esMug = anchoBase === ANCHO_IMAGEN_MUG_TEX;
+    if (esMug) {
+      const FACTOR_CILINDRICO = (2 * Math.PI * 1.1) / 2.0; // ≈3.4558
+      baseH *= FACTOR_CILINDRICO;
+      // Limita ancho excesivo en apaisadas y alto excesivo al agrandar mucho
+      // (evita "muy ancho" y que a escala 4.5x el alto se salga del canvas).
+      const MAX_ANCHO_MUG = tamano * 0.42;
+      const MAX_ALTO_MUG = tamano * 0.88;
+      if (baseW > MAX_ANCHO_MUG || baseH > MAX_ALTO_MUG) {
+        const ratio = Math.min(MAX_ANCHO_MUG / baseW, MAX_ALTO_MUG / baseH);
+        baseW *= ratio;
+        baseH *= ratio;
+      }
+    }
 
     const { cx, cy, fx, fy } = mapearPorArea(d.x, d.y, tamano, area);
 
@@ -219,7 +269,6 @@ export async function componerTexturaCamiseta({
     ctx.translate(cx, cy);
     ctx.rotate(((d.rotacion ?? 0) * Math.PI) / 180);
     ctx.drawImage(img, (-baseW * fx) / 2, (-baseH * fy) / 2, baseW * fx, baseH * fy);
-    // Borde muy sutil (1px) para que no se confunda con la tela, barato y sin blur
     ctx.strokeStyle = "rgba(0,0,0,0.09)";
     ctx.lineWidth = Math.max(1, tamano * 0.003);
     ctx.strokeRect((-baseW * fx) / 2, (-baseH * fy) / 2, baseW * fx, baseH * fy);
@@ -231,6 +280,11 @@ export async function componerTexturaCamiseta({
   ctx.restore();
   ctx.restore();
 
+  return canvas;
+}
+
+export async function componerTexturaCamiseta(opts) {
+  const canvas = await componerCanvasCamisetaInterno(opts);
   const textura = new THREE.CanvasTexture(canvas);
   textura.colorSpace = THREE.SRGBColorSpace;
   textura.premultiplyAlpha = false;
@@ -238,10 +292,211 @@ export async function componerTexturaCamiseta({
   textura.wrapT = THREE.ClampToEdgeWrapping;
   textura.anisotropy = 4;
   textura.needsUpdate = true;
+  // Punto 2 del checklist: material transparente para que el fondo del canvas
+  // (ahora transparente) no oculte el color base del mug.
+  // La propiedad se setea en Prenda3D.jsx al aplicar la textura; aquí solo
+  // se marca como transparent-friendly.
   return textura;
 }
 
-export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null, textos = null, disenos = null }) {
+// --- Alta resolución + bleed para print-ready, REUTILIZANDO la misma composición ---
+// Genera el MISMO canvas que el visor pero a tamaño alta resolución (ej 3600px para
+// 30x40cm a 300 DPI) escalando TODO proporcionalmente, y luego añade bleed configurable
+// (por defecto 3mm ≈35px a 300 DPI) como espacio extra en los bordes SIN mover ni
+// recortar el contenido del usuario.
+export async function componerTexturaCamisetaAltaResolucion({
+  tamanoAltaResolucion = TAMANO_TEX_ALTA_RESOLUCION,
+  bleedPx = BLEED_PX_300DPI,
+  agregarMarcasCorte = true,
+  ...opts
+}) {
+  const tamano = tamanoAltaResolucion;
+  const canvasAlta = await componerCanvasCamisetaInterno({ ...opts, tamano });
+
+  if (!bleedPx || bleedPx <= 0) {
+    return { canvas: canvasAlta, dataUrl: canvasAlta.toDataURL("image/png"), tamano, bleedPx: 0 };
+  }
+
+  const sizeConBleed = tamano + bleedPx * 2;
+  const canvasBleed = document.createElement("canvas");
+  canvasBleed.width = sizeConBleed;
+  canvasBleed.height = sizeConBleed;
+  const ctx = canvasBleed.getContext("2d");
+
+  // Bleed: rellena bordes con el color base o transparente según fondoTransparente
+  if (opts.fondoTransparente) {
+    ctx.clearRect(0, 0, sizeConBleed, sizeConBleed);
+  } else {
+    ctx.fillStyle = opts.color || "#ffffff";
+    ctx.fillRect(0, 0, sizeConBleed, sizeConBleed);
+  }
+  // Dibuja el canvas de alta resolución centrado dentro del bleed
+  ctx.drawImage(canvasAlta, bleedPx, bleedPx);
+
+  if (agregarMarcasCorte) {
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.lineWidth = Math.max(2, tamano * 0.0007);
+    const m = Math.round(tamano * 0.006); // largo de marca ~18px a 512 escalado a 3600
+    const b = bleedPx;
+    const s = sizeConBleed;
+    ctx.beginPath(); ctx.moveTo(b, m); ctx.lineTo(b, b); ctx.lineTo(m, b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s - m, b); ctx.lineTo(s - b, b); ctx.lineTo(s - b, m); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(b, s - m); ctx.lineTo(b, s - b); ctx.lineTo(m, s - b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s - b, s - m); ctx.lineTo(s - b, s - b); ctx.lineTo(s - m, s - b); ctx.stroke();
+  }
+
+  return { canvas: canvasBleed, dataUrl: canvasBleed.toDataURL("image/png"), tamano, bleedPx, tamanoConBleed: sizeConBleed };
+}
+
+// Helper para obtener canvas sin envolver en textura (útil para mug u otros)
+export async function componerCanvasCamiseta(opts) {
+  return componerCanvasCamisetaInterno(opts);
+}
+
+// ========================================================================
+// PRINT-READY CILÍNDRICO RECTANGULAR (mug / jarra)
+// ========================================================================
+// Fórmula de mapeo UV -> píxeles para cilindro desplegado:
+//
+//   El modelo 3D usa UVs cilíndricas: u = 0.5 + atan2(x,z)/(2π) ∈ [0,1] (vuelta)
+//   v = (y - minY)/altura ∈ [0,1] (alto). En Personalizador.jsx se guarda
+//   d.x = u*100, d.y = v_invertida*100 donde v_invertida = 1 - uv_geom.y
+//   (corrección por flipY de CanvasTexture).
+//
+//   Para lienzo rectangular plano W x H (ej. 2362x1063):
+//     pixelX = (d.x / 100) * W   // u * W
+//     pixelY = (d.y / 100) * H   // (1 - v_geom) * H  -> coincide con lo que ve el usuario
+//     anchoDibujo  = W * anchoBase * escala * INSET
+//     altoDibujo   = anchoDibujo * aspectRatio * FACTOR_CILINDRICO_RECT
+//       donde FACTOR_CILINDRICO_RECT = (circ/altura) / (W/H)  corrige que 1px horizontal
+//       no equivale físicamente a 1px vertical. Para square W/H=1 factor=3.4558 (igual que visor);
+//       para 2362x1063 factor≈1.556.
+//
+//   El archivo exportado SOLO contiene la capa del diseño con fondo transparente:
+//   ctx.clearRect(0,0,W,H) sin fill de color cerámica, sin luces/sombras del material 3D.
+//   Así la máquina de sublimación recibe solo tintas donde hay diseño.
+//
+async function componerCanvasMugRectangularInterno({
+  disenos = [],
+  textos = [],
+  ancho = MUG_PRINT_WIDTH_PX,
+  alto = MUG_PRINT_HEIGHT_PX,
+  anchoBase = ANCHO_IMAGEN_MUG_TEX,
+}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = ancho;
+  canvas.height = alto;
+  const ctx = canvas.getContext("2d");
+  // Fondo 100% transparente: solo diseño, sin cerámica/sombras/brillos del 3D
+  ctx.clearRect(0, 0, ancho, alto);
+
+  const INSET = 0.88;
+  // Factor cilíndrico corregido para rectángulo: (circ/altura) / (W/H)
+  const FACTOR_CILINDRICO_BASE = (2 * Math.PI * 1.1) / 2.0; // 3.4558 para square
+  const factorRect = FACTOR_CILINDRICO_BASE / (ancho / alto);
+
+  for (const d of disenos ?? []) {
+    const img = await cargarDiseno(d.url);
+    if (!img) continue;
+    const aspectRatio = img.naturalHeight / img.naturalWidth;
+    let baseW = ancho * anchoBase * (d.escala ?? 1) * INSET;
+    let baseH = baseW * aspectRatio * factorRect;
+
+    // Límites proporcionales al rectángulo (evita que a escala 4.5x se salga)
+    const MAX_ANCHO = ancho * 0.90;
+    const MAX_ALTO = alto * 0.90;
+    if (baseW > MAX_ANCHO || baseH > MAX_ALTO) {
+      const ratio = Math.min(MAX_ANCHO / baseW, MAX_ALTO / baseH);
+      baseW *= ratio;
+      baseH *= ratio;
+    }
+
+    // Mapeo UV -> píxeles rectangular (WYSIWYG con el visor 3D)
+    const cx = (d.x / 100) * ancho;
+    const cy = (d.y / 100) * alto;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(((d.rotacion ?? 0) * Math.PI) / 180);
+    ctx.drawImage(img, -baseW / 2, -baseH / 2, baseW, baseH);
+    ctx.restore();
+  }
+
+  // Textos: dibujado directo en coordenadas de lienzo rectangular
+  // Reusa lógica de dibujarTexto pero adaptada a W x H no cuadrado
+  for (const texto of textos ?? []) {
+    if (!texto?.contenido?.trim()) continue;
+    await cargarFuenteParaCanvas(texto.fuente || "sans-serif");
+    const cx = (texto.x / 100) * ancho;
+    const cy = (texto.y / 100) * alto;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(((texto.rotacion ?? 0) * Math.PI) / 180);
+    ctx.scale(texto.escala ?? 1, texto.escala ?? 1);
+    ctx.fillStyle = texto.color || "#111111";
+    const peso = texto.negrita ? "700" : "600";
+    const estilo = texto.cursiva ? "italic " : "";
+    // Escala de fuente proporcional a ancho (2362 vs 512 del visor)
+    const tamDibujo = Math.round((texto.tamano || 32) * (ancho / 512));
+    ctx.font = `${estilo}${peso} ${tamDibujo}px ${texto.fuente || "sans-serif"}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(texto.contenido, 0, 0);
+    if (texto.subrayado) {
+      const w = ctx.measureText(texto.contenido).width;
+      ctx.strokeStyle = texto.color || "#111111";
+      ctx.lineWidth = Math.max(2, tamDibujo * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(-w / 2, tamDibujo * 0.45);
+      ctx.lineTo(w / 2, tamDibujo * 0.45);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  return canvas;
+}
+
+export async function componerMugPrintReady({
+  disenos = [],
+  textos = [],
+  ancho = MUG_PRINT_WIDTH_PX,
+  alto = MUG_PRINT_HEIGHT_PX,
+  anchoBase = ANCHO_IMAGEN_MUG_TEX,
+  bleedPx = 0,
+  agregarMarcasCorte = false,
+} = {}) {
+  const canvasBase = await componerCanvasMugRectangularInterno({ disenos, textos, ancho, alto, anchoBase });
+
+  if (!bleedPx || bleedPx <= 0) {
+    return { canvas: canvasBase, dataUrl: canvasBase.toDataURL("image/png"), ancho, alto, bleedPx: 0 };
+  }
+
+  // Bleed rectangular transparente (no se rellena con color cerámica)
+  const wBleed = ancho + bleedPx * 2;
+  const hBleed = alto + bleedPx * 2;
+  const canvasBleed = document.createElement("canvas");
+  canvasBleed.width = wBleed;
+  canvasBleed.height = hBleed;
+  const ctx = canvasBleed.getContext("2d");
+  ctx.clearRect(0, 0, wBleed, hBleed);
+  ctx.drawImage(canvasBase, bleedPx, bleedPx);
+
+  if (agregarMarcasCorte) {
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.lineWidth = 2;
+    const m = Math.round(Math.min(ancho, alto) * 0.012);
+    const b = bleedPx;
+    ctx.beginPath(); ctx.moveTo(b, m); ctx.lineTo(b, b); ctx.lineTo(m, b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wBleed - m, b); ctx.lineTo(wBleed - b, b); ctx.lineTo(wBleed - b, m); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(b, hBleed - m); ctx.lineTo(b, hBleed - b); ctx.lineTo(m, hBleed - b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wBleed - b, hBleed - m); ctx.lineTo(wBleed - b, hBleed - b); ctx.lineTo(wBleed - m, hBleed - b); ctx.stroke();
+  }
+
+  return { canvas: canvasBleed, dataUrl: canvasBleed.toDataURL("image/png"), ancho, alto, bleedPx, anchoConBleed: wBleed, altoConBleed: hBleed };
+}
+
+export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null, textos = null, disenos = null, fondoTransparente = null }) {
   const texW = 512;
   const texH = 512;
 
@@ -250,8 +505,18 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
   canvas.height = texH;
   const ctx = canvas.getContext("2d");
 
-  ctx.fillStyle = color;
-  ctx.fillRect(0, 0, texW, texH);
+  // Punto 1 del checklist: canvas transparente para mug (sin fill sólido) cuando hay diseño.
+  // Si fondoTransparente===true (mug overlay) se limpia transparente; si null se decide
+  // automáticamente: transparente cuando hay contenido, sólido solo sin contenido.
+  // Esto evita el rectángulo gris que cortaba la imagen del colibrí.
+  const tieneContenido = (disenos && disenos.length > 0) || Boolean(disenoUrl) || (textos && textos.length > 0) || Boolean(texto && texto.trim());
+  const usarTransparente = fondoTransparente !== null ? fondoTransparente : tieneContenido;
+  if (usarTransparente) {
+    ctx.clearRect(0, 0, texW, texH);
+  } else {
+    ctx.fillStyle = color || "#ffffff";
+    ctx.fillRect(0, 0, texW, texH);
+  }
 
   const dibujarUnDiseno = async (d, anchoFraccionPropio) => {
     const diseno = await cargarDiseno(d.url);
@@ -266,20 +531,35 @@ export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, c
       ? anchoFraccionPropio * escY * altura 
       : anchoFisico * aspect;
 
-    const dw = (anchoFisico / circunferencia) * texW;
-    const dh = (altoFisico / altura) * texH;
+    let dw = (anchoFisico / circunferencia) * texW;
+    let dh = (altoFisico / altura) * texH;
+    // Punto 3: evita recorte vertical en canvas cilíndrico cuadrado.
+    // Para mug, dw/dh crudos pueden quedar muy anchos/pequeños; se usa la
+    // misma corrección que en componerCanvasCamisetaInterno pero aquí el
+    // canvas es siempre 512×512 físico, por lo que se limita proporcionalmente.
+    // Si la imagen completa no cabe (ej escala 4.5x), se escala uniformemente
+    // para que quepa sin recortarse, manteniendo el fondo transparente.
+    const MAX_DW = texW * 0.45;
+    const MAX_DH = texH * 0.90;
+    if (dw > MAX_DW || dh > MAX_DH) {
+      const r = Math.min(MAX_DW / dw, MAX_DH / dh);
+      dw *= r;
+      dh *= r;
+    }
     const cx = (d.x / 100) * texW;
     const cy = (d.y / 100) * texH;
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(((d.rotacion ?? 0) * Math.PI) / 180);
-    // Inset 12% + borde sutil, sin blur para mantener nitidez y performance
     const INSET_MUG = 0.88;
     ctx.drawImage(diseno, -dw * INSET_MUG / 2, -dh * INSET_MUG / 2, dw * INSET_MUG, dh * INSET_MUG);
-    ctx.strokeStyle = "rgba(0,0,0,0.07)";
-    ctx.lineWidth = Math.max(1, texW * 0.003);
-    ctx.strokeRect(-dw * INSET_MUG / 2, -dh * INSET_MUG / 2, dw * INSET_MUG, dh * INSET_MUG);
+    // Borde sutil solo si hay fondo transparente (evita rectángulo gris visible)
+    if (usarTransparente) {
+      ctx.strokeStyle = "rgba(0,0,0,0.07)";
+      ctx.lineWidth = Math.max(1, texW * 0.003);
+      ctx.strokeRect(-dw * INSET_MUG / 2, -dh * INSET_MUG / 2, dw * INSET_MUG, dh * INSET_MUG);
+    }
     ctx.restore();
   };
 

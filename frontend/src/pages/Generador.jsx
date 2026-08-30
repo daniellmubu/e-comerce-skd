@@ -1,9 +1,8 @@
 import { useState, useMemo } from "react";
-import { FaMagic, FaSpinner, FaArrowRight, FaTimes, FaLock, FaPlus } from "react-icons/fa";
-import { Shirt, Coffee, Share2 } from "lucide-react";
+import { FaMagic, FaSpinner, FaArrowRight, FaTimes, FaLock, FaPlus, FaBeer } from "react-icons/fa";
+import { Coffee, Share2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
-import camiseta from "../assets/images/products/camiseta.png";
 import mug from "../assets/images/products/mug.png";
 import { useAuth } from "../context/AuthContext";
 import { generarDiseno } from "../services/disenoService";
@@ -11,16 +10,16 @@ import { getErrorMessage } from "../services/api";
 import Prenda3D from "../components/ui/Prenda3D";
 
 const PRODUCT_TYPES = [
-  { id: "camiseta", name: "Camiseta", image: camiseta, icon: Shirt },
   { id: "mug", name: "Mug", image: mug, icon: Coffee },
+  { id: "mug_magico", name: "Mug Mágico", image: mug, icon: Coffee },
+  { id: "jarra_cervecera", name: "Jarra Cervecera", image: mug, icon: FaBeer },
 ];
 
 // El Catálogo manda la categoría tal como la devuelve el backend
-// ("Camisetas", "Mugs"); acá la traducimos al id interno
-// que usan las tarjetas de producto de este componente.
+// acá la traducimos al id interno
 const CATEGORIA_TO_TIPO = {
-  Camisetas: "camiseta",
   Mugs: "mug",
+  Jarras: "jarra_cervecera",
 };
 
 const COLORS = [
@@ -218,7 +217,7 @@ function Generador() {
                   setPrompt(e.target.value);
                   if (showAuthGate) setShowAuthGate(false);
                 }}
-                placeholder="Quiero una camiseta negra con un dragón japonés en tonos azules y un estilo cyberpunk."
+                placeholder="Quiero un mug negro con un dragón japonés en tonos azules y un estilo cyberpunk."
                 rows={4}
                 className="
                   w-full resize-none rounded-2xl border border-slate-700

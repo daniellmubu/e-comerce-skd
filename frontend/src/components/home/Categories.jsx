@@ -1,9 +1,9 @@
-import { FaTshirt, FaMugHot, FaWineBottle } from "react-icons/fa";
+import { FaMugHot, FaBeer, FaWineBottle } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 
 const categorias = [
-  { title: "Pocillos", icon: FaMugHot },
-  { title: "Camisetas", icon: FaTshirt },
+  { title: "Mugs", icon: FaMugHot },
+  { title: "Jarras", icon: FaBeer },
   { title: "Botellas", icon: FaWineBottle },
 ];
 

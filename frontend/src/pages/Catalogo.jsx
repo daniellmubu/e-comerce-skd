@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { FaSearch, FaHeart } from "react-icons/fa";
 
-import camiseta from "../assets/images/products/camiseta.png";
 import mug from "../assets/images/products/mug.png";
 import { listarProductos } from "../services/productService";
 import { agregarFavorito, eliminarFavorito } from "../services/favoritoService";
@@ -19,11 +18,11 @@ const SORT_OPTIONS = [
 // Mapeamos a la imagen y el gradiente visuales; cualquier categoría
 // nueva que no esté aquí cae en el valor por defecto.
 const CATEGORY_META = {
-  Camisetas: { image: camiseta, color: "from-cyan-500 to-blue-700" },
   Mugs: { image: mug, color: "from-violet-500 to-purple-700" },
+  Jarras: { image: mug, color: "from-amber-500 to-orange-700" },
 };
 
-const DEFAULT_META = { image: camiseta, color: "from-slate-500 to-slate-700" };
+const DEFAULT_META = { image: mug, color: "from-slate-500 to-slate-700" };
 
 function formatPrice(value) {
   return Number(value).toLocaleString("es-CO", {

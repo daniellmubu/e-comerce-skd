@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
 import { FaEye } from "react-icons/fa";
 
-import camiseta from "../../assets/images/products/camiseta.png";
 import mug from "../../assets/images/products/mug.png";
 
 const designs = [
   {
     title: "Cyber Samurai",
-    category: "Camisetas",
-    image: camiseta,
+    category: "Mugs",
+    image: mug,
   },
   {
     title: "Neon Dragon",

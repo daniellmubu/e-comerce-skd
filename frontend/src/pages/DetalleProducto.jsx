@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { FaStar, FaShoppingCart, FaMagic, FaArrowLeft, FaUpload, FaSpinner } from "react-icons/fa";
 
-import camiseta from "../assets/images/products/camiseta.png";
 import mug from "../assets/images/products/mug.png";
 import { obtenerProductoPorId, obtenerVariantesDeProducto, listarProductos } from "../services/productService";
 import { listarResenasPorProducto, crearResena, subirImagenResena } from "../services/resenaService";
@@ -13,12 +12,11 @@ import { useAuth } from "../context/AuthContext";
 import Loading from "../components/ui/Loading";
 
 // Igual que en Catalogo.jsx: el backend solo da el nombre de la categoría,
-// así que mapeamos a la imagen de referencia que ya usa el resto del sitio.
 const CATEGORY_META = {
-  Camisetas: { image: camiseta, color: "from-cyan-500 to-blue-700" },
   Mugs: { image: mug, color: "from-violet-500 to-purple-700" },
+  Jarras: { image: mug, color: "from-amber-500 to-orange-700" },
 };
-const DEFAULT_META = { image: camiseta, color: "from-slate-500 to-slate-700" };
+const DEFAULT_META = { image: mug, color: "from-slate-500 to-slate-700" };
 
 function formatPrice(value) {
   return Number(value).toLocaleString("es-CO", {

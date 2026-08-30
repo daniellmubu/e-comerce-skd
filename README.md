@@ -152,6 +152,21 @@ npm run dev
 
 La aplicación queda disponible en `http://localhost:5173`.
 
+## Modelos 3D y licencias
+
+El personalizador usa modelos glTF en `frontend/public/models/`:
+
+- `mug.gltf` (+ `mug.bin`) — base para **Mug** y **Mug Mágico** (mismo objeto, diferencia solo color base `#ffffff` vs `#1a1a1a`).
+- `jarra-cervecera.gltf` (+ `jarra-cervecera.bin`) — **Jarra Cervecera 500ml**, modelo *Beer jar* por **Pxto** (Sketchfab) bajo **CC-BY-4.0** (https://creativecommons.org/licenses/by/4.0/). Ver `frontend/public/models/license.txt` y `frontend/public/models/jarra-cervecera.gltf` → `asset.extras` para crédito. La atribución visible está en `/creditos` (Footer → Créditos 3D).
+
+> **Requisito CC-BY-4.0:** al compartir o desplegar este proyecto, mantén el crédito: *This work is based on "Beer jar" (https://sketchfab.com/3d-models/beer-jar-ff7bf48e13fe44a5b2476d382f345507) by Pxto licensed under CC-BY-4.0*.
+
+## Catálogo actual (tras eliminar Camiseta)
+
+- **Mugs**: `Mug Cerámico Blanco 11oz` (18000), `Mug Mágico Negro` (25000)
+- **Jarras**: `Jarra Cervecera 500ml` (32000)
+- **Gorras / Cojines / Llaveros** sin cambios. Las categorías `Camisetas` y productos `Camiseta Blanca/Deportiva` fueron eliminadas.
+
 ## Flujo de trabajo
 
 Se usa un modelo tipo GitFlow:

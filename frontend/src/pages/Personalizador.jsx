@@ -14,19 +14,18 @@ import {
   FaExclamationTriangle,
   FaPrint,
   FaImages,
+  FaBeer,
+  FaMoon,
 } from "react-icons/fa";
-import { Shirt, Coffee } from "lucide-react";
+import { Coffee } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { guardarPersonalizacion } from "../services/personalizacionService";
 import { generarDiseno, subirDiseno } from "../services/disenoService";
 import { listarPlantillas } from "../services/plantillaService";
+import { listarProductos } from "../services/productService";
 import { getErrorMessage } from "../services/api";
-import camisetaBase from "../assets/images/products/base/camiseta-base.png";
-import camisetaEspalda from "../assets/images/products/base/camiseta-espalda.png";
-import camisetaMangaIzquierda from "../assets/images/products/base/camiseta-manga-izquierda.png";
-import camisetaMangaDerecha from "../assets/images/products/base/camiseta-manga-derecha.png";
 import pocilloFrente from "../assets/images/products/base/pocillo-frente.png";
 import pocilloAsa from "../assets/images/products/base/pocillo-asa.png";
 import Prenda3D, {
@@ -41,6 +40,17 @@ import {
   buscarFuente,
   cargarFuenteParaCanvas,
 } from "../utils/fuentesTexto";
+import {
+  componerTexturaCamisetaAltaResolucion,
+  TAMANO_TEX_ALTA_RESOLUCION,
+  BLEED_PX_300DPI,
+  BLEED_MM_DEFECTO,
+  componerMugPrintReady,
+  MUG_PRINT_WIDTH_PX,
+  MUG_PRINT_HEIGHT_PX,
+  JARRA_PRINT_WIDTH_PX,
+  JARRA_PRINT_HEIGHT_PX,
+} from "../utils/texturaPrenda";
 
 const COSTO_PERSONALIZACION = 5000;
 
@@ -58,18 +68,21 @@ const ANCHO_IMAGEN_BASE = 0.38;
 // Mockups base (foto de la prenda con fondo transparente) usados solo para
 // componer la imagen final que se guarda como miniatura.
 const IMAGENES_MOCKUP = {
-  camiseta: camisetaBase,
   mug: pocilloFrente,
+  mug_magico: pocilloFrente,
+  jarra_cervecera: pocilloFrente,
 };
 
 const BASES_MOCKUP_POR_CARA = {
-  camiseta: {
-    frente: camisetaBase,
-    espalda: camisetaEspalda,
-    mangaIzquierda: camisetaMangaIzquierda,
-    mangaDerecha: camisetaMangaDerecha,
-  },
   mug: {
+    frente: pocilloFrente,
+    atras: pocilloAsa,
+  },
+  mug_magico: {
+    frente: pocilloFrente,
+    atras: pocilloAsa,
+  },
+  jarra_cervecera: {
     frente: pocilloFrente,
     atras: pocilloAsa,
   },
@@ -79,34 +92,39 @@ function obtenerBaseMockup(tipo, cara) {
   return (
     (cara && BASES_MOCKUP_POR_CARA[tipo]?.[cara]) ||
     IMAGENES_MOCKUP[tipo] ||
-    camisetaBase
+    pocilloFrente
   );
 }
 
 // Categoría del backend -> tipo de mockup interno del personalizador.
 const TIPO_POR_CATEGORIA = {
-  Camisetas: "camiseta",
   Mugs: "mug",
+  Jarras: "jarra_cervecera",
+};
+const CATEGORIA_POR_TIPO = {
+  mug: "Mugs",
+  mug_magico: "Mugs",
+  jarra_cervecera: "Jarras",
 };
 
-// Superficies donde se puede ubicar un estampado en la camiseta. Cada imagen
-// guarda su posición libre {x, y} (%) DENTRO de la superficie elegida.
-const CARAS_CAMISETA = [
-  { id: "frente", label: "Frente" },
-  { id: "espalda", label: "Espalda" },
-  { id: "mangaIzquierda", label: "Manga izq." },
-  { id: "mangaDerecha", label: "Manga der." },
-];
+// Detección por nombre de producto para los 3 tipos nuevos (mug, mug_magico, jarra)
+function detectarTipoPorNombre(nombre = "") {
+  const n = String(nombre).toLowerCase();
+  if (n.includes("jarra") || n.includes("cervecera") || n.includes("beer")) return "jarra_cervecera";
+  if (n.includes("mágico") || n.includes("magico") || n.includes("mágica") || n.includes("magica")) return "mug_magico";
+  return "mug";
+}
 
-// Ubicaciones del pocillo: de frente y desde atrás (donde se ve el asa).
+// Ubicaciones del pocillo/mug: de frente y desde atrás (donde se ve el asa).
 const CARAS_MUG = [
   { id: "frente", label: "Frente" },
   { id: "atras", label: "Atrás" },
 ];
 
 const CARAS_POR_TIPO = {
-  camiseta: CARAS_CAMISETA,
   mug: CARAS_MUG,
+  mug_magico: CARAS_MUG,
+  jarra_cervecera: CARAS_MUG,
 };
 
 // Paleta amplia de colores preseleccionables para pintar el diseño/objeto.
@@ -188,7 +206,10 @@ const PRINT_WIDTH_INCHES = 12;
 const DPI_MINIMO = 150;
 const DPI_OBJETIVO = 300;
 // Sangrado para sublimación (se imprime más allá del corte y se recorta).
+// BLEED_PX legacy para composiciones mockup; para print-ready vinculado al visor
+// 3D se usa BLEED_PX_300DPI (3mm≈35px a 300DPI) de texturaPrenda.js
 const BLEED_PX = 36;
+const BLEED_PRINT_3D = BLEED_PX_300DPI; // 35px - extensión extra sin recortar contenido
 // Margen seguro: lo que nunca se corta, aunque haya desalineación.
 const MARGEN_SEGURO_PX = 80;
 
@@ -234,13 +255,75 @@ function Personalizador() {
   // Producto elegido en Catálogo / Detalle (si existe); si se entra
   // directo a la página, se usa un producto de referencia genérico.
   const productoOrigen = location.state ?? null;
-  const precioBase = productoOrigen?.precio ?? 25000;
 
   // Producto seleccionado en el personalizador (controla el mockup mostrado).
-  // Si el usuario llega desde un producto concreto del catálogo, se preselecciona.
-  const [selectedProduct, setSelectedProduct] = useState(
-    () => TIPO_POR_CATEGORIA[productoOrigen?.categoria] ?? "camiseta"
-  );
+  // Si el usuario llega desde un producto concreto del catálogo, se preselecciona por nombre.
+  const [selectedProduct, setSelectedProduct] = useState(() => {
+    if (productoOrigen?.nombre) return detectarTipoPorNombre(productoOrigen.nombre);
+    return TIPO_POR_CATEGORIA[productoOrigen?.categoria] ?? "mug";
+  });
+
+  // Producto efectivo para guardar/carrito: si viene del catálogo se usa ese,
+  // si no se resuelve uno real del backend según el tipo seleccionado (mug/mug_magico/jarra)
+  // para que "Agregar al carrito" funcione sin obligar a pasar por catálogo.
+  const [productoEfectivo, setProductoEfectivo] = useState(productoOrigen);
+  const [cargandoProductoEfectivo, setCargandoProductoEfectivo] = useState(false);
+  const precioBase = productoEfectivo?.precio ?? productoOrigen?.precio ?? 25000;
+
+  useEffect(() => {
+    // Si hay origen y coincide con el tipo seleccionado (por nombre o categoria), usarlo directo
+    if (productoOrigen) {
+      const tipoOrigen = productoOrigen?.nombre
+        ? detectarTipoPorNombre(productoOrigen.nombre)
+        : TIPO_POR_CATEGORIA[productoOrigen.categoria];
+      if (tipoOrigen === selectedProduct) {
+        setProductoEfectivo(productoOrigen);
+        return;
+      }
+    }
+    // Si no hay origen o se cambió de tipo, buscar en el backend un producto real de esa categoría
+    let cancelado = false;
+    setCargandoProductoEfectivo(true);
+    listarProductos()
+      .then((lista) => {
+        if (cancelado) return;
+        const categoriaBuscada = CATEGORIA_POR_TIPO[selectedProduct] ?? "Mugs";
+        let candidatos = (Array.isArray(lista) ? lista : []).filter(
+          (p) => p.categoria === categoriaBuscada && p.activo !== false
+        );
+        // Filtrar por nombre para distinguir mug / mug_magico / jarra_cervecera dentro de la misma categoría
+        if (selectedProduct === "mug_magico") {
+          candidatos = candidatos.filter((p) => {
+            const n = String(p.nombre).toLowerCase();
+            return n.includes("mágico") || n.includes("magico") || n.includes("mágica") || n.includes("magica");
+          });
+        } else if (selectedProduct === "jarra_cervecera") {
+          candidatos = candidatos.filter((p) => {
+            const n = String(p.nombre).toLowerCase();
+            return n.includes("jarra") || n.includes("cervecera") || n.includes("beer");
+          });
+        } else if (selectedProduct === "mug") {
+          candidatos = candidatos.filter((p) => {
+            const n = String(p.nombre).toLowerCase();
+            return !n.includes("mágico") && !n.includes("magico") && !n.includes("mágica") && !n.includes("magica") && !n.includes("jarra") && !n.includes("cervecera");
+          });
+        }
+        // Preferir el más barato con stock, si no el primero
+        const elegido =
+          candidatos.sort((a, b) => (a.precio ?? 0) - (b.precio ?? 0)).find((p) => (p.stock ?? 1) > 0) ??
+          candidatos[0] ??
+          null;
+        if (elegido) setProductoEfectivo(elegido);
+        else setProductoEfectivo(productoOrigen); // fallback aunque no coincida
+      })
+      .catch(() => {
+        if (!cancelado) setProductoEfectivo(productoOrigen);
+      })
+      .finally(() => {
+        if (!cancelado) setCargandoProductoEfectivo(false);
+      });
+    return () => { cancelado = true; };
+  }, [selectedProduct, productoOrigen]);
 
   // Lista de imágenes insertadas (subidas, IA o plantillas). Cada una guarda la
   // cara de la prenda, su posición en coordenadas UV [0,1] (de la capa de
@@ -276,6 +359,9 @@ function Personalizador() {
   const [rotacionTexto, setRotacionTexto] = useState(0);
   const [escalaTexto, setEscalaTexto] = useState(1);
   const [textoActivo, setTextoActivo] = useState(false);
+  // Capas de texto tipo Canva: cada texto es un objeto independiente movible/escalable/rotatable
+  const [capasTexto, setCapasTexto] = useState([]); // {id, contenido, color, fuente, tamano, negrita, cursiva, subrayado, x, y, rotacion, escala, cara}
+  const [textoActivoId, setTextoActivoId] = useState(null);
   const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "plantillas" | "texto" | "color"
   const [guardando, setGuardando] = useState(false);
   // Guardado del diseño compuesto en "Mis diseños" (endpoint /disenos/subir).
@@ -319,8 +405,10 @@ function Personalizador() {
   // Emojis de la cara activa (se dibujan en la imagen final guardada).
   const emojisEnCaraActiva = emojis.filter((e) => (e.cara ?? "frente") === caraActiva);
 
+  const capasTextoEnCaraActiva = capasTexto.filter((t) => (t.cara ?? "frente") === caraActiva);
+  const textoActivoLayer = capasTexto.find((t) => t.id === textoActivoId) ?? null;
   const hayDiseno = Boolean(
-    imagenes.length || emojis.length || colorSeleccionado || textoDiseno.trim()
+    imagenes.length || emojis.length || capasTexto.length || colorSeleccionado || textoDiseno.trim()
   );
 
   const total = useMemo(() => precioBase + COSTO_PERSONALIZACION, [precioBase]);
@@ -418,12 +506,12 @@ function Personalizador() {
         return;
       }
 
-      // Función real del archivo que deja la plantilla lista para colocarse
-      // con un clic sobre el modelo 3D (igual que subir una imagen).
-      await prepararImagenPendiente(url);
+      // Plantillas: mugs y jarra con escala inicial mayor para que no se vean pequeñas
+      const escalaPlantilla = selectedProduct === "jarra_cervecera" ? 1.4 : 1.35;
+      await prepararImagenPendiente(url, escalaPlantilla);
       setMensaje({
         tipo: "ok",
-        texto: `Plantilla "${plantilla.nombre}" lista. Haz clic sobre la prenda para colocarla.`,
+        texto: `Plantilla "${plantilla.nombre}" lista. Haz clic sobre la prenda para colocarla (escala inicial ${Math.round(escalaPlantilla*100)}%, podrás agrandarla hasta ${ESCALA_MAX_3D*100}%).`,
       });
     } catch (err) {
       console.error("Error cargando la plantilla en el canvas:", err);
@@ -437,7 +525,7 @@ function Personalizador() {
   // Deja una imagen lista para colocar sobre el modelo 3D. Almacena sus
   // dimensiones naturales (para conservar el aspect ratio del Decal) y avisa
   // al usuario de que haga clic sobre la prenda.
-  const prepararImagenPendiente = async (url) => {
+  const prepararImagenPendiente = async (url, escalaSugerida = 1) => {
     let naturalWidth = 0;
     let naturalHeight = 0;
     try {
@@ -454,8 +542,9 @@ function Personalizador() {
     // "no aplica la imagen" cuando había activa).
     setImagenActivaId(null);
     setEmojiActivoId(null);
+    setTextoActivoId(null);
     setTextoActivo(false);
-    setImagenPendiente({ url, naturalWidth, naturalHeight });
+    setImagenPendiente({ url, naturalWidth, naturalHeight, escala: escalaSugerida });
     setMensaje({
       tipo: "ok",
       texto: "Haz clic sobre la prenda para colocar la imagen.",
@@ -479,12 +568,13 @@ function Personalizador() {
       x: u * 100,
       y: v * 100,
       posicion: posicion ?? [0, 0, 0.18],
-      escala: 1,
+      escala: imagenPendiente.escala ?? 1,
       rotacion: 0,
     };
     setImagenes((prev) => [...prev, nueva]);
     setImagenActivaId(nueva.id);
     setEmojiActivoId(null);
+    setTextoActivoId(null);
     setTextoActivo(false);
     setImagenPendiente(null);
     setMensaje({
@@ -535,6 +625,7 @@ function Personalizador() {
   const seleccionarImagen = (id) => {
     setImagenActivaId(id);
     setEmojiActivoId(null);
+    setTextoActivoId(null);
     if (id) {
       setTextoActivo(false);
       const img = imagenes.find((i) => i.id === id);
@@ -561,8 +652,10 @@ function Personalizador() {
     setEmojis((prev) => [...prev, nuevo]);
     setEmojiActivoId(id);
     setImagenActivaId(null);
+    setTextoActivoId(null);
     setTextoActivo(false);
   };
+
 
   const actualizarEmoji = (id, patch) => {
     setEmojis((prev) =>
@@ -573,12 +666,70 @@ function Personalizador() {
   const seleccionarEmoji = (id) => {
     setEmojiActivoId(id);
     setImagenActivaId(null);
+    setTextoActivoId(null);
     if (id) setTextoActivo(false);
   };
 
   const eliminarEmoji = (id) => {
     setEmojis((prev) => prev.filter((e) => e.id !== id));
     setEmojiActivoId((actual) => (actual === id ? null : actual));
+  };
+
+  // --- Capas de texto Canva ---
+  function crearIdTexto() {
+    return `txt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+  const agregarCapaTexto = () => {
+    if (!textoDiseno.trim()) return;
+    const id = crearIdTexto();
+    const offset = desplazamientoAleatorio();
+    const nueva = {
+      id,
+      contenido: textoDiseno.trim(),
+      color: colorTexto,
+      fuente: fuenteTexto,
+      tamano: tamanoTexto,
+      negrita: esNegrita,
+      cursiva: esCursiva,
+      subrayado: esSubrayado,
+      x: 50 + offset * 0.6,
+      y: 50 + offset * 0.6,
+      rotacion: 0,
+      escala: 1,
+      cara: caraActiva,
+    };
+    setCapasTexto((prev) => [...prev, nueva]);
+    setTextoActivoId(id);
+    setTextoActivo(false);
+    setImagenActivaId(null);
+    setEmojiActivoId(null);
+    setTextoDiseno("");
+  };
+  const actualizarCapaTexto = (id, patch) => {
+    setCapasTexto((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  };
+  const seleccionarCapaTexto = (id) => {
+    setTextoActivoId(id);
+    setImagenActivaId(null);
+    setEmojiActivoId(null);
+    setTextoActivo(false);
+  };
+  const eliminarCapaTexto = (id) => {
+    setCapasTexto((prev) => prev.filter((t) => t.id !== id));
+    setTextoActivoId((actual) => (actual === id ? null : actual));
+  };
+  // Movimiento directo sobre el buso/estampado (sin overlay): actualiza x/y vía UV del raycast
+  const moverCapaTexto3D = (id, ubicacion) => {
+    const patch = {};
+    if (ubicacion.uv) { patch.x = ubicacion.uv.u * 100; patch.y = ubicacion.uv.v * 100; }
+    if (ubicacion.cara) patch.cara = ubicacion.cara;
+    actualizarCapaTexto(id, patch);
+  };
+  const moverEmoji3D = (id, ubicacion) => {
+    const patch = {};
+    if (ubicacion.uv) { patch.x = ubicacion.uv.u * 100; patch.y = ubicacion.uv.v * 100; }
+    if (ubicacion.cara) patch.cara = ubicacion.cara;
+    actualizarEmoji(id, patch);
   };
 
   const handleRotarImagen = () => {
@@ -601,6 +752,10 @@ function Personalizador() {
     }
     if (emojiActivoId) {
       eliminarEmoji(emojiActivoId);
+      return;
+    }
+    if (textoActivoId) {
+      eliminarCapaTexto(textoActivoId);
       return;
     }
     if (textoActivo) {
@@ -626,7 +781,7 @@ function Personalizador() {
     };
     window.addEventListener("keydown", alTeclado);
     return () => window.removeEventListener("keydown", alTeclado);
-  }, [imagenActivaId, emojiActivoId, textoActivo]); // 👈 Arreglo de dependencias agregado
+  }, [imagenActivaId, emojiActivoId, textoActivoId, textoActivo]);
 
   useEffect(() => {
     const finArrastre = () => {
@@ -687,6 +842,7 @@ function Personalizador() {
     setImagenes((prev) => [...prev, nueva]);
     setImagenActivaId(nueva.id);
     setEmojiActivoId(null);
+    setTextoActivoId(null);
     setTextoActivo(false);
   };
 
@@ -796,7 +952,7 @@ function Personalizador() {
     try {
       const resultado = await generarDiseno({
         prompt,
-        productoId: productoOrigen?.id ?? null,
+        productoId: productoEfectivo?.id ?? productoOrigen?.id ?? null,
       });
 
       const imagenUrl =
@@ -828,6 +984,8 @@ function Personalizador() {
     setImagenPendiente(null);
     setEmojis([]);
     setEmojiActivoId(null);
+    setCapasTexto([]);
+    setTextoActivoId(null);
     setTextoActivo(false);
     setColorSeleccionado(null);
     setTextoDiseno("");
@@ -851,7 +1009,7 @@ function Personalizador() {
   // carrito. La posición de cada imagen viene en coordenadas UV [0,1] (las
   // mismas que se guardan en el payload).
   const componerImagenFinal = async () => {
-    if (!imagenes.length && !emojis.length && !textoDiseno.trim()) return null;
+    if (!imagenes.length && !emojis.length && !capasTexto.length && !textoDiseno.trim()) return null;
 
     const canvas = document.createElement("canvas");
     canvas.width = TAMANO_LIENZO;
@@ -892,12 +1050,8 @@ function Personalizador() {
       ctx.globalCompositeOperation = "source-over";
     }
 
-    // 3. Diseños + texto en una capa aparte, para poder recortarlos con la
-    //    silueta del producto igual que en el editor (en las vistas de manga
-    //    se permite desbordar hacia el costado del torso).
-    const permitirDesborde =
-      selectedProduct === "camiseta" &&
-      (caraActiva === "mangaIzquierda" || caraActiva === "mangaDerecha");
+    // 3. Diseños + texto en una capa aparte (mug no necesita desborde)
+    const permitirDesborde = false;
 
     const capaDiseno = document.createElement("canvas");
     capaDiseno.width = TAMANO_LIENZO;
@@ -926,30 +1080,44 @@ function Personalizador() {
       ctxDiseno.restore();
     }
 
-    if (textoDiseno.trim()) {
-      // Asegura que la fuente web esté descargada antes de dibujar; si no,
-      // el canvas caería al fallback y la imagen guardada no coincidiría.
-      await cargarFuenteParaCanvas(fuenteTexto);
+    // Compatibilidad: capa legacy (textoDiseno) si existe y no hay capas Canva
+    const capasTextoParaDibujar = capasTexto.length
+      ? capasTexto.filter((t) => (t.cara ?? "frente") === caraActiva)
+      : textoDiseno.trim()
+        ? [
+            {
+              contenido: textoDiseno,
+              color: colorTexto,
+              fuente: fuenteTexto,
+              tamano: tamanoTexto,
+              negrita: esNegrita,
+              cursiva: esCursiva,
+              subrayado: esSubrayado,
+              x: posicionTexto.x,
+              y: posicionTexto.y,
+              rotacion: rotacionTexto,
+              escala: escalaTexto,
+            },
+          ]
+        : [];
+    for (const capa of capasTextoParaDibujar) {
+      if (!capa.contenido?.trim()) continue;
+      await cargarFuenteParaCanvas(capa.fuente);
       ctxDiseno.save();
-      ctxDiseno.translate(
-        (posicionTexto.x / 100) * TAMANO_LIENZO,
-        (posicionTexto.y / 100) * TAMANO_LIENZO
-      );
-      ctxDiseno.rotate(((rotacionTexto ?? 0) * Math.PI) / 180);
-      ctxDiseno.scale(escalaTexto ?? 1, escalaTexto ?? 1);
-      ctxDiseno.fillStyle = colorTexto;
-      const peso = esNegrita ? "700" : "600";
-      const estiloFuente = esCursiva ? "italic " : "";
-      ctxDiseno.font = `${estiloFuente}${peso} ${Math.round(tamanoTexto * FACTOR_LIENZO)}px ${fuenteTexto}`;
+      ctxDiseno.translate((capa.x / 100) * TAMANO_LIENZO, (capa.y / 100) * TAMANO_LIENZO);
+      ctxDiseno.rotate(((capa.rotacion ?? 0) * Math.PI) / 180);
+      ctxDiseno.scale(capa.escala ?? 1, capa.escala ?? 1);
+      ctxDiseno.fillStyle = capa.color;
+      const peso = capa.negrita ? "700" : "600";
+      const estiloFuente = capa.cursiva ? "italic " : "";
+      ctxDiseno.font = `${estiloFuente}${peso} ${Math.round((capa.tamano ?? 32) * FACTOR_LIENZO)}px ${capa.fuente}`;
       ctxDiseno.textAlign = "center";
       ctxDiseno.textBaseline = "middle";
-      ctxDiseno.fillText(textoDiseno, 0, 0);
-      // Subrayado: el canvas no tiene textDecoration, se dibuja una línea bajo
-      // el texto usando el ancho medido y un grosor proporcional al tamaño.
-      if (esSubrayado) {
-        const anchoTexto = ctxDiseno.measureText(textoDiseno).width;
-        const tamDibujo = Math.round(tamanoTexto * FACTOR_LIENZO);
-        ctxDiseno.strokeStyle = colorTexto;
+      ctxDiseno.fillText(capa.contenido, 0, 0);
+      if (capa.subrayado) {
+        const anchoTexto = ctxDiseno.measureText(capa.contenido).width;
+        const tamDibujo = Math.round((capa.tamano ?? 32) * FACTOR_LIENZO);
+        ctxDiseno.strokeStyle = capa.color;
         ctxDiseno.lineWidth = Math.max(2, tamDibujo * 0.08);
         ctxDiseno.beginPath();
         ctxDiseno.moveTo(-anchoTexto / 2, tamDibujo * 0.45);
@@ -988,143 +1156,134 @@ function Personalizador() {
     return canvas.toDataURL("image/png");
   };
 
-  // Versión print-ready: mismo contenido pero con sangrado, marcas de corte y a
-  // resolución de impresión (300 DPI). No recorta por máscara, deja el sangrado
-  // imprimible para la prensa de sublimación.
-  const componerImagenPrintReady = async () => {
-    if (!imagenes.length && !emojis.length && !textoDiseno.trim()) return null;
+  // --- PRINT-READY VINCULADO AL VISOR 3D ---
+  // Config idéntica a la usada en Prenda3D.jsx/prepararModeloCamiseta/Mug para
+  // garantizar paridad visual exacta. Cambiar aquí debe reflejar allí y viceversa.
+  const CONFIG_SUPERFICIE_PRINT = {
+    mug: {
+      frente: { mapearTorso: false, conTexto: true, anchoBase: 0.22 },
+      atras: { mapearTorso: false, conTexto: false, anchoBase: 0.22 },
+    },
+    mug_magico: {
+      frente: { mapearTorso: false, conTexto: true, anchoBase: 0.22 },
+      atras: { mapearTorso: false, conTexto: false, anchoBase: 0.22 },
+    },
+    jarra_cervecera: {
+      frente: { mapearTorso: false, conTexto: true, anchoBase: 0.28 },
+      atras: { mapearTorso: false, conTexto: false, anchoBase: 0.28 },
+    },
+  };
 
-    const PRINT_SIZE = 3000;
-    const escala = PRINT_SIZE / TAMANO_LIENZO;
-    const bleed = Math.round(BLEED_PX * escala);
-    const size = PRINT_SIZE + bleed * 2;
-
-    const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, size, size);
-
-    const baseImg = await cargarImagenElemento(
-      obtenerBaseMockup(selectedProduct, caraActiva)
-    );
-    let encuadreBase = null;
-    if (baseImg) {
-      const anchoBase = PRINT_SIZE * (baseImg.naturalWidth / baseImg.naturalHeight);
-      encuadreBase = { dx: bleed + (PRINT_SIZE - anchoBase) / 2, dw: anchoBase };
-      ctx.drawImage(baseImg, encuadreBase.dx, bleed, encuadreBase.dw, PRINT_SIZE);
+  function agruparDisenosPorCaraLocal(imagenesLista) {
+    const CARAS_VALIDAS = ["frente", "atras"];
+    const grupos = {};
+    for (const d of imagenesLista ?? []) {
+      const caraNorm = d.cara === "asa" ? "atras" : d.cara;
+      const cara = CARAS_VALIDAS.includes(caraNorm) ? caraNorm : "frente";
+      (grupos[cara] ??= []).push(d);
     }
+    return grupos;
+  }
 
-    if (baseImg && colorSeleccionado) {
-      const capaColor = document.createElement("canvas");
-      capaColor.width = size;
-      capaColor.height = size;
-      const ctxColor = capaColor.getContext("2d");
-      ctxColor.drawImage(baseImg, encuadreBase.dx, bleed, encuadreBase.dw, PRINT_SIZE);
-      ctxColor.globalCompositeOperation = "source-in";
-      ctxColor.fillStyle = colorSeleccionado;
-      ctxColor.fillRect(0, 0, size, size);
-      ctx.globalCompositeOperation = "multiply";
-      ctx.drawImage(capaColor, 0, 0);
-      ctx.globalCompositeOperation = "source-over";
-    }
+  // Genera print-ready CILÍNDRICO RECTANGULAR (2362x1063 para mug 20x9cm a 300DPI)
+  // Fórmula UV -> píxeles: pixelX = (u*100/100)*W , pixelY = (v*100/100)*H con W=2362 H=1063
+  // SOLO capa del diseño con fondo transparente: sin sombras/brillos/cerámica del material 3D.
+  // Lo que el usuario ve en el 3D (posición u,v y escala) coincide 1:1 con el lienzo 2D expandido.
+  const componerImagenPrintReady = async (caraDestino = caraActiva) => {
+    if (!imagenes.length && !emojis.length && !capasTexto.length && !textoDiseno.trim()) return null;
 
-    const permitirDesborde =
-      selectedProduct === "camiseta" &&
-      (caraActiva === "mangaIzquierda" || caraActiva === "mangaDerecha");
+    const cfg = CONFIG_SUPERFICIE_PRINT[selectedProduct]?.[caraDestino] ?? CONFIG_SUPERFICIE_PRINT.mug.frente;
+    const grupos = agruparDisenosPorCaraLocal(imagenes);
+    const disenosCara = grupos[caraDestino] ?? [];
 
-    const capaDiseno = document.createElement("canvas");
-    capaDiseno.width = size;
-    capaDiseno.height = size;
-    const ctxDiseno = capaDiseno.getContext("2d");
-
-    for (const imagen of imagenes) {
-      const procesada = await procesarDiseno(imagen.url);
-      const el = await cargarImagenElemento(procesada?.dataUrl ?? imagen.url);
-      if (!el) continue;
-      const escalaUniforme = imagen.escala ?? 1;
-      const escalaX = imagen.escalaX ?? escalaUniforme;
-      const escalaY = imagen.escalaY ?? escalaUniforme;
-      const baseW = PRINT_SIZE * ANCHO_IMAGEN_BASE * escalaX;
-      const baseH = baseW * (el.naturalHeight / el.naturalWidth) * (escalaY / escalaX || 1);
-      // Soporte uv (3D) con fallback a x/y legado
-      const cx = bleed + (imagen.uv ? imagen.uv.u : (imagen.x ?? 50) / 100) * PRINT_SIZE;
-      const cy = bleed + (imagen.uv ? imagen.uv.v : (imagen.y ?? 50) / 100) * PRINT_SIZE;
-      ctxDiseno.save();
-      ctxDiseno.translate(cx, cy);
-      ctxDiseno.rotate(((imagen.rotacion ?? 0) * Math.PI) / 180);
-      ctxDiseno.drawImage(el, -baseW / 2, -baseH / 2, baseW, baseH);
-      ctxDiseno.restore();
-    }
-
-    if (textoDiseno.trim()) {
-      await cargarFuenteParaCanvas(fuenteTexto);
-      ctxDiseno.save();
-      ctxDiseno.translate(
-        bleed + (posicionTexto.x / 100) * PRINT_SIZE,
-        bleed + (posicionTexto.y / 100) * PRINT_SIZE
-      );
-      ctxDiseno.rotate(((rotacionTexto ?? 0) * Math.PI) / 180);
-      ctxDiseno.scale(escalaTexto ?? 1, escalaTexto ?? 1);
-      ctxDiseno.fillStyle = colorTexto;
-      const peso = esNegrita ? "700" : "600";
-      const estiloFuente = esCursiva ? "italic " : "";
-      ctxDiseno.font = `${estiloFuente}${peso} ${Math.round(tamanoTexto * FACTOR_LIENZO * escala)}px ${fuenteTexto}`;
-      ctxDiseno.textAlign = "center";
-      ctxDiseno.textBaseline = "middle";
-      ctxDiseno.fillText(textoDiseno, 0, 0);
-      if (esSubrayado) {
-        const anchoTexto = ctxDiseno.measureText(textoDiseno).width;
-        const tamDibujo = Math.round(tamanoTexto * FACTOR_LIENZO * escala);
-        ctxDiseno.strokeStyle = colorTexto;
-        ctxDiseno.lineWidth = Math.max(2, tamDibujo * 0.08);
-        ctxDiseno.beginPath();
-        ctxDiseno.moveTo(-anchoTexto / 2, tamDibujo * 0.45);
-        ctxDiseno.lineTo(anchoTexto / 2, tamDibujo * 0.45);
-        ctxDiseno.stroke();
+    // Reproduce exactamente la construcción de textosConfig del visor 3D
+    const textosConfig = [];
+    if (capasTexto.length) {
+      for (const capa of capasTexto) {
+        if ((capa.cara ?? "frente") !== caraDestino && cfg.conTexto) {
+          if (caraDestino !== (capa.cara ?? "frente")) continue;
+        }
+        textosConfig.push({
+          contenido: capa.contenido,
+          color: capa.color,
+          fuente: capa.fuente,
+          tamano: capa.tamano,
+          negrita: capa.negrita,
+          cursiva: capa.cursiva,
+          subrayado: capa.subrayado,
+          x: capa.x,
+          y: capa.y,
+          rotacion: capa.rotacion,
+          escala: capa.escala,
+        });
       }
-      ctxDiseno.restore();
+    } else if (textoDiseno && textoDiseno.trim()) {
+      textosConfig.push({
+        contenido: textoDiseno,
+        color: colorTexto,
+        fuente: fuenteTexto,
+        tamano: tamanoTexto,
+        negrita: esNegrita,
+        cursiva: esCursiva,
+        subrayado: esSubrayado,
+        x: posicionTexto.x,
+        y: posicionTexto.y,
+        rotacion: rotacionTexto,
+        escala: escalaTexto,
+      });
     }
-
-    for (const emoji of emojisEnCaraActiva) {
-      const tamDibujo = Math.round((emoji.tamano ?? 48) * FACTOR_LIENZO * escala * (emoji.escala ?? 1));
-      ctxDiseno.save();
-      ctxDiseno.translate(
-        bleed + (emoji.x / 100) * PRINT_SIZE,
-        bleed + (emoji.y / 100) * PRINT_SIZE
-      );
-      ctxDiseno.rotate(((emoji.rotacion ?? 0) * Math.PI) / 180);
-      ctxDiseno.font = `${tamDibujo}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
-      ctxDiseno.textAlign = "center";
-      ctxDiseno.textBaseline = "middle";
-      ctxDiseno.fillText(emoji.emoji, 0, 0);
-      ctxDiseno.restore();
+    for (const em of emojis ?? []) {
+      // Solo emojis de la cara destino (el visor filtra por cara)
+      if ((em.cara ?? "frente") !== caraDestino && cfg.conTexto) continue;
+      textosConfig.push({
+        contenido: em.emoji,
+        color: "#000000",
+        fuente: '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
+        tamano: em.tamano ?? 48,
+        x: em.x,
+        y: em.y,
+        rotacion: em.rotacion ?? 0,
+        escala: em.escala ?? 1,
+      });
     }
+    const textosCara = cfg.conTexto ? textosConfig : [];
 
-    if (baseImg && !permitirDesborde) {
-      ctxDiseno.globalCompositeOperation = "destination-in";
-      ctxDiseno.drawImage(baseImg, encuadreBase.dx, bleed, encuadreBase.dw, PRINT_SIZE);
-      ctxDiseno.globalCompositeOperation = "source-over";
+    // Dimensiones según producto: mug 20x9cm (2362x1063), jarra 24x12cm (2835x1417) a 300 DPI
+    const esJarra = selectedProduct === "jarra_cervecera";
+    const anchoPrint = esJarra ? JARRA_PRINT_WIDTH_PX : MUG_PRINT_WIDTH_PX;
+    const altoPrint = esJarra ? JARRA_PRINT_HEIGHT_PX : MUG_PRINT_HEIGHT_PX;
+
+    // *** CLAVE: fondoTransparente 100% - solo diseño, sin cerámica/sombras/luces ***
+    const { dataUrl } = await componerMugPrintReady({
+      disenos: disenosCara,
+      textos: textosCara,
+      ancho: anchoPrint,
+      alto: altoPrint,
+      anchoBase: cfg.anchoBase,
+      bleedPx: 0, // sublimación cilíndrica no necesita bleed extra; el rectángulo ya es el área completa
+      agregarMarcasCorte: false,
+    });
+    return dataUrl;
+  };
+
+  // Versión que genera las 4 caras con contenido (cada una como archivo separado)
+  // Para mantener simpleza, el botón actual exporta solo la cara activa; esta
+  // función deja preparado el soporte para exportar todas si se necesita.
+  const componerTodasCarasPrintReady = async () => {
+    const caras = CARAS_POR_TIPO[selectedProduct] ?? CARAS_MUG;
+    const resultados = [];
+    const grupos = agruparDisenosPorCaraLocal(imagenes);
+    // Texto global se evalúa por cara según conTexto
+    for (const cara of caras) {
+      const cfg = CONFIG_SUPERFICIE_PRINT[selectedProduct]?.[cara.id];
+      if (!cfg) continue;
+      const tieneDiseno = (grupos[cara.id]?.length ?? 0) > 0;
+      const tieneTexto = cfg.conTexto && (textoDiseno.trim() || emojis.length > 0);
+      if (!tieneDiseno && !tieneTexto) continue;
+      const dataUrl = await componerImagenPrintReady(cara.id);
+      if (dataUrl) resultados.push({ cara: cara.id, label: cara.label, dataUrl });
     }
-    ctx.drawImage(capaDiseno, 0, 0);
-
-    // Marcas de corte en las esquinas del sangrado.
-    ctx.strokeStyle = "rgba(0,0,0,0.35)";
-    ctx.lineWidth = 2;
-    const m = 18 * escala;
-    const b = bleed;
-    const s = size;
-    // Sup. izq.
-    ctx.beginPath(); ctx.moveTo(b, m); ctx.lineTo(b, b); ctx.lineTo(m, b); ctx.stroke();
-    // Sup. der.
-    ctx.beginPath(); ctx.moveTo(s - m, b); ctx.lineTo(s - b, b); ctx.lineTo(s - b, m); ctx.stroke();
-    // Inf. izq.
-    ctx.beginPath(); ctx.moveTo(b, s - m); ctx.lineTo(b, s - b); ctx.lineTo(m, s - b); ctx.stroke();
-    // Inf. der.
-    ctx.beginPath(); ctx.moveTo(s - b, s - m); ctx.lineTo(s - b, s - b); ctx.lineTo(s - m, s - b); ctx.stroke();
-
-    return canvas.toDataURL("image/png");
+    return resultados;
   };
 
   const handleDescargarPrintReady = async () => {
@@ -1134,12 +1293,21 @@ function Personalizador() {
     }
     setDescargandoPrint(true);
     try {
-      const dataUrl = await componerImagenPrintReady();
-      if (!dataUrl) return;
-      const sufijo = selectedProduct === "camiseta" ? caraActiva : caraActiva;
-      descargarDataUrl(dataUrl, `skd-print-${sufijo}.png`);
-      setMensaje({ tipo: "ok", texto: `Archivo print-ready (${DPI_OBJETIVO} DPI + sangrado) descargado.` });
-    } catch {
+      const dataUrl = await componerImagenPrintReady(caraActiva);
+      if (!dataUrl) {
+        setMensaje({ tipo: "error", texto: "Esa cara no tiene contenido para imprimir." });
+        return;
+      }
+      const esJarra = selectedProduct === "jarra_cervecera";
+      const anchoPrint = esJarra ? JARRA_PRINT_WIDTH_PX : MUG_PRINT_WIDTH_PX;
+      const altoPrint = esJarra ? JARRA_PRINT_HEIGHT_PX : MUG_PRINT_HEIGHT_PX;
+      // Archivo print-ready rectangular transparente, solo diseño (sin sombras/cerámica)
+      descargarDataUrl(dataUrl, `skd-print-${selectedProduct}-${caraActiva}-${anchoPrint}x${altoPrint}-300dpi.png`);
+      const cmW = esJarra ? "24" : "20";
+      const cmH = esJarra ? "12" : "9";
+      setMensaje({ tipo: "ok", texto: `Print-ready ${anchoPrint}x${altoPrint}px (${cmW}x${cmH}cm a 300 DPI) descargado — fondo transparente, solo diseño, WYSIWYG con el visor 3D.` });
+    } catch (e) {
+      console.error("Error print-ready cilíndrico:", e);
       setMensaje({ tipo: "error", texto: "No se pudo generar el archivo de impresión." });
     } finally {
       setDescargandoPrint(false);
@@ -1158,8 +1326,9 @@ function Personalizador() {
       navigate("/login");
       return;
     }
-    if (!productoOrigen) {
-      setMensaje({ tipo: "error", texto: "Elige un producto desde el catálogo antes de guardar." });
+    const productoParaGuardar = productoEfectivo ?? productoOrigen;
+    if (!productoParaGuardar?.id) {
+      setMensaje({ tipo: "error", texto: cargandoProductoEfectivo ? "Cargando producto, intenta de nuevo en un segundo..." : "No se encontró un producto para guardar. Ve al catálogo y elige uno." });
       return;
     }
 
@@ -1172,7 +1341,7 @@ function Personalizador() {
         return;
       }
       const file = dataUrlToFile(dataUrl, "diseno.png");
-      await subirDiseno({ file, productoId: productoOrigen.id });
+      await subirDiseno({ file, productoId: productoParaGuardar.id });
       setMensaje({ tipo: "ok", texto: "Diseño guardado. Lo encontrarás en tu dashboard." });
     } catch (err) {
       setMensaje({ tipo: "error", texto: getErrorMessage(err) });
@@ -1186,10 +1355,11 @@ function Personalizador() {
       navigate("/login");
       return;
     }
-    if (!productoOrigen) {
+    const productoParaCarrito = productoEfectivo ?? productoOrigen;
+    if (!productoParaCarrito?.id) {
       setMensaje({
         tipo: "error",
-        texto: "Elige un producto desde el catálogo antes de personalizar.",
+        texto: cargandoProductoEfectivo ? "Cargando producto, intenta de nuevo en un segundo..." : "No se encontró un producto para el carrito. Elige uno en el catálogo.",
       });
       return;
     }
@@ -1202,13 +1372,13 @@ function Personalizador() {
     setMensaje(null);
     try {
       const imagenFinal = await componerImagenFinal();
-      const item = await agregarProducto(productoOrigen);
+      const item = await agregarProducto(productoParaCarrito);
 
       // Si el carrito devolvió el item, intentamos persistir la
       // personalización asociada (imagen aplanada + descripción).
       if (item?.id) {
         const notas = [
-          `Producto: ${selectedProduct === "camiseta" ? "Camiseta" : "Mug"}`,
+          `Producto: ${selectedProduct}`,
           imagenes.length
             ? `Imágenes: ${imagenes
                 .map(
@@ -1222,8 +1392,11 @@ function Personalizador() {
                 .join(" | ")}`
             : null,
           emojis.length ? `Emojis insertados: ${emojis.length}` : null,
+          capasTexto.length
+            ? `Textos Canva: ${capasTexto.map((t) => `"${t.contenido}" ${t.x.toFixed(0)}%,${t.y.toFixed(0)}% ${t.tamano}px ${buscarFuente(t.fuente)?.nombre ?? t.fuente}`).join(" | ")}`
+            : null,
           colorSeleccionado ? `Color elegido: ${colorSeleccionado}` : null,
-          textoDiseno.trim()
+          !capasTexto.length && textoDiseno.trim()
             ? `Texto: "${textoDiseno.trim()}" (${colorTexto}, ${tamanoTexto}px, fuente ${buscarFuente(fuenteTexto)?.nombre ?? "Clásica"}, posición ${Math.round(posicionTexto.x)}%,${Math.round(posicionTexto.y)}%)`
             : null,
         ]
@@ -1251,7 +1424,7 @@ function Personalizador() {
     }
   };
 
-  const carasProducto = CARAS_POR_TIPO[selectedProduct] ?? CARAS_CAMISETA;
+  const carasProducto = CARAS_POR_TIPO[selectedProduct] ?? CARAS_MUG;
 
   const etiquetaCaraActiva =
     carasProducto.find((cara) => cara.id === caraActiva)?.label ?? "";
@@ -1266,20 +1439,25 @@ function Personalizador() {
     setImagenPendiente(null);
     setEmojis([]);
     setEmojiActivoId(null);
+    setCapasTexto([]);
+    setTextoActivoId(null);
     setTextoDiseno("");
     setTextoActivo(false);
-    setColorSeleccionado(null);
+    // Mug Mágico por defecto es negro/oscuro (#1a1a1a) como taza que cambia con calor
+    if (tipo === "mug_magico") setColorSeleccionado("#1a1a1a");
+    else setColorSeleccionado(null);
   };
 
   // Props compartidas del visor 3D interactivo (editor principal y modal).
   const props3D = {
     interactivo: true,
     tipo: selectedProduct,
-    color: colorSeleccionado ?? "#ffffff",
+    color: colorSeleccionado ?? (selectedProduct === "mug_magico" ? "#1a1a1a" : "#ffffff"),
     imagenes,
     imagenActivaId,
     imagenPendiente: imagenPendiente ? imagenPendiente.url : null,
     emojis,
+    capasTexto,
     texto: textoDiseno,
     colorTexto,
     fuenteTexto,
@@ -1292,7 +1470,13 @@ function Personalizador() {
     escalaTexto,
     onColocar: colocarImagen,
     onMover: moverImagen,
+    onMoverTexto: moverCapaTexto3D,
+    onMoverEmoji: moverEmoji3D,
+    textoActivoId,
+    emojiActivoId,
     onSeleccionar: seleccionarImagen,
+    onSeleccionarTexto: seleccionarCapaTexto,
+    onSeleccionarEmoji: seleccionarEmoji,
     caraCamara: caraActiva,
     arrastrandoImagen,
     onArrastrarImagen: setArrastrandoImagen,
@@ -1307,30 +1491,28 @@ function Personalizador() {
           Personaliza tu producto
         </h1>
 
-        {productoOrigen && (
+        {productoOrigen ? (
           <p className="-mt-6 mb-6 text-sm text-gray-500 dark:text-slate-400">
-            Personalizando: <strong>{productoOrigen.nombre}</strong>
+            Personalizando: <strong>{productoOrigen.nombre}</strong> · {formatPrice(productoOrigen.precio)}
+          </p>
+        ) : productoEfectivo ? (
+          <p className="-mt-6 mb-6 text-sm text-gray-500 dark:text-slate-400">
+            Producto: <strong>{productoEfectivo.nombre}</strong> · {formatPrice(productoEfectivo.precio)}{" "}
+            <span className="text-xs italic">(seleccionado automáticamente para {selectedProduct} — puedes cambiarlo arriba o ir al catálogo para elegir otro)</span>
+          </p>
+        ) : null}
+        {cargandoProductoEfectivo && (
+          <p className="-mt-4 mb-4 flex items-center gap-2 text-xs text-indigo-600 dark:text-cyan-300">
+            <FaSpinner className="animate-spin" /> Cargando producto base para el carrito...
           </p>
         )}
 
-        {/* Selector de producto */}
+        {/* Selector de producto - Mug / Mug Mágico / Jarra Cervecera */}
         <div className="mb-8">
           <p className="mb-3 text-sm font-semibold text-gray-500 dark:text-slate-400">
             Elige el producto
           </p>
-          <div className="grid max-w-md grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => cambiarProducto("camiseta")}
-              className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-5 transition ${
-                selectedProduct === "camiseta"
-                  ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-200 dark:ring-cyan-500/40"
-                  : "border-gray-200 bg-white text-gray-500 hover:border-gray-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-500"
-              }`}
-            >
-              <Shirt className="h-8 w-8" />
-              <span className="font-semibold">Camiseta</span>
-            </button>
+          <div className="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-3">
             <button
               type="button"
               onClick={() => cambiarProducto("mug")}
@@ -1342,6 +1524,33 @@ function Personalizador() {
             >
               <Coffee className="h-8 w-8" />
               <span className="font-semibold">Mug</span>
+              <span className="text-xs opacity-70">Clásico 11oz</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => cambiarProducto("mug_magico")}
+              className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-5 transition ${
+                selectedProduct === "mug_magico"
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-200 dark:ring-cyan-500/40"
+                  : "border-gray-200 bg-white text-gray-500 hover:border-gray-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-500"
+              }`}
+            >
+              <FaMoon className="h-8 w-8" />
+              <span className="font-semibold">Mug Mágico</span>
+              <span className="text-xs opacity-70">Cambia con calor</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => cambiarProducto("jarra_cervecera")}
+              className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-5 transition ${
+                selectedProduct === "jarra_cervecera"
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-200 dark:ring-cyan-500/40"
+                  : "border-gray-200 bg-white text-gray-500 hover:border-gray-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-500"
+              }`}
+            >
+              <FaBeer className="h-8 w-8" />
+              <span className="font-semibold">Jarra Cervecera</span>
+              <span className="text-xs opacity-70">500ml</span>
             </button>
           </div>
         </div>
@@ -1643,7 +1852,7 @@ function Personalizador() {
                 {/* Galería de plantillas prediseñadas: arrancar de un diseño
                     ya hecho en vez de empezar en blanco. */}
                 <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Plantillas para {selectedProduct === "camiseta" ? "camiseta" : "mug"}
+                  Plantillas para {selectedProduct}
                 </p>
 
                 {/* Tabs de categoría (derivadas de las plantillas cargadas) */}
@@ -1765,136 +1974,147 @@ function Personalizador() {
               </>
             ) : (
               <>
-                {/* Texto sobre el diseño */}
+                {/* ===== MODO CANVA: Texto y Emojis como capas libres ===== */}
+                <div className="mb-3 rounded-xl bg-indigo-50 px-3 py-2 dark:bg-cyan-500/10">
+                  <p className="text-xs font-semibold text-indigo-700 dark:text-cyan-300">Modo Canva</p>
+                  <p className="text-[11px] leading-tight text-indigo-600/80 dark:text-cyan-200/70">Cada texto es una capa independiente: se puede mover, agrandar y rotar directamente sobre la prenda.</p>
+                </div>
+
                 <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
                   Agregar texto
                 </p>
-                <input
-                  type="text"
-                  value={textoDiseno}
-                  onChange={(e) => setTextoDiseno(e.target.value)}
-                  placeholder="Ej: Familia Pérez"
-                  maxLength={40}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 placeholder:text-gray-400 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={textoDiseno}
+                    onChange={(e) => setTextoDiseno(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); agregarCapaTexto(); } }}
+                    placeholder="Ej: Familia Pérez"
+                    maxLength={40}
+                    className="flex-1 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 placeholder:text-gray-400 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={agregarCapaTexto}
+                    disabled={!textoDiseno.trim()}
+                    className="shrink-0 rounded-xl bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-40 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+                  >
+                    Agregar
+                  </button>
+                </div>
 
-{/* Selector interactivo de tipografía */}
+                {/* Capas de texto creadas - lista Canva */}
+                {capasTexto.length > 0 && (
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs font-semibold text-gray-500 dark:text-slate-400">Capas de texto ({capasTexto.length}) · toca para editar</p>
+                    <div className="space-y-2">
+                      {capasTexto.map((capa) => (
+                        <button
+                          key={capa.id}
+                          type="button"
+                          onClick={() => seleccionarCapaTexto(capa.id)}
+                          className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${capa.id === textoActivoId ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:ring-cyan-500/40" : "border-gray-200 bg-white hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-900"}`}
+                        >
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[10px] font-bold dark:bg-slate-800" style={{ fontFamily: capa.fuente, color: capa.color }}>Aa</span>
+                          <span className="min-w-0 flex-1 truncate text-sm" style={{ fontFamily: capa.fuente, color: capa.color, fontWeight: capa.negrita ? 700 : 600, fontStyle: capa.cursiva ? "italic" : "normal", textDecoration: capa.subrayado ? "underline" : "none" }}>{capa.contenido}</span>
+                          <span className={`shrink-0 text-[10px] ${capa.cara === caraActiva ? "text-emerald-600" : "text-gray-400"}`}>{capasTexto.find(c=>c.id===capa.id)?.cara === caraActiva ? "● " : ""}{capasTexto.find(c=>c.id===capa.id)?.cara ?? "frente"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Editor de la capa seleccionada - controles Canva */}
+                {textoActivoLayer ? (
+                  <div className="mt-4 space-y-3 rounded-xl border-2 border-indigo-500 bg-indigo-50/50 p-3 dark:border-cyan-400 dark:bg-cyan-500/5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-indigo-700 dark:text-cyan-300">Editando: {textoActivoLayer.contenido.slice(0,18)}</p>
+                      <button type="button" onClick={() => eliminarCapaTexto(textoActivoLayer.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"><FaTrash size={12} /></button>
+                    </div>
+                    <input
+                      type="text"
+                      value={textoActivoLayer.contenido}
+                      onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { contenido: e.target.value })}
+                      className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                    />
+                    <label className="block text-xs text-gray-500">Color
+                      <input type="color" value={normalizarHexParaPicker(textoActivoLayer.color) ?? "#111111"} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { color: e.target.value })} className="mt-1 h-8 w-full cursor-pointer rounded border-none" />
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button type="button" aria-pressed={textoActivoLayer.negrita} onClick={() => actualizarCapaTexto(textoActivoLayer.id, { negrita: !textoActivoLayer.negrita })} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-bold transition ${textoActivoLayer.negrita ? "border-indigo-500 bg-indigo-600 text-white dark:bg-cyan-500 dark:border-cyan-400" : "border-gray-200 bg-white dark:bg-slate-900 dark:border-slate-700"}`}>B</button>
+                      <button type="button" aria-pressed={textoActivoLayer.cursiva} onClick={() => actualizarCapaTexto(textoActivoLayer.id, { cursiva: !textoActivoLayer.cursiva })} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm italic transition ${textoActivoLayer.cursiva ? "border-indigo-500 bg-indigo-600 text-white dark:bg-cyan-500 dark:border-cyan-400" : "border-gray-200 bg-white dark:bg-slate-900 dark:border-slate-700"}`}>I</button>
+                      <button type="button" aria-pressed={textoActivoLayer.subrayado} onClick={() => actualizarCapaTexto(textoActivoLayer.id, { subrayado: !textoActivoLayer.subrayado })} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm underline transition ${textoActivoLayer.subrayado ? "border-indigo-500 bg-indigo-600 text-white dark:bg-cyan-500 dark:border-cyan-400" : "border-gray-200 bg-white dark:bg-slate-900 dark:border-slate-700"}`}>U</button>
+                      <button type="button" onClick={() => actualizarCapaTexto(textoActivoLayer.id, { rotacion: ((textoActivoLayer.rotacion ?? 0) + 45) % 360 })} className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-xs dark:bg-slate-900 dark:border-slate-700" title="Rotar 45°"><FaSyncAlt size={10} /></button>
+                    </div>
+                    <label className="block text-xs text-gray-500">Rotación {textoActivoLayer.rotacion ?? 0}°
+                      <input type="range" min={0} max={360} step={5} value={textoActivoLayer.rotacion ?? 0} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { rotacion: Number(e.target.value) })} className="w-full accent-indigo-600" />
+                    </label>
+                    <p className="text-[11px] text-gray-400">Selecciona el texto y arrástralo directamente sobre el buso para moverlo. El tamaño se ajusta abajo en “Tamaño del próximo texto”.</p>
+                  </div>
+                ) : capasTexto.length === 0 && (
+                  <div className="mt-3 rounded-lg border border-dashed border-gray-300 p-3 text-center text-xs text-gray-400 dark:border-slate-700 dark:text-slate-500">Aún no hay capas. Escribe arriba y pulsa Agregar para crear tu primer texto movible.</div>
+                )}
+
+                {/* Selector de fuente para texto nuevo (y edición rápida) */}
                 <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Fuente ({fuentesVisibles.length})
+                  Fuente para texto nuevo ({fuentesVisibles.length})
                 </label>
-
                 <div className="mb-2 flex items-center gap-2">
-                  <svg className="h-4 w-4 text-gray-400 dark:text-slate-500" viewBox="0 0 24 24">
-                    <path d="M21 21l-3.33-3.33l-2.21 2.21l5.45 5.45l-1.42 1.42zM21 3l-3.33 3.33l2.21 2.21l-5.45-5.45l1.42-1.42zM3 3l3.33-3.33l-2.21-2.21l5.45 5.45l-1.42-1.42zM3 21l3.33 3.33l-2.21 2.21l-5.45-5.45l1.42 1.42zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM12 4v12c1.1 0 2-0.9 2-2V4c0-1.1-0.9-2-2-2z" />
-                  </svg>
                   <input
                     type="text"
                     placeholder="Buscar fuente..."
                     value={busquedaFuente}
                     onChange={(e) => setBusquedaFuente(e.target.value)}
-                    className="rounded-xl border border-gray-200 bg-gray-50 p-2 text-sm text-gray-700 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500 flex-1"
+                    className="flex-1 rounded-xl border border-gray-200 bg-gray-50 p-2 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                   />
                 </div>
-
-                {/* Tarjetas: cada una se dibuja con su propia tipografía para
-                    reconocerla de un vistazo; hover con elevación y borde. */}
-                <div className="grid max-h-48 grid-cols-2 gap-1.5 overflow-y-auto rounded-xl border border-gray-100 p-1.5 dark:border-slate-800">
-                  {fuentesVisibles.map((fuente) => {
+                <div className="grid max-h-36 grid-cols-2 gap-1.5 overflow-y-auto rounded-xl border border-gray-100 p-1.5 dark:border-slate-800">
+                  {fuentesVisibles.slice(0, 20).map((fuente) => {
                     const activa = fuenteTexto === fuente.css;
                     return (
                       <button
                         key={fuente.id}
                         type="button"
-                        onClick={() => setFuenteTexto(fuente.css)}
-                        title={`Aplicar ${fuente.nombre}`}
-                        aria-pressed={activa}
+                        onClick={() => {
+                          setFuenteTexto(fuente.css);
+                          if (textoActivoLayer) actualizarCapaTexto(textoActivoLayer.id, { fuente: fuente.css });
+                        }}
                         style={{ fontFamily: fuente.css }}
-                        className={`flex flex-col items-center justify-center rounded-lg border px-1 py-2 transition duration-150 hover:-translate-y-0.5 hover:shadow-md ${
-                          activa
-                            ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:ring-cyan-500/40"
-                            : "border-gray-200 bg-white hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-cyan-500/50"
-                        }`}
+                        className={`flex flex-col items-center justify-center rounded-lg border px-1 py-2 text-sm ${activa ? "border-indigo-500 bg-indigo-50 dark:bg-cyan-500/10" : "border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900"}`}
                       >
-                        <span
-                          className={`truncate text-lg leading-tight ${
-                            activa
-                              ? "text-indigo-700 dark:text-cyan-300"
-                              : "text-gray-700 dark:text-slate-200"
-                          }`}
-                        >
-                          Aa
-                        </span>
-                        <span
-                          className={`w-full truncate text-center text-[9px] ${
-                            activa
-                              ? "font-semibold text-indigo-600 dark:text-cyan-400"
-                              : "text-gray-400 dark:text-slate-500"
-                          }`}
-                        >
-                          {fuente.nombre}
-                        </span>
+                        <span className="text-lg leading-none">Aa</span>
+                        <span className="w-full truncate text-center text-[9px] text-gray-400">{fuente.nombre}</span>
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Formato del texto: negrita, cursiva y subrayado */}
-                <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Formato
-                </label>
-                <div className="mb-4 flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    aria-pressed={esNegrita}
-                    title="Negrita"
-                    onClick={() => setEsNegrita((v) => !v)}
-                    className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-bold transition ${
-                      esNegrita
-                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-300"
-                        : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
-                    }`}
-                  >
-                    B
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={esCursiva}
-                    title="Cursiva"
-                    onClick={() => setEsCursiva((v) => !v)}
-                    className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-semibold italic transition ${
-                      esCursiva
-                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-300"
-                        : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
-                    }`}
-                  >
-                    I
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={esSubrayado}
-                    title="Subrayado"
-                    onClick={() => setEsSubrayado((v) => !v)}
-                    className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-semibold underline transition ${
-                      esSubrayado
-                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-500/10 dark:text-cyan-300"
-                        : "border-gray-200 text-gray-600 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400"
-                    }`}
-                  >
-                    U
-                  </button>
+                {/* Estilo por defecto para el próximo texto */}
+                <label className="mb-1 mt-3 block text-xs font-medium text-gray-500 dark:text-slate-400">Estilo del próximo texto <span className="font-normal text-[10px]">— solo afecta al siguiente que agregues</span></label>
+                <p className="mb-2 text-[10px] leading-tight text-gray-400 dark:text-slate-500">Define negrita, color y tamaño del próximo “Agregar”. Los textos ya creados se editan tocando su capa arriba.</p>
+                <div className="mb-3 flex items-center gap-1.5">
+                  <button type="button" aria-pressed={esNegrita} onClick={() => setEsNegrita((v) => !v)} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-bold ${esNegrita ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-cyan-500/10 dark:text-cyan-300" : "border-gray-200 dark:border-slate-700"}`}>B</button>
+                  <button type="button" aria-pressed={esCursiva} onClick={() => setEsCursiva((v) => !v)} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm italic ${esCursiva ? "border-indigo-500 bg-indigo-50 dark:bg-cyan-500/10" : "border-gray-200 dark:border-slate-700"}`}>I</button>
+                  <button type="button" aria-pressed={esSubrayado} onClick={() => setEsSubrayado((v) => !v)} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm underline ${esSubrayado ? "border-indigo-500 bg-indigo-50 dark:bg-cyan-500/10" : "border-gray-200 dark:border-slate-700"}`}>U</button>
+                  <div className="ml-2 flex items-center gap-2 text-xs">
+                    <input type="color" value={normalizarHexParaPicker(colorTexto) ?? "#111111"} onChange={(e) => setColorTexto(e.target.value)} className="h-8 w-8 cursor-pointer rounded border-none" />
+                    <span className="text-gray-500">T:{tamanoTexto}px</span>
+                    <input type="range" min={12} max={80} step={2} value={tamanoTexto} onChange={(e) => setTamanoTexto(Number(e.target.value))} className="w-20 accent-indigo-600" />
+                  </div>
                 </div>
 
-                {/* Emojis como capas independientes en el lienzo */}
+                <div className="my-4 border-t border-gray-200 dark:border-slate-800" />
+                {/* Emojis Canva */}
                 <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Emojis
+                  Emojis (capas movibles)
                 </label>
-                <div className="mb-4 flex flex-wrap gap-1.5">
+                <div className="mb-3 flex flex-wrap gap-1.5">
                   {EMOJIS_RAPIDOS.map((emoji) => (
                     <button
                       key={emoji}
                       type="button"
                       onClick={() => agregarEmoji(emoji)}
-                      title={`Agregar ${emoji} como capa`}
+                      title="Agregar capa emoji movible"
                       className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-lg transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:hover:border-cyan-400"
                     >
                       {emoji}
@@ -1904,171 +2124,37 @@ function Personalizador() {
 
                 {emojis.length > 0 && (
                   <>
-                    <div className="my-3 border-t border-gray-200 dark:border-slate-800" />
-                    <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
-                      Emojis agregados ({emojis.length})
-                    </p>
+                    <p className="mb-2 text-xs font-medium text-gray-500">Emojis en lienzo ({emojis.length}) · arrastra sobre la prenda</p>
                     <div className="mb-3 flex flex-wrap gap-1.5">
                       {emojis.map((em) => (
                         <button
                           key={em.id}
                           type="button"
                           onClick={() => seleccionarEmoji(em.id)}
-                          title="Seleccionar para mover, escalar o eliminar"
-                          className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition ${
-                            em.id === emojiActivoId
-                              ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:ring-cyan-500/40"
-                              : "border-gray-200 bg-gray-50 hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-cyan-500/50"
-                          }`}
+                          className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg ${em.id === emojiActivoId ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300 dark:bg-cyan-500/10" : "border-gray-200 bg-gray-50 dark:border-slate-700 dark:bg-slate-950"}`}
                         >
                           {em.emoji}
                         </button>
                       ))}
                     </div>
-
                     {emojiActivo && (
-                      <div className="space-y-3 rounded-xl border border-gray-200 p-3 dark:border-slate-700">
-                        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400">
-                          Emoji seleccionado
-                        </p>
-
-                        <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
-                          Tamaño: {Math.round((emojiActivo.tamano ?? 48) * (emojiActivo.escala ?? 1))}px
-                        </label>
-                        <input
-                          type="range"
-                          min={16}
-                          max={120}
-                          step={2}
-                          value={Math.round((emojiActivo.tamano ?? 48) * (emojiActivo.escala ?? 1))}
-                          onChange={(e) => {
-                            const base = emojiActivo.tamano ?? 48;
-                            actualizarEmoji(emojiActivo.id, {
-                              escala: Number(e.target.value) / base,
-                            });
-                          }}
-                          className="w-full accent-indigo-600 dark:accent-cyan-500"
-                        />
-                        <p className="text-[10px] text-gray-400 dark:text-slate-500">
-                          También puedes escalarlo arrastrando las esquinas del
-                          marco en el lienzo.
-                        </p>
-
+                      <div className="space-y-3 rounded-xl border-2 border-indigo-500 bg-indigo-50/40 p-3 dark:border-cyan-400 dark:bg-cyan-500/5">
+                        <p className="text-xs font-bold text-indigo-700 dark:text-cyan-300">Emoji seleccionado · arrástralo sobre el buso para mover</p>
                         <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              actualizarEmoji(emojiActivo.id, {
-                                rotacion: ((emojiActivo.rotacion ?? 0) + 90) % 360,
-                              })
-                            }
-                            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
-                          >
-                            <FaSyncAlt /> Rotar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => eliminarEmoji(emojiActivo.id)}
-                            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-red-500 transition hover:border-red-300 dark:border-slate-700 dark:text-red-400 dark:hover:border-red-500/50"
-                          >
-                            <FaTrash /> Eliminar
-                          </button>
+                          <button type="button" onClick={() => actualizarEmoji(emojiActivo.id, { rotacion: ((emojiActivo.rotacion ?? 0) + 45) % 360 })} className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white py-2 text-xs dark:bg-slate-900 dark:border-slate-700"><FaSyncAlt size={10} /> Rotar 45°</button>
+                          <button type="button" onClick={() => eliminarEmoji(emojiActivo.id)} className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white py-2 text-xs text-red-500 dark:bg-slate-900"><FaTrash size={10} /> Eliminar</button>
                         </div>
+                        <p className="text-[11px] text-gray-400">Tip: selecciona el emoji y arrástralo directamente sobre el buso para mover. Para agrandar usa el tamaño del próximo emoji antes de agregarlo.</p>
                       </div>
                     )}
                   </>
                 )}
-
-                {/* Vista previa en vivo del texto con la fuente y color elegidos */}
-                <div className="mt-2 flex min-h-[44px] items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50 p-2 dark:border-slate-700 dark:bg-slate-950">
-                  {textoDiseno.trim() ? (
-                    <span
-                      className="truncate text-xl leading-tight"
-                      style={{
-                        fontFamily: fuenteTexto,
-                        color: colorTexto,
-                        fontWeight: esNegrita ? 700 : 600,
-                        fontStyle: esCursiva ? "italic" : "normal",
-                        textDecoration: esSubrayado ? "underline" : "none",
-                      }}
-                    >
-                      {textoDiseno}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-400 dark:text-slate-500">
-                      Escribe un texto para ver la vista previa
-                    </span>
-                  )}
-                </div>
-
-                <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Color del texto
-                </label>
-                <div className="mb-4 flex items-center gap-3 rounded-xl border border-gray-200 p-2 dark:border-slate-700">
-                  <input
-                    type="color"
-                    value={normalizarHexParaPicker(colorTexto) ?? "#111111"}
-                    onChange={(e) => setColorTexto(e.target.value)}
-                    className="h-9 w-12 cursor-pointer rounded border-none bg-transparent p-0"
-                  />
-                  <input
-                    type="text"
-                    maxLength="7"
-                    value={colorTexto}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setColorTexto(val);
-                      // Si es un HEX válido (# + 3 o 6 dígitos), el color se
-                      // aplica automáticamente al texto del canvas.
-                      if (/^#?([0-9a-fA-F]{3}){1,2}$/.test(val)) {
-                        setColorTexto(val.startsWith("#") ? val : `#${val}`);
-                      }
-                    }}
-                    placeholder="#111111"
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-700 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
-                  />
-                </div>
-
-                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Tamaño: {tamanoTexto}px
-                </label>
-                <input
-                  type="range"
-                  min={16}
-                  max={64}
-                  step={2}
-                  value={tamanoTexto}
-                  onChange={(e) => setTamanoTexto(Number(e.target.value))}
-                  className="w-full accent-indigo-600 dark:accent-cyan-500"
-                />
-
-                <div className="mt-4 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRotacionTexto((r) => (r + 90) % 360)}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-700 transition hover:border-indigo-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400"
-                  >
-                    <FaSyncAlt /> Rotar texto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTextoDiseno("");
-                      setTextoActivo(false);
-                    }}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 py-2 text-xs font-medium text-red-500 transition hover:border-red-300 dark:border-slate-700 dark:text-red-400 dark:hover:border-red-500/50"
-                  >
-                    <FaTrash /> Eliminar texto
-                  </button>
-                </div>
               </>
             )}
 
             {herramienta !== "imagen" && (
               <p className="mt-5 border-t border-gray-200 pt-4 text-xs text-gray-400 dark:border-slate-800 dark:text-slate-500">
-                Consejo: selecciona una imagen en el panel y arrástrala sobre la
-                prenda para moverla; usa el deslizador para escalarla y el botón
-                de rotar para girarla.
+                Consejo: selecciona texto/emoji/imagen y arrástralo directamente sobre el buso para moverlo. Solo se ve una imagen pegada, sin capas flotantes arriba.
               </p>
             )}
           </div>
@@ -2114,9 +2200,9 @@ function Personalizador() {
             <p className="pt-3 text-center text-xs text-gray-400 dark:text-slate-500">
               {imagenPendiente
                 ? "Haz clic en el modelo para colocar la imagen."
-                : imagenActivaId
-                  ? "Arrastra sobre la prenda para mover la imagen seleccionada."
-                  : "Gira el modelo y selecciona una imagen en el panel para editarla."}
+                : imagenActivaId || textoActivoId || emojiActivoId
+                  ? "Arrastra sobre el buso para mover la capa seleccionada (texto/emoji/imagen)."
+                  : "Gira el modelo. Selecciona texto/emoji/imagen en el panel y arrastra sobre el buso para mover."}
             </p>
           </div>
 

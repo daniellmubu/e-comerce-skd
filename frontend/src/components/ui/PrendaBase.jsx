@@ -1,9 +1,7 @@
 import { useRef, useState } from "react";
-import camisetaBase from "../../assets/images/products/base/camiseta-base.png";
 import mugBase from "../../assets/images/products/base/mug-base.png";
 
 const IMAGENES = {
-  camiseta: camisetaBase,
   mug: mugBase,
 };
 

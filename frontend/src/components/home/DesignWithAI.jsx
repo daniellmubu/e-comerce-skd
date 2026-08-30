@@ -64,7 +64,7 @@ function DesignWithAI() {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Quiero una camiseta negra con un dragón japonés en tonos azules y un estilo cyberpunk."
+            placeholder="Quiero un mug negro con un dragón japonés en tonos azules y un estilo cyberpunk."
             rows={4}
             className="
               w-full resize-none rounded-2xl border border-slate-700

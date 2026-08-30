@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaHeart, FaRegHeart, FaStar } from "react-icons/fa";
 
-import camiseta from "../assets/images/products/camiseta.png";
 import mug from "../assets/images/products/mug.png";
 
 import { listarMisFavoritos, eliminarFavorito } from "../services/favoritoService";
@@ -10,12 +9,12 @@ import { getErrorMessage } from "../services/api";
 import Loading from "../components/ui/Loading";
 
 const CATEGORY_META = {
-  Camisetas: { image: camiseta, color: "from-cyan-500 to-blue-700" },
   Mugs: { image: mug, color: "from-violet-500 to-purple-700" },
-  Termos: { image: camiseta, color: "from-emerald-500 to-green-700" },
+  Jarras: { image: mug, color: "from-amber-500 to-orange-700" },
+  Termos: { image: mug, color: "from-emerald-500 to-green-700" },
 };
 
-const DEFAULT_META = { image: camiseta, color: "from-slate-500 to-slate-700" };
+const DEFAULT_META = { image: mug, color: "from-slate-500 to-slate-700" };
 
 function formatPrice(value) {
   return Number(value).toLocaleString("es-CO", {

@@ -8,7 +8,8 @@ import {
 } from "../../utils/texturaPrenda";
 
 export const ESCALA_MIN_3D = 0.2;
-export const ESCALA_MAX_3D = 3;
+export const ESCALA_MAX_3D = 4.5;
+// Límite ampliado para plantillas y mug (eran muy pequeñas con 3x)
 
 /* ------------------------------------------------------------------ */
 /* Modelos glTF por tipo de producto                                   */
@@ -20,14 +21,15 @@ export const ESCALA_MAX_3D = 3;
 // El modelo de mug es opcional: mientras frontend/public/models/mug.gltf no
 // exista, el visor detecta el fallo de carga y cae automáticamente al mug
 // procedural (ver LimiteErrorModelo más abajo).
-const MODELOS_3D = {
-  camiseta: "/models/tshirt.gltf",
+export const MODELOS_3D = {
   mug: "/models/mug.gltf",
+  mug_magico: "/models/mug.gltf",
+  jarra_cervecera: "/models/jarra-cervecera.gltf",
 };
 
-// Precarga el modelo principal al montar el módulo para evitar parpadeo.
-// El mug NO se precarga: puede no existir todavía.
-useGLTF.preload(MODELOS_3D.camiseta);
+// Precarga mugs y jarra (ahora que jarra-cervecera.gltf existe)
+useGLTF.preload(MODELOS_3D.mug);
+useGLTF.preload(MODELOS_3D.jarra_cervecera);
 
 const FACTOR_ROTACION = 0.01;
 
@@ -41,9 +43,11 @@ const ALTURA_MODELO = 2.6;
 const ANCHO_DISENO_MUG = 0.3;
 
 // Ancho base del diseño en el mug glTF, como fracción de la textura de la capa
-// (la textura cubre los 360° de la pared): 0.15 ≈ 54° de arco ≈ ~45% del ancho
-// visible del pocillo de frente. Ajustar junto con el mockup 2D.
-const ANCHO_IMAGEN_MUG = 0.15;
+// (la textura cubre los 360° de la pared): 0.22 ≈ 79° de arco ≈ ~65% del ancho
+// visible (antes 0.15 se veía muy pequeño y estirado). Se corrige además la
+// relación aspecto cilíndrica en texturaPrenda.js (baseH × circ/altura) para
+// que no se vea muy ancho.
+const ANCHO_IMAGEN_MUG = 0.22;
 
 function configDisenoMug() {
   const { radioSuperior, altura } = DIMENSIONES_MUG;
@@ -260,236 +264,6 @@ function proyectarUvFrontal(geo, desdeAtras = false) {
     geo.attributes.uv.setXY(i, u, v);
   }
   geo.attributes.uv.needsUpdate = true;
-}
-
-// Prepara la camiseta (tshirt.gltf):
-//  - materiales propios por instancia; el color se aplica a TODOS,
-//  - cada mesh se clasifica por el nombre de su MATERIAL del glTF (Body_* /
-//    Sleeves_*) y no por el nombre del mesh: el export de CLO agrupa las
-//    primitivas en un Group y los Mesh hijos llegan sin nombre,
-//  - el lado de cada manga (izquierda/derecha) y el panel frontal/trasero se
-//    deducen de la posición del mesh (X y Z respectivamente),
-//   - cuatro superficies imprimibles como CAPAS DE PROYECCIÓN independientes
-//    (frente, espalda, manga izquierda y manga derecha): los diseños de manga
-//    proyectan sobre TODA la silueta lateral (manga + costado + torso) para
-//    que puedan desbordar de la manga sin cortarse en una costura,
-//    los triángulos de cada cara se extraen a una geometría fusionada con UVs
-//    planares generadas desde el mundo, de modo que la textura dibujada desde
-//    las coordenadas (%) del editor 2D cae exactamente donde debe en el
-//    modelo, sin depender de los UVs arbitrarios del export de CLO,
-//  - centrado y escalado a ALTURA_MODELO.
-// El clon comparte geometrías con la caché de useGLTF (no se disponen aquí).
-function prepararModeloCamiseta(escenaOriginal) {
-  const clon = escenaOriginal.clone(true);
-  clon.updateMatrixWorld(true);
-
-  const materialesGltf = {};
-  clon.traverse((objeto) => {
-    if (objeto.isMesh && objeto.material?.name) {
-      materialesGltf[objeto.material.name] = objeto.material;
-    }
-  });
-
-  // Nombres reales dentro de tshirt.gltf: Body_FRONT_2664 y Sleeves_FRONT_2669.
-  const baseCuerpo =
-    materialesGltf["Body_FRONT_2664"] ?? Object.values(materialesGltf)[0];
-  const baseMangas = materialesGltf["Sleeves_FRONT_2669"] ?? baseCuerpo;
-
-  const acabadoTela = { roughness: 0.85, metalness: 0 };
-  const crearMaterial = (base) => {
-    const material = base.clone();
-    Object.assign(material, acabadoTela);
-    material.map = null;
-    // Ligera separación visual para que el decal no se vea "pegado" plano
-    material.polygonOffset = false;
-    return material;
-  };
-
-  // Materiales de COLOR base (sin estampado): el estampado vive en las capas
-  // de proyección, así que el cuerpo completo se colorea liso.
-  const matCuerpoFrente = crearMaterial(baseCuerpo);
-  const matCuerpoLiso = crearMaterial(baseCuerpo);
-  const matMangaColor = crearMaterial(baseMangas);
-  const matRibbing = crearMaterial(baseCuerpo);
-
-  let caja = new THREE.Box3().setFromObject(clon);
-  const centro = caja.getCenter(new THREE.Vector3());
-  const centroX = centro.x;
-  const centroZ = centro.z;
-  const tamano = caja.getSize(new THREE.Vector3());
-
-  // Vista frontal (+Z hacia cámara): X negativo es la manga izquierda vista
-  // por el usuario; Z positivo son los paneles delanteros.
-  const esPanelFrontal = (cajaMesh) => {
-    const centroMesh = cajaMesh.getCenter(new THREE.Vector3());
-    return centroMesh.z >= centroZ;
-  };
-
-  const esRibbing = (objeto) =>
-    (objeto.name ?? "").includes("Ribbing") ||
-    (objeto.parent?.name ?? "").includes("Ribbing");
-
-  // Clasificación por geometría única (el export duplica primitivas con los
-  // mismos accessors; así no se procesan ni extraen varias veces).
-  const geosProcesadas = new Map();
-
-  clon.traverse((objeto) => {
-    if (!objeto.isMesh) return;
-    const nombreMaterial = objeto.material?.name ?? "";
-    if (esRibbing(objeto)) {
-      objeto.material = matRibbing;
-      return;
-    }
-
-    const cajaMesh = new THREE.Box3().setFromObject(objeto);
-    const esManga =
-      nombreMaterial.includes("Sleeves") ||
-      (objeto.name ?? "").includes("Sleeves");
-
-    if (esManga) {
-      objeto.material = matMangaColor;
-    } else {
-      const frontal = esPanelFrontal(cajaMesh);
-      objeto.material = frontal ? matCuerpoFrente : matCuerpoLiso;
-    }
-
-    if (!geosProcesadas.has(objeto.geometry)) {
-      geosProcesadas.set(objeto.geometry, {
-        esManga,
-        lado: cajaMesh.getCenter(new THREE.Vector3()).x < centroX ? -1 : 1,
-        mesh: objeto,
-      });
-    }
-  });
-
-  // Extracción de triángulos ANTES de desplazar el modelo al origen.
-  // - mangas: triángulos del material Sleeve del lado pedido + TODO el torso.
-  //   La proyección lateral (u = profundidad Z, v = altura Y) es continua, así
-  //   el diseño puede desbordar de la manga hacia el costado y el torso sin
-  //   cortarse en una costura invisible; los paneles frontal y trasero ocupan
-  //   rangos de Z disjuntos, así que no se pintan espejados entre sí,
-  // - frente/espalda: triángulos del torso separados por el plano medio Z.
-  clon.updateMatrixWorld(true);
-  const extraerPartes = ({ mangaLado = 0, todo = false, triangulo = null }) => {
-    const partes = [];
-    for (const info of geosProcesadas.values()) {
-      if (info.esManga) {
-        if (mangaLado !== 0 && info.lado === mangaLado) {
-          partes.push(extraerTriangulos(info.mesh, null));
-        }
-        continue;
-      }
-      if (!todo && !triangulo) continue;
-      partes.push(extraerTriangulos(info.mesh, todo ? null : triangulo));
-    }
-    return combinarGeometrias(partes);
-  };
-
-  const geoCapaIzq = extraerPartes({ mangaLado: -1, todo: false });
-  const geoCapaDer = extraerPartes({ mangaLado: 1, todo: false });
-  const geoFrente = extraerPartes({ triangulo: (c) => c.z >= centroZ });
-  const geoEspalda = extraerPartes({ triangulo: (c) => c.z < centroZ });
-
-  const escala = ALTURA_MODELO / (tamano.y || 1);
-  const raiz = new THREE.Group();
-  clon.position.sub(centro);
-  raiz.add(clon);
-  raiz.scale.setScalar(escala);
-
-  // Capas de proyección: geometría fusionada trasladada al origen del modelo,
-  // UVs planares regeneradas y material transparente para no tapar el color
-  // base de la prenda. La capa solo se hace visible cuando su ubicación tiene
-  // contenido (ver efecto de texturas en ModeloGltf).
-  const armarCapaProyeccion = (geoMerge, baseMaterial, proyectar) => {
-    if (!geoMerge) return null;
-    geoMerge.translate(-centro.x, -centro.y, -centro.z);
-    proyectar(geoMerge);
-
-    const material = crearMaterial(baseMaterial);
-    Object.assign(material, {
-      transparent: true,
-      alphaTest: 0.01,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -4,
-      polygonOffsetUnits: -4,
-    });
-    material.map = null;
-
-    const capa = new THREE.Mesh(geoMerge, material);
-    capa.renderOrder = 2;
-    capa.visible = false;
-    raiz.add(capa);
-
-    return { material, capa };
-  };
-
-  const capaFrente = armarCapaProyeccion(geoFrente, baseCuerpo, (g) =>
-    proyectarUvFrontal(g, false)
-  );
-  const capaEspalda = armarCapaProyeccion(geoEspalda, baseCuerpo, (g) =>
-    proyectarUvFrontal(g, true)
-  );
-  const capaIzquierda = armarCapaProyeccion(geoCapaIzq, baseMangas, (g) =>
-    proyectarUvLateral(g, -1)
-  );
-  const capaDerecha = armarCapaProyeccion(geoCapaDer, baseMangas, (g) =>
-    proyectarUvLateral(g, 1)
-  );
-
-  return {
-    raiz,
-    superficies: [
-      {
-        clave: "frente",
-        material: capaFrente?.material ?? null,
-        mesh: capaFrente?.capa ?? null,
-        transparencia: true,
-        silueta: false,
-        conTexto: true,
-        mapearTorso: true,
-      },
-      {
-        clave: "espalda",
-        material: capaEspalda?.material ?? null,
-        mesh: capaEspalda?.capa ?? null,
-        transparencia: true,
-        silueta: false,
-        conTexto: false,
-        mapearTorso: true,
-      },
-      {
-        clave: "mangaIzquierda",
-        material: capaIzquierda?.material ?? null,
-        mesh: capaIzquierda?.capa ?? null,
-        transparencia: true,
-        silueta: false,
-        conTexto: false,
-      },
-      {
-        clave: "mangaDerecha",
-        material: capaDerecha?.material ?? null,
-        mesh: capaDerecha?.capa ?? null,
-        transparencia: true,
-        silueta: false,
-        conTexto: false,
-      },
-    ],
-    materialesLisos: [matRibbing, matMangaColor, matCuerpoFrente, matCuerpoLiso],
-    materialesTodos: [
-      matCuerpoFrente,
-      matCuerpoLiso,
-      matMangaColor,
-      matRibbing,
-      capaFrente?.material,
-      capaEspalda?.material,
-      capaIzquierda?.material,
-      capaDerecha?.material,
-    ].filter(Boolean),
-    geometriasPropias: [geoCapaIzq, geoCapaDer, geoFrente, geoEspalda].filter(
-      Boolean
-    ),
-  };
 }
 
 // Preparación del mug (mug.gltf):
@@ -746,10 +520,145 @@ function prepararModeloMug(escenaOriginal) {
   };
 }
 
+// Preparación de la Jarra Cervecera (jarra-cervecera.gltf):
+// Similar a la del mug pero con geometría de vidrio más grande y transparente.
+// Se usa una extracción genérica sin filtro de radio restrictivo (toma toda la
+// pared exterior cuyo normal es mayormente horizontal) y genera UVs cilíndricas
+// para que el decal se aplique 360° como en el mug.
+function prepararModeloJarra(escenaOriginal) {
+  const clon = escenaOriginal.clone(true);
+  clon.rotation.set(0, -Math.PI / 2, 0);
+  clon.updateMatrixWorld(true);
+  const geosHorneadas = [];
+  clon.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const g = o.geometry.clone();
+    g.applyMatrix4(o.matrixWorld);
+    o.geometry = g;
+    geosHorneadas.push(g);
+  });
+  clon.traverse((o) => {
+    o.position.set(0, 0, 0);
+    o.rotation.set(0, 0, 0);
+    o.scale.set(1, 1, 1);
+  });
+  clon.updateMatrixWorld(true);
+  const materialesGltf = new Map();
+  clon.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    if (!materialesGltf.has(o.material)) {
+      const c = o.material.clone();
+      c.map = null;
+      // Vidrio: ligeramente transparente
+      Object.assign(c, { transparent: true, opacity: 0.92, roughness: 0.15, metalness: 0.0, side: THREE.DoubleSide });
+      materialesGltf.set(o.material, c);
+    }
+    o.material = materialesGltf.get(o.material);
+  });
+  const caja = new THREE.Box3().setFromObject(clon);
+  const centro = caja.getCenter(new THREE.Vector3());
+  const tamano = caja.getSize(new THREE.Vector3());
+  // Centrado por eje del cuerpo
+  {
+    let maxY = -Infinity;
+    const verts = [];
+    clon.traverse((o) => {
+      if (!o.isMesh || !o.geometry?.attributes.position) return;
+      o.updateWorldMatrix(true, false);
+      const pos = o.geometry.attributes.position;
+      const p = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        p.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+        if (p.y > maxY) maxY = p.y;
+        verts.push(p.x, p.y, p.z);
+      }
+    });
+    const umbral = maxY - (tamano.y || 1) * 0.02;
+    let sx = 0, sz = 0, n = 0;
+    for (let i = 0; i < verts.length; i += 3) {
+      if (verts[i + 1] >= umbral) { sx += verts[i]; sz += verts[i + 2]; n++; }
+    }
+    if (n > 0) { centro.x = sx / n; centro.z = sz / n; }
+  }
+  // Pared genérica: toma toda la geometría exterior con normal horizontal
+  const geoPared = (() => {
+    const posArr = [], norArr = [];
+    const mn = new THREE.Matrix3();
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+    clon.traverse((o) => {
+      if (!o.isMesh || !o.geometry) return;
+      o.updateWorldMatrix(true, false);
+      mn.getNormalMatrix(o.matrixWorld);
+      const base = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
+      const pos = base.attributes.position;
+      const nor = base.attributes.normal;
+      for (let i = 0; i < pos.count; i += 3) {
+        a.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+        b.fromBufferAttribute(pos, i + 1).applyMatrix4(o.matrixWorld);
+        c.fromBufferAttribute(pos, i + 2).applyMatrix4(o.matrixWorld);
+        let nx = 0, ny = 0, nz = 0;
+        if (nor) { for (let j = 0; j < 3; j++) { n.fromBufferAttribute(nor, i + j).applyMatrix3(mn); nx += n.x; ny += n.y; nz += n.z; } }
+        if (Math.abs(ny) > Math.hypot(nx, nz) * 0.55) continue;
+        posArr.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+        for (let j = 0; j < 3; j++) {
+          if (nor) { n.fromBufferAttribute(nor, i + j).applyMatrix3(mn).normalize(); norArr.push(n.x, n.y, n.z); } else norArr.push(0, 1, 0);
+        }
+      }
+      if (base !== o.geometry) base.dispose();
+    });
+    if (!posArr.length) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(posArr, 3));
+    geo.setAttribute("normal", new THREE.Float32BufferAttribute(norArr, 3));
+    return geo;
+  })();
+  const escala = ALTURA_MODELO / (tamano.y || 1);
+  const raiz = new THREE.Group();
+  clon.position.sub(centro);
+  raiz.add(clon);
+  raiz.scale.setScalar(escala);
+  let uvPared = null;
+  if (geoPared) {
+    geoPared.translate(-centro.x, -centro.y, -centro.z);
+    const pos = geoPared.attributes.position;
+    let minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < pos.count; i++) { const y = pos.getY(i); if (y < minY) minY = y; if (y > maxY) maxY = y; }
+    const alto = maxY - minY || 1;
+    const uvs = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) { const ang = Math.atan2(pos.getX(i), pos.getZ(i)); uvs[i * 2] = 0.5 + ang / (Math.PI * 2); uvs[i * 2 + 1] = (pos.getY(i) - minY) / alto; }
+    for (let i = 0; i < pos.count; i += 3) {
+      const us = [uvs[i * 2], uvs[(i + 1) * 2], uvs[(i + 2) * 2]];
+      if (Math.max(...us) - Math.min(...us) > 0.5) { for (let j = 0; j < 3; j++) if (uvs[(i + j) * 2] < 0.5) uvs[(i + j) * 2] += 1; }
+    }
+    geoPared.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+    uvPared = geoPared;
+  }
+  const crearCapa = () => {
+    if (!uvPared || !materialesGltf.size) return { material: null, capa: null };
+    const mat = materialesGltf.values().next().value.clone();
+    Object.assign(mat, { transparent: true, alphaTest: 0.01, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    mat.map = null;
+    const capa = new THREE.Mesh(uvPared, mat);
+    capa.renderOrder = 2; capa.visible = false; raiz.add(capa);
+    return { material: mat, capa };
+  };
+  const capaFrente = crearCapa(); const capaAtras = crearCapa();
+  return {
+    raiz,
+    superficies: [
+      { clave: "frente", material: capaFrente.material, mesh: capaFrente.capa, transparencia: true, silueta: false, conTexto: true, anchoBase: 0.28, espejoX: false, espejoY: false },
+      { clave: "atras", material: capaAtras.material, mesh: capaAtras.capa, transparencia: true, silueta: false, conTexto: false, anchoBase: 0.28, espejoX: false, espejoY: false },
+    ],
+    materialesLisos: [...materialesGltf.values()],
+    materialesTodos: [...materialesGltf.values(), capaFrente.material, capaAtras.material].filter(Boolean),
+    geometriasPropias: [...geosHorneadas, ...(uvPared ? [uvPared] : [])],
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Modelo glTF genérico (color uniforme + estampado por superficie)    */
 
-const CARAS_VALIDAS = ["frente", "espalda", "mangaIzquierda", "mangaDerecha", "atras"];
+const CARAS_VALIDAS = ["frente", "atras"];
 
 function agruparDisenosPorCara(imagenes, unaSuperficie = false) {
   const grupos = {};
@@ -774,6 +683,7 @@ function ModeloGltf({
   disenoUrl,
   imagenes = null,
   emojis = null,
+  capasTexto = null,
   texto = "",
   colorTexto = "#111111",
   fuenteTexto,
@@ -787,9 +697,15 @@ function ModeloGltf({
   interactivo = false,
   imagenActivaId = null,
   imagenPendiente = null,
+  textoActivoId = null,
+  emojiActivoId = null,
   onColocar,
   onMover,
+  onMoverTexto,
+  onMoverEmoji,
   onSeleccionar,
+  onSeleccionarTexto,
+  onSeleccionarEmoji,
   caraCamara,
   arrastrandoImagen = false,
   onArrastrarImagen,
@@ -836,7 +752,10 @@ function ModeloGltf({
     };
 
     const hayContenido =
-      disenosEfectivos.length > 0 || Boolean(texto && texto.trim());
+      disenosEfectivos.length > 0 ||
+      Boolean(texto && texto.trim()) ||
+      (capasTexto && capasTexto.length > 0) ||
+      (emojis && emojis.length > 0);
 
     if (!hayContenido) {
       preparado.materialesTodos.forEach(aplicarColorLiso);
@@ -846,7 +765,24 @@ function ModeloGltf({
     }
 
     const textosConfig = [];
-    if (texto && texto.trim()) {
+    if (capasTexto && capasTexto.length > 0) {
+      for (const capa of capasTexto) {
+        if (!capa.contenido?.trim()) continue;
+        textosConfig.push({
+          contenido: capa.contenido,
+          color: capa.color,
+          fuente: capa.fuente,
+          tamano: capa.tamano,
+          negrita: capa.negrita,
+          cursiva: capa.cursiva,
+          subrayado: capa.subrayado,
+          x: capa.x,
+          y: capa.y,
+          rotacion: capa.rotacion ?? 0,
+          escala: capa.escala ?? 1,
+        });
+      }
+    } else if (texto && texto.trim()) {
       textosConfig.push({
         contenido: texto,
         color: colorTexto,
@@ -970,7 +906,7 @@ function ModeloGltf({
     return () => {
       cancelado = true;
     };
-  }, [color, disenosEfectivos, emojis, texto, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado, posicionTexto, rotacionTexto, escalaTexto, preparado, unaSuperficie, arrastrandoImagen]);
+  }, [color, disenosEfectivos, emojis, capasTexto, texto, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado, posicionTexto, rotacionTexto, escalaTexto, preparado, unaSuperficie, arrastrandoImagen]);
 
   // Limpieza: solo lo creado por esta instancia (materiales, texturas y
   // geometrías de las capas de proyección). Las geometrías del glTF
@@ -1036,8 +972,6 @@ function ModeloGltf({
       cara: superficie.clave,
     };
     // Prioridad: si hay imagen pendiente (plantilla/subida/IA), colocarla primero
-    // aunque haya una imagen activa seleccionada. Antes el orden inverso hacía que
-    // "aplicar plantilla" no funcionara si había una imagen activa.
     if (imagenPendiente && onColocar) {
       onColocar(detalle);
       return;
@@ -1047,7 +981,23 @@ function ModeloGltf({
         onArrastrarImagen(true);
       }
       onMover(imagenActivaId, detalle);
-    } else if (onSeleccionar) {
+      return;
+    }
+    if (textoActivoId && onMoverTexto) {
+      if (onArrastrarImagen && e.type === "pointerdown") {
+        onArrastrarImagen(true);
+      }
+      onMoverTexto(textoActivoId, detalle);
+      return;
+    }
+    if (emojiActivoId && onMoverEmoji) {
+      if (onArrastrarImagen && e.type === "pointerdown") {
+        onArrastrarImagen(true);
+      }
+      onMoverEmoji(emojiActivoId, detalle);
+      return;
+    }
+    if (onSeleccionar) {
       onSeleccionar(superficie.clave);
     }
   };
@@ -1068,7 +1018,7 @@ function ModeloGltf({
               matrixAutoUpdate={false}
               onPointerDown={(e) => alPresionarSuperficie(e, s)}
               onPointerMove={(e) => {
-                if (arrastrandoImagen && imagenActivaId && onMover) {
+                if (arrastrandoImagen && (imagenActivaId || textoActivoId || emojiActivoId)) {
                   alPresionarSuperficie(e, s);
                 }
               }}
@@ -1182,29 +1132,13 @@ function Visor3D({ children, arrastrandoImagen = false }) {
   );
 }
 
-function VistaCamiseta(props) {
-  return (
-    <Visor3D arrastrandoImagen={props.arrastrandoImagen}>
-      <Suspense fallback={null}>
-        <ModeloGltf
-          url={MODELOS_3D.camiseta}
-          preparar={prepararModeloCamiseta}
-          {...props}
-        />
-      </Suspense>
-    </Visor3D>
-  );
-}
-
 function VistaMugGltf(props) {
+  const url = MODELOS_3D[props.tipo] || MODELOS_3D.mug;
+  const preparar = props.tipo === "jarra_cervecera" ? prepararModeloJarra : prepararModeloMug;
   return (
     <Visor3D arrastrandoImagen={props.arrastrandoImagen}>
       <Suspense fallback={null}>
-        <ModeloGltf
-          url={MODELOS_3D.mug}
-          preparar={prepararModeloMug}
-          {...props}
-        />
+        <ModeloGltf url={url} preparar={preparar} {...props} />
       </Suspense>
     </Visor3D>
   );
@@ -1236,6 +1170,7 @@ function Mug3D({
   disenoUrl,
   imagenes = null,
   emojis = null,
+  capasTexto = null,
   texto = "",
   colorTexto = "#111111",
   fuenteTexto,
@@ -1458,7 +1393,24 @@ function Mug3D({
     let cancelado = false;
 
     const textosConfig = [];
-    if (texto && texto.trim()) {
+    if (capasTexto && capasTexto.length > 0) {
+      for (const capa of capasTexto) {
+        if (!capa.contenido?.trim()) continue;
+        textosConfig.push({
+          contenido: capa.contenido,
+          color: capa.color,
+          fuente: capa.fuente,
+          tamano: capa.tamano,
+          negrita: capa.negrita,
+          cursiva: capa.cursiva,
+          subrayado: capa.subrayado,
+          x: capa.x,
+          y: capa.y,
+          rotacion: capa.rotacion ?? 0,
+          escala: capa.escala ?? 1,
+        });
+      }
+    } else if (texto && texto.trim()) {
       textosConfig.push({
         contenido: texto,
         color: colorTexto,
@@ -1497,10 +1449,15 @@ function Mug3D({
       if (anterior) anterior.dispose();
     };
 
+    // Fallback procedural: textura sólida con color base (sin rectángulo gris).
+    // El canvas se rellena con el color de la taza y el diseño se dibuja con su
+    // transparencia real (quitarFondoBlanco). No se usa fondo transparente aquí
+    // porque es un único mesh; el transparente se maneja en el path glTF con overlay.
     const trabajo = componerTexturaSolida(color, disenoUrl, {
       ...configDisenoMug(),
       textos: textosConfig,
       disenos: disenosArray,
+      fondoTransparente: false,
     });
 
     trabajo
@@ -1509,15 +1466,22 @@ function Mug3D({
           textura.dispose();
           return;
         }
-        aplicar(materialRef.current, textura);
-        if (materialColorRef.current) materialColorRef.current.color.set(color);
+        const mat = materialRef.current;
+        if (!mat) return;
+        // Procedural usa textura opaca con color base ya horneado; no necesita transparent
+        mat.transparent = false;
+        mat.alphaTest = 0;
+        mat.depthWrite = true;
+        aplicar(mat, textura);
+        // El color base ya está horneado en la textura, no se sobre-escribe
+        if (materialColorRef.current) materialColorRef.current.color.set(color || "#ffffff");
       })
       .catch(() => {});
 
     return () => {
       cancelado = true;
     };
-  }, [tipo, color, disenoUrl, imagenes, emojis, texto, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado, posicionTexto, rotacionTexto, escalaTexto]);
+  }, [tipo, color, disenoUrl, imagenes, emojis, capasTexto, texto, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado, posicionTexto, rotacionTexto, escalaTexto]);
 
   return (
     <canvas
@@ -1539,11 +1503,7 @@ function Mug3D({
 function Prenda3D(props) {
   const { tipo } = props;
 
-  if (tipo === "camiseta") {
-    return <VistaCamiseta {...props} />;
-  }
-
-  // Cualquier otro producto con modelo glTF definido usa el visor genérico;
+  // Productos con modelo glTF definido usan el visor genérico;
   // si el archivo aún no existe en /public/models cae al visor procedural.
   const urlModelo = MODELOS_3D[tipo];
   if (urlModelo) {

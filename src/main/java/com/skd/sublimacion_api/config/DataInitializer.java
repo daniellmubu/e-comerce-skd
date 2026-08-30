@@ -95,8 +95,8 @@ public class DataInitializer implements CommandLineRunner {
 
     private void crearCategorias() {
 
-        crearCategoriaSiNoExiste("Camisetas", "Camisetas personalizadas");
         crearCategoriaSiNoExiste("Mugs", "Mugs personalizados");
+        crearCategoriaSiNoExiste("Jarras", "Jarras cerveceras personalizadas");
         crearCategoriaSiNoExiste("Gorras", "Gorras sublimadas");
         crearCategoriaSiNoExiste("Cojines", "Cojines personalizados");
         crearCategoriaSiNoExiste("Llaveros", "Llaveros personalizados");
@@ -116,10 +116,10 @@ public class DataInitializer implements CommandLineRunner {
 
     private void crearProductos() {
 
-        Categoria camisetas = categoriaRepository.findByNombre("Camisetas")
-                .orElseThrow(() -> new IllegalStateException("Categoría Camisetas no existe"));
         Categoria mugs = categoriaRepository.findByNombre("Mugs")
                 .orElseThrow(() -> new IllegalStateException("Categoría Mugs no existe"));
+        Categoria jarras = categoriaRepository.findByNombre("Jarras")
+                .orElseThrow(() -> new IllegalStateException("Categoría Jarras no existe"));
         Categoria gorras = categoriaRepository.findByNombre("Gorras")
                 .orElseThrow(() -> new IllegalStateException("Categoría Gorras no existe"));
         Categoria cojines = categoriaRepository.findByNombre("Cojines")
@@ -127,10 +127,9 @@ public class DataInitializer implements CommandLineRunner {
         Categoria llaveros = categoriaRepository.findByNombre("Llaveros")
                 .orElseThrow(() -> new IllegalStateException("Categoría Llaveros no existe"));
 
-        crearProductoSiNoExiste("Camiseta Blanca Sublimable", "Camiseta 100% poliéster ideal para sublimación", new BigDecimal("35000"), 50, camisetas);
-        crearProductoSiNoExiste("Camiseta Deportiva Dry Fit", "Camiseta deportiva de secado rápido", new BigDecimal("42000"), 40, camisetas);
         crearProductoSiNoExiste("Mug Cerámico Blanco 11oz", "Mug clásico para sublimación", new BigDecimal("18000"), 100, mugs);
         crearProductoSiNoExiste("Mug Mágico Negro", "Mug que revela el diseño con el calor", new BigDecimal("25000"), 60, mugs);
+        crearProductoSiNoExiste("Jarra Cervecera 500ml", "Jarra cervecera de vidrio para sublimación", new BigDecimal("32000"), 40, jarras);
         crearProductoSiNoExiste("Gorra Trucker Sublimable", "Gorra malla trasera con frente sublimable", new BigDecimal("28000"), 45, gorras);
         crearProductoSiNoExiste("Gorra Clásica Algodón", "Gorra de algodón con panel sublimable", new BigDecimal("26000"), 45, gorras);
         crearProductoSiNoExiste("Cojín Cuadrado 40x40", "Cojín decorativo con funda sublimable", new BigDecimal("32000"), 30, cojines);
@@ -235,26 +234,17 @@ public class DataInitializer implements CommandLineRunner {
 
         if (itemCarritoRepository.findByCarritoId(carrito.getId()).isEmpty()) {
 
-            Producto camiseta = productoRepository.findByNombre("Camiseta Blanca Sublimable")
-                    .orElseThrow(() -> new IllegalStateException("Producto Camiseta Blanca Sublimable no existe"));
             Producto mug = productoRepository.findByNombre("Mug Cerámico Blanco 11oz")
                     .orElseThrow(() -> new IllegalStateException("Producto Mug Cerámico Blanco 11oz no existe"));
 
             ItemCarrito itemUno = ItemCarrito.builder()
-                    .carrito(carrito)
-                    .producto(camiseta)
-                    .cantidad(2)
-                    .precioUnitario(camiseta.getPrecio())
-                    .build();
-
-            ItemCarrito itemDos = ItemCarrito.builder()
                     .carrito(carrito)
                     .producto(mug)
                     .cantidad(1)
                     .precioUnitario(mug.getPrecio())
                     .build();
 
-            itemCarritoRepository.saveAll(List.of(itemUno, itemDos));
+            itemCarritoRepository.saveAll(List.of(itemUno));
         }
 
         System.out.println("✔ Carrito e items verificados");
@@ -301,26 +291,10 @@ public class DataInitializer implements CommandLineRunner {
     // Variantes de producto (talla/color/stock/precio) para que Jeanpierre pueda mockear
     private void crearVariantes() {
 
-        Categoria camisetas = categoriaRepository.findByNombre("Camisetas")
-                .orElseThrow(() -> new IllegalStateException("Categoría Camisetas no existe"));
         Categoria mugs = categoriaRepository.findByNombre("Mugs")
                 .orElseThrow(() -> new IllegalStateException("Categoría Mugs no existe"));
         Categoria gorras = categoriaRepository.findByNombre("Gorras")
                 .orElseThrow(() -> new IllegalStateException("Categoría Gorras no existe"));
-
-        // Camiseta Blanca Sublimable (producto id existente)
-        Producto camiseta = productoRepository.findByNombre("Camiseta Blanca Sublimable")
-                .orElseThrow(() -> new IllegalStateException("Producto Camiseta Blanca Sublimable no existe"));
-        crearVarianteSiNoExiste(camiseta, "S", "Blanco", new BigDecimal("35000"), 50);
-        crearVarianteSiNoExiste(camiseta, "M", "Blanco", new BigDecimal("35000"), 50);
-        crearVarianteSiNoExiste(camiseta, "L", "Blanco", new BigDecimal("35000"), 50);
-        crearVarianteSiNoExiste(camiseta, "XL", "Blanco", new BigDecimal("35000"), 30);
-        crearVarianteSiNoExiste(camiseta, "XXL", "Blanco", new BigDecimal("35000"), 20);
-        crearVarianteSiNoExiste(camiseta, "S", "Negro", new BigDecimal("35000"), 50);
-        crearVarianteSiNoExiste(camiseta, "M", "Negro", new BigDecimal("35000"), 50);
-        crearVarianteSiNoExiste(camiseta, "L", "Negro", new BigDecimal("35000"), 50);
-        crearVarianteSiNoExiste(camiseta, "XL", "Negro", new BigDecimal("35000"), 30);
-        crearVarianteSiNoExiste(camiseta, "XXL", "Negro", new BigDecimal("35000"), 20);
 
         // Mug Cerámico Blanco 11oz
         Producto mug = productoRepository.findByNombre("Mug Cerámico Blanco 11oz")
@@ -329,6 +303,18 @@ public class DataInitializer implements CommandLineRunner {
         crearVarianteSiNoExiste(mug, "Única", "Negro", new BigDecimal("18000"), 80);
         crearVarianteSiNoExiste(mug, "Única", "Rojo", new BigDecimal("18000"), 60);
         crearVarianteSiNoExiste(mug, "Única", "Azul", new BigDecimal("18000"), 60);
+
+        // Mug Mágico Negro (mismo modelo, color base oscuro)
+        Producto mugMagico = productoRepository.findByNombre("Mug Mágico Negro")
+                .orElseThrow(() -> new IllegalStateException("Producto Mug Mágico Negro no existe"));
+        crearVarianteSiNoExiste(mugMagico, "Única", "Negro", new BigDecimal("25000"), 60);
+        crearVarianteSiNoExiste(mugMagico, "Única", "Blanco", new BigDecimal("25000"), 40);
+
+        // Jarra Cervecera 500ml
+        Producto jarra = productoRepository.findByNombre("Jarra Cervecera 500ml")
+                .orElseThrow(() -> new IllegalStateException("Producto Jarra Cervecera 500ml no existe"));
+        crearVarianteSiNoExiste(jarra, "Única", "Transparente", new BigDecimal("32000"), 40);
+        crearVarianteSiNoExiste(jarra, "Única", "Escarchada", new BigDecimal("35000"), 30);
 
         // Gorra Trucker
         Producto gorra = productoRepository.findByNombre("Gorra Trucker Sublimable")
