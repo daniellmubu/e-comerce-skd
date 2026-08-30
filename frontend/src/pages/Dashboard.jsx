@@ -4,14 +4,13 @@ import {
   FaMagic,
   FaShoppingBag,
   FaPalette,
-  FaSignOutAlt,
   FaGift,
   FaUsers,
   FaCopy,
   FaShareAlt,
 } from "react-icons/fa";
 
-import { obtenerUsuarioActual, logout } from "../services/authService";
+import { obtenerUsuarioActual } from "../services/authService";
 import { obtenerMiCodigo } from "../services/referidoService";
 
 const ROL_LABELS = {
@@ -35,11 +34,6 @@ function Dashboard() {
       .catch(() => {});
     return () => { activo = false; };
   }, [usuario]);
-
-  const handleLogout = () => {
-    logout();
-    navigate("/");
-  };
 
   // Fallback defensivo: RutaProtegida ya evita llegar aquí sin sesión,
   // pero si localStorage se limpió manualmente evitamos un crash.
@@ -81,14 +75,6 @@ function Dashboard() {
               revisar tu actividad.
             </p>
           </div>
-
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 rounded-xl border border-gray-200 px-5 py-3 font-medium text-gray-600 transition hover:border-red-400 hover:text-red-500 dark:border-slate-700 dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:text-red-400"
-          >
-            <FaSignOutAlt />
-            Cerrar sesión
-          </button>
         </div>
 
         {/* Accesos rápidos */}
