@@ -94,3 +94,16 @@ export function estaAutenticado() {
 
   return true;
 }
+
+export async function solicitarRestablecerPassword(correo) {
+  const { data } = await api.post("/auth/olvide-password", { correo });
+  return data;
+}
+
+export async function restablecerPassword(token, password) {
+  const { data } = await api.post("/auth/restablecer-password", {
+    token,
+    password,
+  });
+  return data;
+}
