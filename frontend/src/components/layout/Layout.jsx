@@ -2,8 +2,12 @@ import Navbar from './Navbar';
 import Footer from './Footer';
 import CartDrawer from '../cart/CartDrawer';
 import ChatWidget from '../chat/ChatWidget';
+import { useAuth } from '../../context/AuthContext';
 
 function Layout({ children }) {
+  const { usuario } = useAuth();
+  const esDisenador = usuario?.rol === "disenador";
+
   return (
     <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900 dark:bg-slate-950 dark:text-white">
       <Navbar />
@@ -13,7 +17,7 @@ function Layout({ children }) {
       </main>
 
       <Footer />
-      <CartDrawer />
+      {!esDisenador && <CartDrawer />}
       <ChatWidget />
     </div>
   );

@@ -1,6 +1,5 @@
 package com.skd.sublimacion_api.dto;
 
-import com.skd.sublimacion_api.entity.Rol;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -28,8 +27,6 @@ public class RegistroRequest {
     @NotBlank(message = "La contraseña es obligatoria")
     @Size(min = 6, message = "La contraseña debe tener al menos 6 caracteres")
     private String password;
-
-    private Rol rol;
 
     private String codigoReferido;
 }
