@@ -4,6 +4,7 @@ import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt, FaHea
 
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import { useCart } from "../../context/CartContext";
 import CartIcon from "../cart/CartIcon";
 import { contarNoLeidas } from "../../services/notificacionService";
 
@@ -12,6 +13,7 @@ function Navbar() {
   const location = useLocation();
   const { usuario, cerrarSesion } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+  const { limpiarCarrito } = useCart();
   const [busqueda, setBusqueda] = useState("");
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [noLeidas, setNoLeidas] = useState(0);
@@ -34,6 +36,7 @@ function Navbar() {
 
   const handleLogout = () => {
     cerrarSesion();
+    limpiarCarrito();
     navigate("/");
   };
 
@@ -122,16 +125,7 @@ function Navbar() {
                 </span>
               </Link>
 
-              {esDisenador ? (
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  aria-label="Cerrar sesión"
-                  className="flex items-center gap-2 rounded-lg px-2 py-2 text-gray-400 transition hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400"
-                >
-                  <FaSignOutAlt className="text-lg" />
-                </button>
-              ) : (
+              {!esDisenador && (
                 /* Menú hamburguesa: cupones, favoritos y bandeja */
                 <div className="relative">
                   <button
@@ -183,10 +177,33 @@ function Navbar() {
                           </span>
                           Bandeja de entrada
                         </Link>
+                        <div className="my-2 border-t border-gray-100 dark:border-slate-800" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            cerrarMenu();
+                            handleLogout();
+                          }}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                        >
+                          <FaSignOutAlt />
+                          Cerrar sesión
+                        </button>
                       </div>
                     </>
                   )}
                 </div>
+              )}
+
+              {esDisenador && (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  aria-label="Cerrar sesión"
+                  className="flex items-center gap-2 rounded-lg px-2 py-2 text-gray-400 transition hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400"
+                >
+                  <FaSignOutAlt className="text-lg" />
+                </button>
               )}
             </div>
           ) : (

@@ -30,6 +30,15 @@ export function CartProvider({ children }) {
   const abrirCarrito = () => setIsOpen(true);
   const cerrarCarrito = () => setIsOpen(false);
 
+  // Limpieza local inmediata (sin llamar al backend). Útil al cerrar sesión
+  // para que el carrito no muestre datos del usuario anterior.
+  const limpiarCarrito = useCallback(() => {
+    setCarritoId(null);
+    setItems([]);
+    setIsOpen(false);
+    setError(null);
+  }, []);
+
   const cargarCarrito = useCallback(async () => {
     if (!estaAutenticado()) {
       setCarritoId(null);
@@ -229,6 +238,7 @@ export function CartProvider({ children }) {
         cantidadProductos,
         abrirCarrito,
         cerrarCarrito,
+        limpiarCarrito,
         agregarProducto,
         eliminarProducto,
         aumentarCantidad,
