@@ -1,17 +1,20 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
-import { FaSearch, FaHeart } from "react-icons/fa";
+import { FaSearch, FaHeart, FaChevronLeft, FaChevronRight } from "react-icons/fa";
 
 import mug from "../assets/images/products/mug.png";
-import { listarProductos } from "../services/productService";
+import { buscarProductos } from "../services/productService";
+import { listarCategorias } from "../services/categoriaService";
 import { agregarFavorito, eliminarFavorito } from "../services/favoritoService";
 import { estaAutenticado } from "../services/authService";
 import { getErrorMessage } from "../services/api";
 
+const TAMANIO_PAGINA = 12;
+
 const SORT_OPTIONS = [
   { value: "relevancia", label: "Relevancia" },
-  { value: "menor", label: "Precio: menor a mayor" },
-  { value: "mayor", label: "Precio: mayor a menor" },
+  { value: "precioAsc", label: "Precio: menor a mayor" },
+  { value: "precioDesc", label: "Precio: mayor a menor" },
 ];
 
 // El backend solo devuelve el nombre de la categoría (string).
@@ -41,27 +44,57 @@ function Catalogo() {
   const [error, setError] = useState(null);
 
   // Si llegamos vía el buscador superior (?q=...), prellenamos la búsqueda.
-  const [search, setSearch] = useState(
-    () => searchParams.get("q") ?? ""
-  );
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [categorias, setCategorias] = useState([]);
   const [category, setCategory] = useState("Todos");
   const [sortBy, setSortBy] = useState("relevancia");
   const [favorites, setFavorites] = useState(new Set());
 
+  const [pagina, setPagina] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(0);
+  const [total, setTotal] = useState(0);
+
+  // Debounce de la búsqueda para no pegarle al backend en cada tecla.
   useEffect(() => {
-    cargarProductos();
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPagina(0);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Cargar las categorías una sola vez (para el filtro nombre → id).
+  useEffect(() => {
+    listarCategorias()
+      .then((data) => setCategorias(Array.isArray(data) ? data : []))
+      .catch(() => setCategorias([]));
   }, []);
 
   async function cargarProductos() {
     setLoading(true);
     setError(null);
     try {
-      const data = await listarProductos();
-      setProducts(data.filter((p) => p.activo !== false));
-      // El backend marca esFavorito cuando el usuario está logueado;
-      // con eso sembramos el estado local del corazón.
+      const categoriaSel = categorias.find((c) => c.nombre === category);
+      const data = await buscarProductos({
+        texto: debouncedSearch.trim() || undefined,
+        categoriaId:
+          category !== "Todos" && categoriaSel ? categoriaSel.id : undefined,
+        ordenarPor: sortBy,
+        pagina,
+        tamanio: TAMANIO_PAGINA,
+      });
+
+      setProducts(data?.contenido ?? []);
+      setPagina(data?.pagina ?? 0);
+      setTotalPaginas(data?.totalPaginas ?? 0);
+      setTotal(data?.total ?? 0);
       setFavorites(
-        new Set(data.filter((p) => p.esFavorito).map((p) => p.id))
+        new Set(
+          (data?.contenido ?? [])
+            .filter((p) => p.esFavorito)
+            .map((p) => p.id)
+        )
       );
     } catch (err) {
       setError(getErrorMessage(err));
@@ -70,33 +103,23 @@ function Catalogo() {
     }
   }
 
-  const categories = useMemo(() => {
-    const unique = [...new Set(products.map((p) => p.categoria).filter(Boolean))];
-    return ["Todos", ...unique];
-  }, [products]);
+  // Recarga cuando cambian los filtros o la página. Se espera a que las
+  // categorías estén listas antes de filtrar por una (para tener su id).
+  useEffect(() => {
+    if (category !== "Todos" && categorias.length === 0) return;
+    cargarProductos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, category, sortBy, pagina, categorias]);
 
-  const filteredProducts = useMemo(() => {
-    let result = [...products];
+  const cambiarCategoria = (cat) => {
+    setCategory(cat);
+    setPagina(0);
+  };
 
-    if (category !== "Todos") {
-      result = result.filter((product) => product.categoria === category);
-    }
-
-    if (search.trim()) {
-      const query = search.trim().toLowerCase();
-      result = result.filter((product) =>
-        product.nombre.toLowerCase().includes(query)
-      );
-    }
-
-    if (sortBy === "menor") {
-      result.sort((a, b) => a.precio - b.precio);
-    } else if (sortBy === "mayor") {
-      result.sort((a, b) => b.precio - a.precio);
-    }
-
-    return result;
-  }, [products, search, category, sortBy]);
+  const cambiarOrden = (e) => {
+    setSortBy(e.target.value);
+    setPagina(0);
+  };
 
   // Persiste el favorito en el backend (POST/DELETE) y actualiza el estado
   // local de forma optimista; si la petición falla, revierte el cambio.
@@ -169,11 +192,11 @@ function Catalogo() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            {categories.map((cat) => (
+            {["Todos", ...categorias.map((c) => c.nombre)].map((cat) => (
               <button
                 key={cat}
                 type="button"
-                onClick={() => setCategory(cat)}
+                onClick={() => cambiarCategoria(cat)}
                 className={`rounded-full border px-4 py-2 text-sm transition ${
                   category === cat
                     ? "border-indigo-400 bg-indigo-50 text-indigo-600 dark:border-cyan-400 dark:bg-cyan-400/10 dark:text-cyan-300"
@@ -187,7 +210,7 @@ function Catalogo() {
 
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
+            onChange={cambiarOrden}
             className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-cyan-400"
           >
             {SORT_OPTIONS.map((option) => (
@@ -200,7 +223,7 @@ function Catalogo() {
 
         {loading && (
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {[...Array(6)].map((_, i) => (
+            {[...Array(TAMANIO_PAGINA)].map((_, i) => (
               <div
                 key={i}
                 className="h-96 animate-pulse rounded-3xl border border-gray-200 bg-gray-100 dark:border-slate-800 dark:bg-slate-900"
@@ -222,15 +245,15 @@ function Catalogo() {
           </div>
         )}
 
-        {!loading && !error && filteredProducts.length === 0 && (
+        {!loading && !error && products.length === 0 && (
           <div className="rounded-2xl border border-gray-200 bg-white p-16 text-center text-gray-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
             No encontramos productos que coincidan con tu búsqueda.
           </div>
         )}
 
-        {!loading && !error && filteredProducts.length > 0 && (
+        {!loading && !error && products.length > 0 && (
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {filteredProducts.map((product) => {
+            {products.map((product) => {
               const meta = CATEGORY_META[product.categoria] ?? DEFAULT_META;
               const isFavorite = favorites.has(product.id);
 
@@ -304,6 +327,33 @@ function Catalogo() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {!loading && !error && totalPaginas > 1 && (
+          <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setPagina((p) => Math.max(0, p - 1))}
+              disabled={pagina === 0}
+              className="flex items-center gap-2 rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+            >
+              <FaChevronLeft /> Anterior
+            </button>
+
+            <span className="text-sm text-gray-500 dark:text-slate-400">
+              Página {pagina + 1} de {totalPaginas} · {total}{" "}
+              {total === 1 ? "producto" : "productos"}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setPagina((p) => Math.min(totalPaginas - 1, p + 1))}
+              disabled={pagina >= totalPaginas - 1}
+              className="flex items-center gap-2 rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+            >
+              Siguiente <FaChevronRight />
+            </button>
           </div>
         )}
       </div>

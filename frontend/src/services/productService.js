@@ -5,6 +5,29 @@ export async function listarProductos() {
   return data;
 }
 
+export async function buscarProductos({
+  texto,
+  categoriaId,
+  precioMin,
+  precioMax,
+  ordenarPor,
+  pagina = 0,
+  tamanio = 12,
+} = {}) {
+  const { data } = await api.get("/productos/buscar", {
+    params: {
+      texto,
+      categoriaId,
+      precioMin,
+      precioMax,
+      ordenarPor,
+      pagina,
+      tamanio,
+    },
+  });
+  return data;
+}
+
 export async function obtenerProductoPorId(id) {
   const { data } = await api.get(`/productos/${id}`);
   return data;
