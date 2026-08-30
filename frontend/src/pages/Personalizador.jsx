@@ -2049,7 +2049,26 @@ function Personalizador() {
                     <label className="block text-xs text-gray-500">Rotación {textoActivoLayer.rotacion ?? 0}°
                       <input type="range" min={0} max={360} step={5} value={textoActivoLayer.rotacion ?? 0} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { rotacion: Number(e.target.value) })} className="w-full accent-indigo-600" />
                     </label>
-                    <p className="text-[11px] text-gray-400">Selecciona el texto y arrástralo directamente sobre el buso para moverlo. El tamaño se ajusta abajo en “Tamaño del próximo texto”.</p>
+                    <p className="text-[11px] text-gray-400">Selecciona el texto y arrástralo directamente sobre el mug para moverlo. El tamaño se ajusta abajo en “Tamaño del próximo texto”.</p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTextoActivoId(null);
+                          setMensaje({ tipo: "ok", texto: "Texto guardado ✓" });
+                        }}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+                      >
+                        <FaSave /> Guardar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTextoActivoId(null)}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                      >
+                        <FaTimes /> Cerrar
+                      </button>
+                    </div>
                   </div>
                 ) : capasTexto.length === 0 && (
                   <div className="mt-3 rounded-lg border border-dashed border-gray-300 p-3 text-center text-xs text-gray-400 dark:border-slate-700 dark:text-slate-500">Aún no hay capas. Escribe arriba y pulsa Agregar para crear tu primer texto movible.</div>
