@@ -143,12 +143,20 @@ export function buscarFuente(css) {
 }
 
 // El canvas solo puede dibujar una fuente web si ya terminó de descargar;
-// esto fuerza su carga (usando el mismo peso con el que se dibuja) y espera.
-export async function cargarFuenteParaCanvas(familia) {
+// esto fuerza su carga con el peso/estilo exacto con el que se dibuja.
+export async function cargarFuenteParaCanvas(familia, { peso = "400", estilo = "" } = {}) {
   if (typeof document === "undefined" || !document.fonts) return;
-  try {
-    await document.fonts.load(`600 32px ${familia}`, "Aa");
-  } catch {
-    // Sin soporte o sin conexión: se usará el fallback de la pila.
+  // Carga tanto el peso normal como el bold para que el toggle sea visible
+  const variantes = new Set([`${estilo}${peso} 32px ${familia}`, `400 32px ${familia}`, `700 32px ${familia}`, `800 32px ${familia}`]);
+  for (const v of variantes) {
+    try {
+      await document.fonts.load(v, "Aa");
+    } catch {
+      // fallback
+    }
+  }
+  // Compatibilidad: si se llamó como cargarFuenteParaCanvas("Arial") (string solo), también funciona
+  if (typeof familia === "string" && !familia.includes("px")) {
+    // ya cargado arriba
   }
 }

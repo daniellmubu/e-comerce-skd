@@ -1108,14 +1108,14 @@ function Personalizador() {
         : [];
     for (const capa of capasTextoParaDibujar) {
       if (!capa.contenido?.trim()) continue;
-      await cargarFuenteParaCanvas(capa.fuente);
+      const peso = capa.negrita ? "800" : "400";
+      const estiloFuente = capa.cursiva ? "italic " : "";
+      await cargarFuenteParaCanvas(capa.fuente, { peso, estilo: estiloFuente });
       ctxDiseno.save();
       ctxDiseno.translate((capa.x / 100) * TAMANO_LIENZO, (capa.y / 100) * TAMANO_LIENZO);
       ctxDiseno.rotate(((capa.rotacion ?? 0) * Math.PI) / 180);
       ctxDiseno.scale(capa.escala ?? 1, capa.escala ?? 1);
       ctxDiseno.fillStyle = capa.color;
-      const peso = capa.negrita ? "700" : "600";
-      const estiloFuente = capa.cursiva ? "italic " : "";
       ctxDiseno.font = `${estiloFuente}${peso} ${Math.round((capa.tamano ?? 32) * FACTOR_LIENZO)}px ${capa.fuente}`;
       ctxDiseno.textAlign = "center";
       ctxDiseno.textBaseline = "middle";
@@ -2022,7 +2022,7 @@ function Personalizador() {
                           className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${capa.id === textoActivoId ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-300 dark:border-cyan-400 dark:bg-cyan-500/10 dark:ring-cyan-500/40" : "border-gray-200 bg-white hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-900"}`}
                         >
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[10px] font-bold dark:bg-slate-800" style={{ fontFamily: capa.fuente, color: capa.color }}>Aa</span>
-                          <span className="min-w-0 flex-1 truncate text-sm" style={{ fontFamily: capa.fuente, color: capa.color, fontWeight: capa.negrita ? 700 : 600, fontStyle: capa.cursiva ? "italic" : "normal", textDecoration: capa.subrayado ? "underline" : "none" }}>{capa.contenido}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm" style={{ fontFamily: capa.fuente, color: capa.color, fontWeight: capa.negrita ? 800 : 400, fontStyle: capa.cursiva ? "italic" : "normal", textDecoration: capa.subrayado ? "underline" : "none" }}>{capa.contenido}</span>
                           <span className={`shrink-0 text-[10px] ${capa.cara === caraActiva ? "text-emerald-600" : "text-gray-400"}`}>{capasTexto.find(c=>c.id===capa.id)?.cara === caraActiva ? "● " : ""}{capasTexto.find(c=>c.id===capa.id)?.cara ?? "frente"}</span>
                         </button>
                       ))}

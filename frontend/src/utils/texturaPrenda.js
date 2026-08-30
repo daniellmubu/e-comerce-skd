@@ -147,16 +147,15 @@ async function dibujarTexto(ctx, texto, w, h, area = null) {
 
   const { cx, cy, fx } = mapearPorArea(texto.x, texto.y, w, area);
 
-  await cargarFuenteParaCanvas(texto.fuente || "sans-serif");
+  const peso = texto.negrita ? "800" : "400";
+  const estilo = texto.cursiva ? "italic " : "";
+  await cargarFuenteParaCanvas(texto.fuente || "sans-serif", { peso, estilo });
 
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(((texto.rotacion ?? 0) * Math.PI) / 180);
   ctx.scale(texto.escala ?? 1, texto.escala ?? 1);
   ctx.fillStyle = texto.color || "#111111";
-  
-  const peso = texto.negrita ? "700" : "600";
-  const estilo = texto.cursiva ? "italic " : "";
   const tamDibujo = Math.round((texto.tamano || 32) * (w / 500) * fx);
   ctx.font = `${estilo}${peso} ${tamDibujo}px ${texto.fuente || "sans-serif"}`;
   ctx.textAlign = "center";
@@ -426,7 +425,9 @@ async function componerCanvasMugRectangularInterno({
   // Reusa lógica de dibujarTexto pero adaptada a W x H no cuadrado
   for (const texto of textos ?? []) {
     if (!texto?.contenido?.trim()) continue;
-    await cargarFuenteParaCanvas(texto.fuente || "sans-serif");
+    const peso = texto.negrita ? "800" : "400";
+    const estilo = texto.cursiva ? "italic " : "";
+    await cargarFuenteParaCanvas(texto.fuente || "sans-serif", { peso, estilo });
     const cx = (texto.x / 100) * ancho;
     const cy = (texto.y / 100) * alto;
     ctx.save();
@@ -434,8 +435,6 @@ async function componerCanvasMugRectangularInterno({
     ctx.rotate(((texto.rotacion ?? 0) * Math.PI) / 180);
     ctx.scale(texto.escala ?? 1, texto.escala ?? 1);
     ctx.fillStyle = texto.color || "#111111";
-    const peso = texto.negrita ? "700" : "600";
-    const estilo = texto.cursiva ? "italic " : "";
     // Escala de fuente proporcional a ancho (2362 vs 512 del visor)
     const tamDibujo = Math.round((texto.tamano || 32) * (ancho / 512));
     ctx.font = `${estilo}${peso} ${tamDibujo}px ${texto.fuente || "sans-serif"}`;
