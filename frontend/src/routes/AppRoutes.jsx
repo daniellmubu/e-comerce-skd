@@ -13,6 +13,7 @@ const Registro = lazy(() => import("../pages/Registro"));
 const OlvidePassword = lazy(() => import("../pages/OlvidePassword"));
 const RestablecerPassword = lazy(() => import("../pages/RestablecerPassword"));
 const Legal = lazy(() => import("../pages/Legal"));
+const Contacto = lazy(() => import("../pages/Contacto"));
 const Catalogo = lazy(() => import("../pages/Catalogo"));
 const Dashboard = lazy(() => import("../pages/Dashboard"));
 const Generador = lazy(() => import("../pages/Generador"));
@@ -47,6 +48,7 @@ function AppRoutes() {
       <Route path="/olvide-password" element={<Pagina><OlvidePassword /></Pagina>} />
       <Route path="/restablecer-password" element={<Pagina><RestablecerPassword /></Pagina>} />
       <Route path="/legal/:tipo" element={<Pagina><Legal /></Pagina>} />
+      <Route path="/contacto" element={<Pagina><Contacto /></Pagina>} />
       <Route
         path="/dashboard"
         element={

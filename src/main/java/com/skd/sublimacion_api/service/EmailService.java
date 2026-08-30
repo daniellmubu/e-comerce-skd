@@ -12,4 +12,6 @@ public interface EmailService {
 
     void enviarNotificacion(String correo, String nombre, String titulo, String mensaje);
 
+    void enviarContacto(String nombre, String correo, String asunto, String mensaje);
+
 }
