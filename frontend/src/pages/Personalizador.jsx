@@ -362,6 +362,7 @@ function Personalizador() {
   // Capas de texto tipo Canva: cada texto es un objeto independiente movible/escalable/rotatable
   const [capasTexto, setCapasTexto] = useState([]); // {id, contenido, color, fuente, tamano, negrita, cursiva, subrayado, x, y, rotacion, escala, cara}
   const [textoActivoId, setTextoActivoId] = useState(null);
+  const [editorTextoMinimizado, setEditorTextoMinimizado] = useState(false);
   const [herramienta, setHerramienta] = useState("imagen"); // "imagen" | "plantillas" | "texto" | "color"
   const [guardando, setGuardando] = useState(false);
   // Guardado del diseño compuesto en "Mis diseños" (endpoint /disenos/subir).
@@ -387,6 +388,11 @@ function Personalizador() {
   const [errorPlantillas, setErrorPlantillas] = useState(null);
   const [categoriaPlantilla, setCategoriaPlantilla] = useState("todas");
   const plantillasCargadasRef = useRef(false);
+
+  // Al seleccionar otro texto, des-minimizar el panel para mostrar herramientas
+  useEffect(() => {
+    if (textoActivoId) setEditorTextoMinimizado(false);
+  }, [textoActivoId]);
 
   const imagenActiva = imagenes.find((img) => img.id === imagenActivaId) ?? null;
   const emojiActivo = emojis.find((e) => e.id === emojiActivoId) ?? null;
@@ -2027,48 +2033,87 @@ function Personalizador() {
                 {/* Editor de la capa seleccionada - controles Canva */}
                 {textoActivoLayer ? (
                   <div className="mt-4 space-y-3 rounded-xl border-2 border-indigo-500 bg-indigo-50/50 p-3 dark:border-cyan-400 dark:bg-cyan-500/5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <p className="text-xs font-bold text-indigo-700 dark:text-cyan-300">Editando: {textoActivoLayer.contenido.slice(0,18)}</p>
-                      <button type="button" onClick={() => eliminarCapaTexto(textoActivoLayer.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"><FaTrash size={12} /></button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditorTextoMinimizado((v) => !v)}
+                          title={editorTextoMinimizado ? "Maximizar" : "Minimizar"}
+                          className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                        >
+                          {editorTextoMinimizado ? <FaExpand size={12} /> : <FaTimes size={12} style={{ transform: "rotate(45deg)" }} />}
+                        </button>
+                        <button type="button" onClick={() => eliminarCapaTexto(textoActivoLayer.id)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"><FaTrash size={12} /></button>
+                      </div>
                     </div>
-                    <input
-                      type="text"
-                      value={textoActivoLayer.contenido}
-                      onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { contenido: e.target.value })}
-                      className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                    />
-                    <label className="block text-xs text-gray-500">Color
-                      <input type="color" value={normalizarHexParaPicker(textoActivoLayer.color) ?? "#111111"} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { color: e.target.value })} className="mt-1 h-8 w-full cursor-pointer rounded border-none" />
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <button type="button" aria-pressed={textoActivoLayer.negrita} onClick={() => actualizarCapaTexto(textoActivoLayer.id, { negrita: !textoActivoLayer.negrita })} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-bold transition ${textoActivoLayer.negrita ? "border-indigo-500 bg-indigo-600 text-white dark:bg-cyan-500 dark:border-cyan-400" : "border-gray-200 bg-white dark:bg-slate-900 dark:border-slate-700"}`}>B</button>
-                      <button type="button" aria-pressed={textoActivoLayer.cursiva} onClick={() => actualizarCapaTexto(textoActivoLayer.id, { cursiva: !textoActivoLayer.cursiva })} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm italic transition ${textoActivoLayer.cursiva ? "border-indigo-500 bg-indigo-600 text-white dark:bg-cyan-500 dark:border-cyan-400" : "border-gray-200 bg-white dark:bg-slate-900 dark:border-slate-700"}`}>I</button>
-                      <button type="button" aria-pressed={textoActivoLayer.subrayado} onClick={() => actualizarCapaTexto(textoActivoLayer.id, { subrayado: !textoActivoLayer.subrayado })} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm underline transition ${textoActivoLayer.subrayado ? "border-indigo-500 bg-indigo-600 text-white dark:bg-cyan-500 dark:border-cyan-400" : "border-gray-200 bg-white dark:bg-slate-900 dark:border-slate-700"}`}>U</button>
-                      <button type="button" onClick={() => actualizarCapaTexto(textoActivoLayer.id, { rotacion: ((textoActivoLayer.rotacion ?? 0) + 45) % 360 })} className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-xs dark:bg-slate-900 dark:border-slate-700" title="Rotar 45°"><FaSyncAlt size={10} /></button>
-                    </div>
-                    <label className="block text-xs text-gray-500">Rotación {textoActivoLayer.rotacion ?? 0}°
-                      <input type="range" min={0} max={360} step={5} value={textoActivoLayer.rotacion ?? 0} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { rotacion: Number(e.target.value) })} className="w-full accent-indigo-600" />
-                    </label>
-                    <p className="text-[11px] text-gray-400">Selecciona el texto y arrástralo directamente sobre el mug para moverlo. El tamaño se ajusta abajo en “Tamaño del próximo texto”.</p>
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTextoActivoId(null);
-                          setMensaje({ tipo: "ok", texto: "Texto guardado ✓" });
-                        }}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
-                      >
-                        <FaSave /> Guardar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTextoActivoId(null)}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                      >
-                        <FaTimes /> Cerrar
-                      </button>
-                    </div>
+                    {!editorTextoMinimizado && (
+                      <>
+                        <input
+                          type="text"
+                          value={textoActivoLayer.contenido}
+                          onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { contenido: e.target.value })}
+                          className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                        />
+                        <label className="block text-xs text-gray-500">Color
+                          <input type="color" value={normalizarHexParaPicker(textoActivoLayer.color) ?? "#111111"} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { color: e.target.value })} className="mt-1 h-8 w-full cursor-pointer rounded border-none" />
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <button type="button" aria-pressed={textoActivoLayer.negrita} onClick={() => actualizarCapaTexto(textoActivoLayer.id, { negrita: !textoActivoLayer.negrita })} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-bold transition ${textoActivoLayer.negrita ? "border-indigo-500 bg-indigo-600 text-white dark:bg-cyan-500 dark:border-cyan-400" : "border-gray-200 bg-white dark:bg-slate-900 dark:border-slate-700"}`}>B</button>
+                          <button type="button" aria-pressed={textoActivoLayer.cursiva} onClick={() => actualizarCapaTexto(textoActivoLayer.id, { cursiva: !textoActivoLayer.cursiva })} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm italic transition ${textoActivoLayer.cursiva ? "border-indigo-500 bg-indigo-600 text-white dark:bg-cyan-500 dark:border-cyan-400" : "border-gray-200 bg-white dark:bg-slate-900 dark:border-slate-700"}`}>I</button>
+                          <button type="button" aria-pressed={textoActivoLayer.subrayado} onClick={() => actualizarCapaTexto(textoActivoLayer.id, { subrayado: !textoActivoLayer.subrayado })} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm underline transition ${textoActivoLayer.subrayado ? "border-indigo-500 bg-indigo-600 text-white dark:bg-cyan-500 dark:border-cyan-400" : "border-gray-200 bg-white dark:bg-slate-900 dark:border-slate-700"}`}>U</button>
+                          <button type="button" onClick={() => actualizarCapaTexto(textoActivoLayer.id, { rotacion: ((textoActivoLayer.rotacion ?? 0) + 45) % 360 })} className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-xs dark:bg-slate-900 dark:border-slate-700" title="Rotar 45°"><FaSyncAlt size={10} /></button>
+                        </div>
+                        {/* Tamaño con minimizar/maximizar */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs text-gray-500">Tamaño {textoActivoLayer.tamano ?? 32}px</label>
+                            <div className="flex items-center gap-1">
+                              <button type="button" onClick={() => actualizarCapaTexto(textoActivoLayer.id, { tamano: Math.max(12, (textoActivoLayer.tamano ?? 32) - 2) })} className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-sm font-bold hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900" title="Minimizar">−</button>
+                              <button type="button" onClick={() => actualizarCapaTexto(textoActivoLayer.id, { tamano: Math.min(80, (textoActivoLayer.tamano ?? 32) + 2) })} className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-sm font-bold hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900" title="Maximizar">+</button>
+                            </div>
+                          </div>
+                          <input type="range" min={12} max={80} step={2} value={textoActivoLayer.tamano ?? 32} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { tamano: Number(e.target.value) })} className="w-full accent-indigo-600" />
+                        </div>
+                        {/* Escala con minimizar/maximizar */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs text-gray-500">Escala {((textoActivoLayer.escala ?? 1) * 100).toFixed(0)}%</label>
+                            <div className="flex items-center gap-1">
+                              <button type="button" onClick={() => actualizarCapaTexto(textoActivoLayer.id, { escala: Math.max(0.5, Number(((textoActivoLayer.escala ?? 1) - 0.1).toFixed(1))) })} className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-xs hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900" title="Minimizar"><FaExpand size={10} style={{ transform: "scale(0.7)" }} /></button>
+                              <button type="button" onClick={() => actualizarCapaTexto(textoActivoLayer.id, { escala: Math.min(3, Number(((textoActivoLayer.escala ?? 1) + 0.1).toFixed(1))) })} className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-xs hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900" title="Maximizar"><FaExpand size={10} /></button>
+                            </div>
+                          </div>
+                          <input type="range" min={0.5} max={3} step={0.1} value={textoActivoLayer.escala ?? 1} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { escala: Number(e.target.value) })} className="w-full accent-indigo-600" />
+                        </div>
+                        <label className="block text-xs text-gray-500">Rotación {textoActivoLayer.rotacion ?? 0}°
+                          <input type="range" min={0} max={360} step={5} value={textoActivoLayer.rotacion ?? 0} onChange={(e) => actualizarCapaTexto(textoActivoLayer.id, { rotacion: Number(e.target.value) })} className="w-full accent-indigo-600" />
+                        </label>
+                        <p className="text-[11px] text-gray-400">Arrástralo sobre el mug para moverlo. Usa −/+ para minimizar/maximizar.</p>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTextoActivoId(null);
+                              setMensaje({ tipo: "ok", texto: "Texto guardado ✓" });
+                            }}
+                            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+                          >
+                            <FaSave /> Guardar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTextoActivoId(null)}
+                            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                          >
+                            <FaTimes /> Cerrar
+                          </button>
+                        </div>
+                      </>
+                    )}
+                    {editorTextoMinimizado && (
+                      <p className="text-[11px] text-gray-400">Minimizado — pulsa maximizar para editar.</p>
+                    )}
                   </div>
                 ) : capasTexto.length === 0 && (
                   <div className="mt-3 rounded-lg border border-dashed border-gray-300 p-3 text-center text-xs text-gray-400 dark:border-slate-700 dark:text-slate-500">Aún no hay capas. Escribe arriba y pulsa Agregar para crear tu primer texto movible.</div>
@@ -2106,20 +2151,6 @@ function Personalizador() {
                       </button>
                     );
                   })}
-                </div>
-
-                {/* Estilo por defecto para el próximo texto */}
-                <label className="mb-1 mt-3 block text-xs font-medium text-gray-500 dark:text-slate-400">Estilo del próximo texto <span className="font-normal text-[10px]">— solo afecta al siguiente que agregues</span></label>
-                <p className="mb-2 text-[10px] leading-tight text-gray-400 dark:text-slate-500">Define negrita, color y tamaño del próximo “Agregar”. Los textos ya creados se editan tocando su capa arriba.</p>
-                <div className="mb-3 flex items-center gap-1.5">
-                  <button type="button" aria-pressed={esNegrita} onClick={() => setEsNegrita((v) => !v)} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-bold ${esNegrita ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-cyan-500/10 dark:text-cyan-300" : "border-gray-200 dark:border-slate-700"}`}>B</button>
-                  <button type="button" aria-pressed={esCursiva} onClick={() => setEsCursiva((v) => !v)} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm italic ${esCursiva ? "border-indigo-500 bg-indigo-50 dark:bg-cyan-500/10" : "border-gray-200 dark:border-slate-700"}`}>I</button>
-                  <button type="button" aria-pressed={esSubrayado} onClick={() => setEsSubrayado((v) => !v)} className={`flex h-8 w-8 items-center justify-center rounded-lg border text-sm underline ${esSubrayado ? "border-indigo-500 bg-indigo-50 dark:bg-cyan-500/10" : "border-gray-200 dark:border-slate-700"}`}>U</button>
-                  <div className="ml-2 flex items-center gap-2 text-xs">
-                    <input type="color" value={normalizarHexParaPicker(colorTexto) ?? "#111111"} onChange={(e) => setColorTexto(e.target.value)} className="h-8 w-8 cursor-pointer rounded border-none" />
-                    <span className="text-gray-500">T:{tamanoTexto}px</span>
-                    <input type="range" min={12} max={80} step={2} value={tamanoTexto} onChange={(e) => setTamanoTexto(Number(e.target.value))} className="w-20 accent-indigo-600" />
-                  </div>
                 </div>
 
                 <div className="my-4 border-t border-gray-200 dark:border-slate-800" />
