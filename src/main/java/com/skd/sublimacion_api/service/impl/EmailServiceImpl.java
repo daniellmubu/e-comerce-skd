@@ -25,6 +25,9 @@ public class EmailServiceImpl implements EmailService {
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
+    @Value("${spring.mail.username}")
+    private String correoDestino;
+
     @Async
     @Override
     public void enviarFacturaCompra(CheckoutCompletadoEvent evento) {
@@ -122,6 +125,33 @@ public class EmailServiceImpl implements EmailService {
 
         } catch (MessagingException | RuntimeException e) {
             log.error("No se pudo enviar la notificación a {}: {}",
+                    correo, e.getMessage(), e);
+        }
+    }
+
+    @Async
+    @Override
+    public void enviarContacto(String nombre, String correo, String asunto, String mensaje) {
+
+        try {
+            MimeMessage mime = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mime, false, "UTF-8");
+
+            // El mensaje del formulario llega a la bandeja del negocio.
+            helper.setTo(correoDestino);
+            helper.setSubject("[Contacto SKD] " + (asunto == null || asunto.isBlank() ? "Mensaje desde la web" : asunto));
+            helper.setText("Nuevo mensaje desde la página de contacto:\n\n"
+                    + "Nombre: " + nombre + "\n"
+                    + "Correo: " + correo + "\n"
+                    + "Asunto: " + (asunto == null || asunto.isBlank() ? "—" : asunto) + "\n\n"
+                    + mensaje + "\n\n"
+                    + "Responder directamente a: " + correo);
+
+            mailSender.send(mime);
+            log.info("Mensaje de contacto recibido de {}", correo);
+
+        } catch (MessagingException | RuntimeException e) {
+            log.error("No se pudo procesar el mensaje de contacto de {}: {}",
                     correo, e.getMessage(), e);
         }
     }

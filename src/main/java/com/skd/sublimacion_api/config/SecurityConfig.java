@@ -46,6 +46,8 @@ public class SecurityConfig {
                         // Las reseñas por producto son públicas; crearlas exige
                         // autenticación (queda cubierta por anyRequest()).
                         .requestMatchers("/api/resenas/producto/**").permitAll()
+                        // Formulario de contacto público (no requiere sesión).
+                        .requestMatchers("/api/contacto/**").permitAll()
                         // El enum Rol define admin, disenador y cliente (en minúsculas).
                         // getAuthorities() genera "ROLE_admin" / "ROLE_disenador" /
                         // "ROLE_cliente", por eso se usa hasRole(...) (en minúsculas)

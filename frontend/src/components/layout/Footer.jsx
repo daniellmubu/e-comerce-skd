@@ -30,6 +30,12 @@ function Footer() {
           >
             Créditos 3D
           </Link>
+          <Link
+            to="/contacto"
+            className="underline-offset-2 transition hover:text-gray-700 hover:underline dark:hover:text-slate-200"
+          >
+            Contacto
+          </Link>
         </div>
       </div>
     </footer>
