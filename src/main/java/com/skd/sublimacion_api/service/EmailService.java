@@ -14,4 +14,6 @@ public interface EmailService {
 
     void enviarContacto(String nombre, String correo, String asunto, String mensaje);
 
+    void enviarEstadoPedido(String correo, String nombre, Long pedidoId, String estado);
+
 }

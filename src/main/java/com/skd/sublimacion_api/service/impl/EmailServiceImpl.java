@@ -14,6 +14,8 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -153,6 +155,44 @@ public class EmailServiceImpl implements EmailService {
         } catch (MessagingException | RuntimeException e) {
             log.error("No se pudo procesar el mensaje de contacto de {}: {}",
                     correo, e.getMessage(), e);
+        }
+    }
+
+    private static final Map<String, String> ESTADO_PEDIDO_LABEL = Map.ofEntries(
+            Map.entry("recibido", "recibido"),
+            Map.entry("disenando", "en diseño"),
+            Map.entry("imprimiendo", "en impresión"),
+            Map.entry("empacando", "en empacado"),
+            Map.entry("enviado", "en camino 🚚"),
+            Map.entry("entregado", "entregado ✅"),
+            Map.entry("cancelado", "cancelado"));
+
+    @Async
+    @Override
+    public void enviarEstadoPedido(String correo, String nombre, Long pedidoId, String estado) {
+
+        try {
+            String label = ESTADO_PEDIDO_LABEL.getOrDefault(
+                    estado == null ? "" : estado.toLowerCase(), estado);
+
+            MimeMessage mime = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mime, false, "UTF-8");
+
+            helper.setTo(correo);
+            helper.setSubject("SKD - Tu pedido #" + pedidoId + " está " + label);
+            helper.setText("Hola " + nombre + ",\n\n"
+                    + "Tu pedido #" + pedidoId + " ahora está: " + label + ".\n\n"
+                    + "Puedes hacer seguimiento en vivo aquí:\n"
+                    + frontendUrl + "/pedidos/" + pedidoId + "/seguimiento\n\n"
+                    + "Gracias por confiar en SKD.");
+
+            mailSender.send(mime);
+            log.info("Correo de estado enviado a {} para pedido #{} (estado {})",
+                    correo, pedidoId, estado);
+
+        } catch (MessagingException | RuntimeException e) {
+            log.error("No se pudo enviar el correo de estado del pedido #{} a {}: {}",
+                    pedidoId, correo, e.getMessage(), e);
         }
     }
 }
