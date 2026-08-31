@@ -8,6 +8,7 @@ import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.ItemPedidoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
+import com.skd.sublimacion_api.service.EmailService;
 import com.skd.sublimacion_api.service.NotificacionService;
 import com.skd.sublimacion_api.service.WebSocketService;
 import com.skd.sublimacion_api.service.admin.AdminPedidoService;
@@ -38,6 +39,7 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
     private final ItemPedidoRepository itemPedidoRepository;
     private final WebSocketService webSocketService;
     private final NotificacionService notificacionService;
+    private final EmailService emailService;
 
     @Override
     public Page<PedidoResponse> listar(String estado, Long usuarioId, Pageable pageable) {
@@ -91,6 +93,11 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
                     "Tu pedido cambió de estado",
                     "Tu pedido #" + pedido.getId()
                             + " ahora está en estado: " + pedido.getEstado() + ".");
+            emailService.enviarEstadoPedido(
+                    pedido.getUsuario().getCorreo(),
+                    pedido.getUsuario().getNombre(),
+                    pedido.getId(),
+                    pedido.getEstado());
         }
 
         return response;
