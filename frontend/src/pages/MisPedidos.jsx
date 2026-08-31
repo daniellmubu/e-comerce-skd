@@ -5,7 +5,6 @@ import { FaShoppingBag, FaFilePdf } from "react-icons/fa";
 import api from "../services/api";
 import { listarPedidosPorUsuario } from "../services/pedidoService";
 import { getErrorMessage } from "../services/api";
-import Loading from "../components/ui/Loading";
 
 function formatPrice(value) {
   return Number(value).toLocaleString("es-CO", {
@@ -86,8 +85,27 @@ function MisPedidos() {
         </div>
 
         {loading && (
-          <div className="flex justify-center py-20">
-            <Loading label="Cargando tus pedidos..." />
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="h-4 w-40 rounded bg-gray-200 dark:bg-slate-700" />
+                    <div className="h-6 w-24 rounded bg-gray-200 dark:bg-slate-700" />
+                  </div>
+                  <div className="h-7 w-24 rounded-full bg-gray-200 dark:bg-slate-700" />
+                </div>
+                <div className="mt-4 h-9 w-32 rounded-xl bg-gray-200 dark:bg-slate-700" />
+                <div className="mt-4 grid grid-cols-3 gap-4 border-t border-gray-200 pt-4 dark:border-slate-800">
+                  <div className="h-4 w-20 rounded bg-gray-200 dark:bg-slate-700" />
+                  <div className="h-4 w-20 rounded bg-gray-200 dark:bg-slate-700" />
+                  <div className="h-4 w-20 rounded bg-gray-200 dark:bg-slate-700" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

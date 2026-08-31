@@ -28,10 +28,10 @@ import { listarProductos } from "../services/productService";
 import { getErrorMessage } from "../services/api";
 import pocilloFrente from "../assets/images/products/base/pocillo-frente.png";
 import pocilloAsa from "../assets/images/products/base/pocillo-asa.png";
-import Prenda3D, {
-  ESCALA_MIN_3D,
-  ESCALA_MAX_3D,
-} from "../components/ui/Prenda3D";
+// 3D oculto temporalmente — constantes de escala para slider 2D (antes en Prenda3D)
+const ESCALA_MIN_3D = 0.2;
+const ESCALA_MAX_3D = 4.5;
+import { Panel2D } from "../components/ui/Editor2D";
 import { removeBackground } from "@imgly/background-removal";
 import procesarDiseno from "../utils/quitarFondoBlanco";
 import {
@@ -375,9 +375,10 @@ function Personalizador() {
   // defecto; el usuario puede apagarlo para subir la imagen tal cual, con su
   // fondo original.
   const [recorteInteligente, setRecorteInteligente] = useState(true);
-  const [vista3DAbierta, setVista3DAbierta] = useState(false);
+  // 3D desactivado temporalmente — estados mantenidos para no romper lógica interna (no se renderiza 3D)
+  const [vista3DAbierta] = useState(false);
   const [arrastrandoImagen, setArrastrandoImagen] = useState(false);
-  const [dragPreview, setDragPreview] = useState(null); // preview durante arrastre para 60fps sin regenerar textura
+  const [dragPreview, setDragPreview] = useState(null);
   const arrastrandoRef = useRef(false);
   useEffect(() => { arrastrandoRef.current = arrastrandoImagen; }, [arrastrandoImagen]);
 
@@ -1454,40 +1455,26 @@ function Personalizador() {
     else setColorSeleccionado(null);
   };
 
-  // Props compartidas del visor 3D interactivo (editor principal y modal).
-  const props3D = {
-    interactivo: true,
-    tipo: selectedProduct,
-    color: colorSeleccionado ?? (selectedProduct === "mug_magico" ? "#1a1a1a" : "#ffffff"),
-    imagenes,
-    imagenActivaId,
-    imagenPendiente: imagenPendiente ? imagenPendiente.url : null,
-    emojis,
-    capasTexto,
-    texto: textoDiseno,
-    colorTexto,
-    fuenteTexto,
-    tamanoTexto,
-    esNegrita,
-    esCursiva,
-    esSubrayado,
-    posicionTexto,
-    rotacionTexto,
-    escalaTexto,
-    onColocar: colocarImagen,
-    onMover: moverImagen,
-    onMoverTexto: moverCapaTexto3D,
-    onMoverEmoji: moverEmoji3D,
-    textoActivoId,
-    emojiActivoId,
-    onSeleccionar: seleccionarImagen,
-    onSeleccionarTexto: seleccionarCapaTexto,
-    onSeleccionarEmoji: seleccionarEmoji,
-    caraCamara: caraActiva,
-    arrastrandoImagen,
-    onArrastrarImagen: setArrastrandoImagen,
-    dragPreview,
+  // 3D oculto — helpers solo para 2D (frente / atrás desplegados)
+  const handleColocar2D = (cara, x, y) => {
+    colocarImagen({ uv: { u: x / 100, v: y / 100 }, posicion: [0, 0, 0.18], cara });
   };
+  const handleMoverImagen2D = (id, x, y, cara) => {
+    // actualización directa en coordenadas % (sin dragPreview para 2D)
+    actualizarImagen(id, { x, y, uv: { u: x / 100, v: y / 100 }, cara });
+  };
+  const handleMoverTexto2D = (id, x, y, cara) => {
+    actualizarCapaTexto(id, { x, y, cara });
+  };
+  const handleMoverEmoji2D = (id, x, y, cara) => {
+    actualizarEmoji(id, { x, y, cara });
+  };
+  const handleDeseleccionarTodo = () => {
+    setImagenActivaId(null);
+    setTextoActivoId(null);
+    setEmojiActivoId(null);
+  };
+  const colorProducto2D = colorSeleccionado ?? (selectedProduct === "mug_magico" ? "#1a1a1a" : "#ffffff");
 
   return (
     <>
@@ -2198,12 +2185,11 @@ function Personalizador() {
             )}
           </div>
 
-          {/* Editor 3D: las imágenes se colocan y arrastran directamente sobre
-              el modelo. */}
+          {/* Editor 2D: dos vistas frente y espalda editables */}
           <div className="flex min-h-[560px] flex-1 flex-col rounded-2xl border border-gray-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400">
-                Editor 3D · {etiquetaCaraActiva}
+                Editor 2D · Frente y Atrás
               </h2>
               {hayDiseno && (
                 <button
@@ -2216,32 +2202,68 @@ function Personalizador() {
               )}
             </div>
 
-            <div
-              className="relative flex flex-1 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-slate-800"
-              onDragOver={handleDragOverEnEditor}
-              onDrop={handleDropEnEditor}
-            >
-              {imagenPendiente && (
-                <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white shadow">
-                  Haz clic sobre la prenda para colocar la imagen
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
+              {/* Selector de cara activa: donde caerá la próxima imagen */}
+              <div className="flex items-center gap-2 rounded-xl border border-gray-200 p-2 dark:border-slate-700">
+                <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Cara activa para añadir:</span>
+                <div className="flex gap-1">
+                  {carasProducto.map((cara) => (
+                    <button
+                      key={cara.id}
+                      type="button"
+                      onClick={() => setCaraActiva(cara.id)}
+                      className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${caraActiva === cara.id ? "bg-indigo-600 text-white dark:bg-cyan-500" : "bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400"}`}
+                    >
+                      {cara.label}
+                    </button>
+                  ))}
                 </div>
-              )}
-              <div
-                className="h-full w-full"
-                style={{ cursor: imagenPendiente ? "crosshair" : "default" }}
-                onDragOver={handleDragOverEnEditor}
-                onDrop={handleDropEnEditor}
-              >
-                <Prenda3D key={selectedProduct} {...props3D} />
+                {imagenPendiente && <span className="ml-auto text-[11px] font-semibold text-indigo-600 dark:text-cyan-300">↳ Coloca en {etiquetaCaraActiva}</span>}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {carasProducto.map((cara) => (
+                  <Panel2D
+                    key={cara.id}
+                    cara={cara.id}
+                    titulo={cara.label}
+                    selectedProduct={selectedProduct}
+                    imagenes={imagenes.filter((im) => (im.cara ?? "frente") === cara.id)}
+                    emojis={emojis.filter((em) => (em.cara ?? "frente") === cara.id)}
+                    capasTexto={capasTexto.filter((t) => (t.cara ?? "frente") === cara.id)}
+                    imagenActivaId={imagenActivaId}
+                    textoActivoId={textoActivoId}
+                    emojiActivoId={emojiActivoId}
+                    imagenPendiente={imagenPendiente}
+                    onColocar={handleColocar2D}
+                    onMoverImagen={handleMoverImagen2D}
+                    onMoverTexto={handleMoverTexto2D}
+                    onMoverEmoji={handleMoverEmoji2D}
+                    onSeleccionarImagen={seleccionarImagen}
+                    onSeleccionarTexto={seleccionarCapaTexto}
+                    onSeleccionarEmoji={seleccionarEmoji}
+                    onDeseleccionarTodo={handleDeseleccionarTodo}
+                    activa={caraActiva === cara.id}
+                    colorProducto={colorProducto2D}
+                  />
+                ))}
+              </div>
+
+              <div className="rounded-xl bg-indigo-50 p-3 dark:bg-cyan-500/10">
+                <p className="text-xs font-semibold text-indigo-700 dark:text-cyan-300">¿Cómo editar en 2D?</p>
+                <ul className="mt-1 list-disc pl-4 text-[11px] leading-relaxed text-indigo-600/80 dark:text-cyan-200/70">
+                  <li><b>Frente</b> y <b>Atrás</b> son lienzos rectangulares desplegados (cilindro → plano).</li>
+                  <li>Lo que ves es idéntico al archivo <b>print-ready 2362×1063</b> (mug) / 2835×1417 (jarra) con fondo transparente.</li>
+                  <li>Haz clic en un lienzo para <b>colocar</b> la imagen pendiente en esa cara.</li>
+                  <li>Selecciona y <b>arrastra</b> cualquier elemento para moverlo. Tamaño/rotación en el panel izquierdo.</li>
+                  <li>Cambia la <b>cara activa</b> para decidir dónde cae la próxima subida/plantilla/IA.</li>
+                </ul>
               </div>
             </div>
-
             <p className="pt-3 text-center text-xs text-gray-400 dark:text-slate-500">
               {imagenPendiente
-                ? "Haz clic en el modelo para colocar la imagen."
-                : imagenActivaId || textoActivoId || emojiActivoId
-                  ? "Arrastra sobre el buso para mover la capa seleccionada (texto/emoji/imagen)."
-                  : "Gira el modelo. Selecciona texto/emoji/imagen en el panel y arrastra sobre el buso para mover."}
+                ? `Haz clic en el lienzo ${etiquetaCaraActiva} para colocar la imagen.`
+                : "Tip: sube o genera una imagen y haz clic en Frente o Atrás para colocarla. Luego arrastra para ajustar."}
             </p>
           </div>
 
@@ -2250,14 +2272,6 @@ function Personalizador() {
               <h2 className="mb-4 text-sm font-semibold text-gray-500 dark:text-slate-400">
                 Acciones
               </h2>
-
-              <button
-                type="button"
-                onClick={() => setVista3DAbierta(true)}
-                className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50 dark:border-cyan-500/40 dark:text-cyan-300 dark:hover:bg-cyan-500/10"
-              >
-                <FaExpand /> Ver en 3D a pantalla completa
-              </button>
 
               <button
                 type="button"
@@ -2328,39 +2342,6 @@ function Personalizador() {
         </div>
       </div>
       </section>
-
-      {/* Lienzo maximizado: pantalla completa del editor 3D */}
-      {vista3DAbierta && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur">
-          <div className="flex items-center justify-between px-6 py-4">
-            <h2 className="text-lg font-bold text-white">Vista 3D</h2>
-            <button
-              type="button"
-              onClick={() => setVista3DAbierta(false)}
-              aria-label="Cerrar vista 3D"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white"
-            >
-              <FaTimes />
-            </button>
-          </div>
-
-          {imagenPendiente && (
-            <p className="pb-2 text-center text-sm font-semibold text-cyan-300">
-              Haz clic sobre la prenda para colocar la imagen.
-            </p>
-          )}
-
-          <div className="flex flex-1 items-center justify-center px-6 pb-2">
-            <div className="aspect-square w-full max-w-[560px]">
-              <Prenda3D key={`modal-${selectedProduct}`} {...props3D} />
-            </div>
-          </div>
-
-          <p className="pb-6 text-center text-sm text-slate-400">
-            Arrastra para rotar · Haz clic para colocar o arrastra la imagen seleccionada
-          </p>
-        </div>
-      )}
     </>
   );
 }

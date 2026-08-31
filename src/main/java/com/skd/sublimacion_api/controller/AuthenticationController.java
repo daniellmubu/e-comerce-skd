@@ -49,4 +49,24 @@ public class AuthenticationController {
 
         return ResponseEntity.ok(Map.of("message", "Contraseña actualizada correctamente"));
     }
+
+    @PostMapping("/verificar-email")
+    public ResponseEntity<Map<String, String>> verificarEmail(
+            @RequestBody Map<String, String> body) {
+
+        authenticationService.verificarEmail(body.get("token"));
+
+        return ResponseEntity.ok(Map.of("message", "Correo verificado correctamente"));
+    }
+
+    @PostMapping("/reenviar-verificacion")
+    public ResponseEntity<Map<String, String>> reenviarVerificacion(
+            @Valid @RequestBody OlvidePasswordRequest request) {
+
+        authenticationService.reenviarVerificacion(request.getCorreo());
+
+        return ResponseEntity.ok(Map.of(
+                "message",
+                "Si el correo está registrado, recibirás un enlace para verificar tu cuenta"));
+    }
 }

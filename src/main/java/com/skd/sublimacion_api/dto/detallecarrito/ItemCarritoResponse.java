@@ -17,6 +17,8 @@ public class ItemCarritoResponse {
 
     private String producto;
 
+    private String imagenUrl;
+
     private Integer cantidad;
 
     private BigDecimal precioUnitario;

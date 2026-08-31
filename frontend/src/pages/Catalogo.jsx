@@ -160,10 +160,6 @@ function Catalogo() {
     }
   };
 
-  const handlePersonalizar = (product) => {
-    navigate("/personalizador", { state: product });
-  };
-
   return (
     <section className="min-h-screen bg-gray-50 px-6 py-16 text-gray-900 dark:bg-slate-950 dark:text-white">
       <div className="mx-auto max-w-7xl">
@@ -257,7 +253,7 @@ function Catalogo() {
               const meta = CATEGORY_META[product.categoria] ?? DEFAULT_META;
               const isFavorite = favorites.has(product.id);
 
-              return (
+  return (
                 <div
                   key={product.id}
                   className="group overflow-hidden rounded-3xl border border-gray-200 bg-white transition-all duration-500 hover:-translate-y-2 hover:border-indigo-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:hover:border-cyan-500 dark:hover:shadow-[0_0_35px_rgba(34,211,238,0.15)]"
@@ -309,18 +305,10 @@ function Catalogo() {
                         {formatPrice(product.precio)}
                       </h4>
 
-                      {product.stock === 0 ? (
+                      {product.stock === 0 && (
                         <span className="rounded-xl border border-gray-200 px-5 py-3 text-sm text-gray-400 dark:border-slate-700 dark:text-slate-500">
                           Agotado
                         </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handlePersonalizar(product)}
-                          className="rounded-xl bg-indigo-600 px-5 py-3 text-white transition duration-300 hover:scale-105 hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600 dark:hover:bg-none"
-                        >
-                          Personalizar
-                        </button>
                       )}
                     </div>
                   </div>

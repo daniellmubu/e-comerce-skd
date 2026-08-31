@@ -9,10 +9,22 @@ function formatPrice(value) {
 }
 
 function CartItem({ item, onAumentar, onDisminuir, onEliminar, disabled }) {
+  const imagen = item.imagenDisenoUrl || item.imagenUrl;
+
   return (
     <div className="flex gap-3 rounded-2xl border border-gray-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900/60 sm:gap-4 sm:p-4">
-      <div className="flex h-14 w-14 shrink-0 items-center justify-center self-start rounded-xl bg-indigo-50 text-xl font-bold text-indigo-600 dark:bg-gradient-to-br dark:from-cyan-500/20 dark:to-violet-600/20 dark:text-cyan-300 sm:h-16 sm:w-16 sm:text-2xl">
-        {item.producto?.charAt(0) ?? "?"}
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center self-start overflow-hidden rounded-xl bg-gray-100 dark:bg-slate-800 sm:h-16 sm:w-16">
+        {imagen ? (
+          <img
+            src={imagen}
+            alt={item.producto}
+            className="h-full w-full object-contain"
+          />
+        ) : (
+          <span className="text-xl font-bold text-indigo-600 dark:text-cyan-300">
+            {item.producto?.charAt(0) ?? "?"}
+          </span>
+        )}
       </div>
 
       <div className="min-w-0 flex-1">

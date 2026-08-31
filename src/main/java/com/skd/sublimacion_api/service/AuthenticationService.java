@@ -6,12 +6,14 @@ import com.skd.sublimacion_api.dto.RegistroRequest;
 import com.skd.sublimacion_api.dto.cupon.CuponBienvenidaResponse;
 import com.skd.sublimacion_api.entity.Cupon;
 import com.skd.sublimacion_api.entity.CuponUsuario;
+import com.skd.sublimacion_api.entity.EmailVerificationToken;
 import com.skd.sublimacion_api.entity.PasswordResetToken;
 import com.skd.sublimacion_api.entity.Rol;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.exeption.ForbiddenException;
 import com.skd.sublimacion_api.repository.CuponRepository;
 import com.skd.sublimacion_api.repository.CuponUsuarioRepository;
+import com.skd.sublimacion_api.repository.EmailVerificationTokenRepository;
 import com.skd.sublimacion_api.repository.PasswordResetTokenRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.security.JwtService;
@@ -41,6 +43,7 @@ public class AuthenticationService {
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final CuponRepository cuponRepository;
     private final CuponUsuarioRepository cuponUsuarioRepository;
 
@@ -76,6 +79,7 @@ public class AuthenticationService {
         Cupon cuponBienvenida = crearCuponBienvenida(usuario);
 
         emailService.enviarBienvenida(usuario.getCorreo(), usuario.getNombre());
+        crearTokenVerificacionYEnviar(usuario);
 
         String token = jwtService.generateToken(usuario);
         String refreshToken = jwtService.generateRefreshToken(usuario);
@@ -88,6 +92,7 @@ public class AuthenticationService {
                 .username(usuario.getUsername())
                 .correo(usuario.getCorreo())
                 .rol(usuario.getRol().name())
+                .verificado(usuario.getVerificado())
                 .cuponBienvenida(CuponBienvenidaResponse.builder()
                         .codigo(cuponBienvenida.getCodigo())
                         .descuentoPorcentaje(cuponBienvenida.getDescuentoPorcentaje())
@@ -183,6 +188,7 @@ public class AuthenticationService {
                 .username(usuario.getUsername())
                 .correo(usuario.getCorreo())
                 .rol(usuario.getRol().name())
+                .verificado(usuario.getVerificado())
                 .build();
     }
 
@@ -227,5 +233,66 @@ public class AuthenticationService {
         resetToken.setUsado(true);
         resetToken.setFechaUso(LocalDateTime.now());
         passwordResetTokenRepository.save(resetToken);
+    }
+
+    public void verificarEmail(String token) {
+
+        EmailVerificationToken verificacion = emailVerificationTokenRepository.findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "El enlace de verificación es inválido"));
+
+        if (Boolean.TRUE.equals(verificacion.getUsado())) {
+            throw new IllegalArgumentException("El enlace ya fue utilizado");
+        }
+        if (verificacion.getFechaExpiracion().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("El enlace ha expirado");
+        }
+
+        Usuario usuario = verificacion.getUsuario();
+        usuario.setVerificado(true);
+        usuarioRepository.save(usuario);
+
+        verificacion.setUsado(true);
+        verificacion.setFechaUso(LocalDateTime.now());
+        emailVerificationTokenRepository.save(verificacion);
+    }
+
+    public void reenviarVerificacion(String correo) {
+
+        // Respuesta genérica: no se filtra si el correo existe.
+        usuarioRepository.findByCorreo(correo).ifPresent(usuario -> {
+            if (!Boolean.TRUE.equals(usuario.getVerificado())) {
+                emailVerificationTokenRepository.deleteByUsuario_Id(usuario.getId());
+                crearTokenVerificacionYEnviar(usuario);
+            }
+        });
+    }
+
+    private void crearTokenVerificacionYEnviar(Usuario usuario) {
+
+        String codigo = generarCodigoVerificacion();
+
+        EmailVerificationToken verificacion = EmailVerificationToken.builder()
+                .token(codigo)
+                .usuario(usuario)
+                .fechaExpiracion(LocalDateTime.now().plusHours(24))
+                .build();
+
+        emailVerificationTokenRepository.save(verificacion);
+
+        emailService.enviarVerificacionEmail(
+                usuario.getCorreo(), usuario.getNombre(), codigo);
+    }
+
+    private String generarCodigoVerificacion() {
+
+        // Código numérico de 6 dígitos: el usuario lo teclea en la web, así
+        // no depende de que el enlace del correo tenga la URL correcta.
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        String codigo;
+        do {
+            codigo = String.format("%06d", random.nextInt(1_000_000));
+        } while (emailVerificationTokenRepository.findByToken(codigo).isPresent());
+        return codigo;
     }
 }

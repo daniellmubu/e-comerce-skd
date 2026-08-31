@@ -8,10 +8,12 @@ import {
   FaUsers,
   FaCopy,
   FaShareAlt,
+  FaEnvelope,
 } from "react-icons/fa";
 
-import { obtenerUsuarioActual } from "../services/authService";
+import { obtenerUsuarioActual, reenviarVerificacion, verificarEmail } from "../services/authService";
 import { obtenerMiCodigo } from "../services/referidoService";
+import { getErrorMessage } from "../services/api";
 
 const ROL_LABELS = {
   cliente: "Cliente",
@@ -21,10 +23,14 @@ const ROL_LABELS = {
 
 function Dashboard() {
   const navigate = useNavigate();
-  const usuario = obtenerUsuarioActual();
+  const [usuario, setUsuario] = useState(() => obtenerUsuarioActual());
 
   const [referido, setReferido] = useState(null);
   const [copiado, setCopiado] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const [verificando, setVerificando] = useState(false);
+  const [codigo, setCodigo] = useState("");
+  const [mensajeVerif, setMensajeVerif] = useState(null);
 
   useEffect(() => {
     if (!usuario) return undefined;
@@ -53,7 +59,28 @@ function Dashboard() {
     );
   }
 
+
+  const handleVerificar = async () => {
+    if (codigo.length !== 6) return;
+    setVerificando(true);
+    setMensajeVerif(null);
+    try {
+      await verificarEmail(codigo);
+      // Refresca la sesión guardada y el estado local para que desaparezca el banner.
+      const actual = obtenerUsuarioActual();
+      const actualizado = { ...actual, verificado: true };
+      localStorage.setItem("skd_user", JSON.stringify(actualizado));
+      setUsuario(actualizado);
+      setMensajeVerif("¡Correo verificado!");
+    } catch (err) {
+      setMensajeVerif(getErrorMessage(err));
+    } finally {
+      setVerificando(false);
+    }
+  };
+
   const rolLabel = ROL_LABELS[usuario.rol] || usuario.rol;
+
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gray-50 px-6 py-16 text-gray-900 dark:bg-slate-950 dark:text-white">
@@ -76,6 +103,61 @@ function Dashboard() {
             </p>
           </div>
         </div>
+
+        {usuario.verificado === false && (
+          <div className="mb-8 rounded-2xl border border-amber-300 bg-amber-50 p-5 dark:border-amber-500/30 dark:bg-amber-500/10">
+            <div className="flex items-start gap-3">
+              <FaEnvelope className="mt-0.5 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="font-semibold text-amber-700 dark:text-amber-300">
+                  Verifica tu correo
+                </p>
+                <p className="text-sm text-amber-700/80 dark:text-amber-300/80">
+                  Ingresa el código que enviamos a {usuario.correo}.
+                  {mensajeVerif && ` ${mensajeVerif}`}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))}
+                placeholder="Código de 6 dígitos"
+                className="w-full rounded-xl border border-amber-400 bg-white px-4 py-2.5 text-center text-lg font-bold tracking-widest text-gray-900 placeholder:text-sm placeholder:font-normal placeholder:tracking-normal placeholder:text-gray-400 outline-none transition focus:border-amber-500 sm:w-44 dark:border-amber-500/40 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500"
+              />
+              <button
+                type="button"
+                onClick={handleVerificar}
+                disabled={codigo.length !== 6 || verificando}
+                className="shrink-0 rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-amber-500 dark:hover:bg-amber-400"
+              >
+                {verificando ? "Verificando..." : "Verificar"}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setReenviando(true);
+                  setMensajeVerif(null);
+                  try {
+                    await reenviarVerificacion(usuario.correo);
+                    setMensajeVerif("Revisa tu correo.");
+                  } catch (err) {
+                    setMensajeVerif(getErrorMessage(err));
+                  } finally {
+                    setReenviando(false);
+                  }
+                }}
+                disabled={reenviando}
+                className="shrink-0 rounded-xl border border-amber-400 px-5 py-2.5 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:text-amber-300 dark:hover:bg-amber-500/10"
+              >
+                {reenviando ? "Enviando..." : "Reenviar código"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Accesos rápidos */}
         <div className="mb-12 grid gap-6 sm:grid-cols-2">
