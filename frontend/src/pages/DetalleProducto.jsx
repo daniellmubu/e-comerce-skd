@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { FaStar, FaShoppingCart, FaMagic, FaArrowLeft, FaUpload, FaSpinner } from "react-icons/fa";
+import { FaStar, FaShoppingCart, FaArrowLeft, FaUpload, FaSpinner } from "react-icons/fa";
 
 import mug from "../assets/images/products/mug.png";
-import { obtenerProductoPorId, obtenerVariantesDeProducto, listarProductos } from "../services/productService";
+import { obtenerProductoPorId, obtenerVariantesDeProducto } from "../services/productService";
 import { listarResenasPorProducto, crearResena, subirImagenResena } from "../services/resenaService";
 import { listarCaracteristicasPorProducto } from "../services/caracteristicaService";
 import { getErrorMessage } from "../services/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
-import Loading from "../components/ui/Loading";
 
 // Igual que en Catalogo.jsx: el backend solo da el nombre de la categoría,
 const CATEGORY_META = {
@@ -46,7 +45,6 @@ function DetalleProducto() {
   const [producto, setProducto] = useState(null);
   const [resenas, setResenas] = useState([]);
   const [caracteristicas, setCaracteristicas] = useState([]);
-  const [relacionados, setRelacionados] = useState([]);
   const [variantes, setVariantes] = useState([]);
   const [tallaSel, setTallaSel] = useState(null);
   const [colorSel, setColorSel] = useState(null);
@@ -69,22 +67,15 @@ function DetalleProducto() {
       obtenerProductoPorId(id),
       listarResenasPorProducto(id).catch(() => []),
       listarCaracteristicasPorProducto(id).catch(() => []),
-      listarProductos().catch(() => []),
       obtenerVariantesDeProducto(id).catch(() => []),
     ])
       .then(
-        ([productoData, resenasData, caracteristicasData, todos, variantesData]) => {
+        ([productoData, resenasData, caracteristicasData, variantesData]) => {
           if (!activo) return;
           setProducto(productoData);
           setResenas(resenasData);
           setCaracteristicas(caracteristicasData);
           setVariantes(Array.isArray(variantesData) ? variantesData : []);
-          setRelacionados(
-            todos
-              .filter((p) => p.id !== productoData.id && p.categoria === productoData.categoria)
-              .slice(0, 4)
-          );
-
           // Auto-selección: si el producto tiene una sola talla o un solo color,
           // queda preseleccionado para que el usuario no tenga que elegir.
           if (Array.isArray(variantesData) && variantesData.length > 0) {
@@ -135,10 +126,6 @@ function DetalleProducto() {
 
   const precioMostrar = varianteSel ? varianteSel.precio : producto?.precio;
   const stockMostrar = varianteSel ? varianteSel.stock : producto?.stock;
-
-  const handlePersonalizar = () => {
-    navigate("/personalizador", { state: producto });
-  };
 
   const recargarResenas = () => {
     listarResenasPorProducto(id)
@@ -212,7 +199,23 @@ function DetalleProducto() {
   };
 
   if (loading) {
-    return <Loading fullScreen label="Cargando producto..." />;
+    return (
+      <section className="min-h-screen bg-gray-50 px-6 py-16 dark:bg-slate-950">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid animate-pulse gap-10 md:grid-cols-2">
+            <div className="h-96 rounded-3xl bg-gray-200 dark:bg-slate-800" />
+            <div className="space-y-4">
+              <div className="h-6 w-24 rounded-full bg-gray-200 dark:bg-slate-700" />
+              <div className="h-10 w-3/4 rounded bg-gray-200 dark:bg-slate-700" />
+              <div className="h-4 w-full rounded bg-gray-200 dark:bg-slate-700" />
+              <div className="h-4 w-2/3 rounded bg-gray-200 dark:bg-slate-700" />
+              <div className="h-10 w-40 rounded-xl bg-gray-200 dark:bg-slate-700" />
+              <div className="h-12 w-full rounded-xl bg-gray-200 dark:bg-slate-700" />
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   if (error || !producto) {
@@ -385,14 +388,7 @@ function DetalleProducto() {
 
             <div className="my-8 border-t border-gray-200 dark:border-slate-800" />
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={handlePersonalizar}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-4 font-semibold text-white transition hover:scale-[1.02] hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
-              >
-                <FaMagic /> Personalizar
-              </button>
+            <div className="flex flex-col gap-3">
               <button
                 type="button"
                 onClick={() =>
@@ -404,7 +400,7 @@ function DetalleProducto() {
                 disabled={
                   (variantes.length > 0 && !varianteSel) || stockMostrar === 0
                 }
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 px-6 py-4 font-semibold transition hover:border-indigo-400 dark:border-slate-700 dark:hover:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-4 font-semibold text-white transition hover:scale-[1.02] hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
               >
                 <FaShoppingCart />
                 {(variantes.length > 0 && !varianteSel) || stockMostrar === 0
@@ -543,38 +539,6 @@ function DetalleProducto() {
           )}
         </div>
 
-        {/* Productos relacionados */}
-        {relacionados.length > 0 && (
-          <div className="mt-20">
-            <h2 className="mb-6 text-2xl font-bold">Productos relacionados</h2>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              {relacionados.map((p) => {
-                const relMeta = CATEGORY_META[p.categoria] ?? DEFAULT_META;
-                return (
-                  <Link
-                    key={p.id}
-                    to={`/productos/${p.id}`}
-                    className="group overflow-hidden rounded-2xl border border-gray-200 bg-white transition hover:-translate-y-1 hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-cyan-500"
-                  >
-                    <div
-                      className={`flex h-40 items-center justify-center bg-gradient-to-br ${relMeta.color}`}
-                    >
-                      <img
-                        src={relMeta.image}
-                        alt={p.nombre}
-                        className="h-28 object-contain transition group-hover:scale-110"
-                      />
-                    </div>
-                    <div className="p-4">
-                      <p className="font-semibold">{p.nombre}</p>
-                      <p className="mt-1 text-indigo-600 dark:text-cyan-300">{formatPrice(p.precio)}</p>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </section>
   );
