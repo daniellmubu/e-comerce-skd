@@ -6,6 +6,7 @@ import {
   FaCheckDouble,
   FaPaperPlane,
   FaTruck,
+  FaMoneyBillWave,
   FaSpinner,
 } from "react-icons/fa";
 
@@ -32,6 +33,7 @@ function formatFecha(value) {
 
 function IconoTipo({ tipo }) {
   if (tipo?.startsWith("PEDIDO")) return <FaTruck className="text-indigo-500 dark:text-cyan-400" />;
+  if (tipo?.startsWith("PAGO")) return <FaMoneyBillWave className="text-emerald-500 dark:text-emerald-400" />;
   return <FaPaperPlane className="text-indigo-500 dark:text-cyan-400" />;
 }
 

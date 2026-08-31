@@ -16,5 +16,7 @@ public interface AdminPedidoService {
 
     PedidoResponse cambiarEstado(Long id, String estado);
 
+    PedidoResponse aprobarPago(Long id);
+
     Map<String, List<PedidoKanbanResponse>> kanban();
 }

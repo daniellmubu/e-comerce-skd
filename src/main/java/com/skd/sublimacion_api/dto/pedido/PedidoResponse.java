@@ -35,4 +35,8 @@ public class PedidoResponse {
 
     private String numeroFactura;
 
+    private String metodoPago;
+
+    private String estadoPago;
+
 }
