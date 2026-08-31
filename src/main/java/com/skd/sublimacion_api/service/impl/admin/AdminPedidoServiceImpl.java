@@ -87,6 +87,8 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
 
         if (!estadoAnterior.equals(pedido.getEstado())) {
             webSocketService.publicarEstadoPedido(pedido.getId(), pedido.getEstado());
+            // Sincroniza el tablero de producción en tiempo real.
+            webSocketService.publicarCambioKanban(pedido.getId(), pedido.getEstado());
             notificacionService.crear(
                     pedido.getUsuario().getId(),
                     "PEDIDO_" + pedido.getEstado().toUpperCase(),

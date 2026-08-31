@@ -1,11 +1,15 @@
 package com.skd.sublimacion_api.service.impl.admin;
 
+import com.skd.sublimacion_api.dto.usuario.CambioPendienteResponse;
 import com.skd.sublimacion_api.dto.usuario.UsuarioRequest;
 import com.skd.sublimacion_api.dto.usuario.UsuarioResponse;
 import com.skd.sublimacion_api.mapper.UsuarioMapper;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
+import com.skd.sublimacion_api.service.CambioPendienteService;
 import com.skd.sublimacion_api.service.admin.AdminUsuarioService;
 import lombok.RequiredArgsConstructor;
+
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,8 +22,6 @@ import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import org.springframework.data.jpa.domain.Specification;
 import com.skd.sublimacion_api.specification.UsuarioSpecification;
 
-import com.skd.sublimacion_api.dto.usuario.CambiarRolRequest;
-
 @Service
 @RequiredArgsConstructor
 public class AdminUsuarioServiceImpl implements AdminUsuarioService {
@@ -27,6 +29,7 @@ public class AdminUsuarioServiceImpl implements AdminUsuarioService {
     private final UsuarioRepository usuarioRepository;
     private final UsuarioMapper usuarioMapper;
     private final PasswordEncoder passwordEncoder;
+    private final CambioPendienteService cambioPendienteService;
 
    @Override
     public Page<UsuarioResponse> listar(
@@ -85,27 +88,11 @@ public class AdminUsuarioServiceImpl implements AdminUsuarioService {
     }
 
     @Override
-    public UsuarioResponse actualizar(Long id, UsuarioRequest request) {
+    public CambioPendienteResponse actualizar(Long id, UsuarioRequest request) {
 
-        validarUsuario(
-                request.getUsername(),
-                request.getCorreo(),
-                id);
-
-        Usuario usuario = buscarUsuario(id);
-
-        actualizarDatosUsuario(usuario, request);
-
-        if (request.getContrasena() != null &&
-            !request.getContrasena().isBlank()) {
-
-            usuario.setContrasenaHash(
-                    passwordEncoder.encode(request.getContrasena()));
-        }
-
-        Usuario actualizado = usuarioRepository.save(usuario);
-
-        return usuarioMapper.toResponse(actualizado);
+        // No modifica al usuario directamente: se crea una solicitud pendiente
+        // que el cliente debe aprobar desde el correo (double opt-in).
+        return cambioPendienteService.solicitarActualizacion(id, request);
     }
 
     @Override
@@ -137,13 +124,9 @@ public class AdminUsuarioServiceImpl implements AdminUsuarioService {
     }
 
     @Override
-    public void cambiarRol(Long id, CambiarRolRequest request) {
+    public List<CambioPendienteResponse> listarCambiosPendientes(Long usuarioId) {
 
-        Usuario usuario = buscarUsuario(id);
-
-        usuario.setRol(request.getRol());
-
-        usuarioRepository.save(usuario);
+        return cambioPendienteService.listarPorUsuario(usuarioId);
     }
 
     private void actualizarDatosUsuario(

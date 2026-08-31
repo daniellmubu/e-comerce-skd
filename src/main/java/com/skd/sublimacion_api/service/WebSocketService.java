@@ -26,6 +26,22 @@ public class WebSocketService {
         messagingTemplate.convertAndSend("/topic/pedidos/" + pedidoId, evento);
     }
 
+    /**
+     * Publica el cambio de estado en el topic global del tablero de producción
+     * (/topic/kanban) para que todas las vistas del panel se actualicen en
+     * tiempo real (Pedidos <-> Producción).
+     */
+    public void publicarCambioKanban(Long pedidoId, String estado) {
+
+        PedidoEstadoEvent evento = PedidoEstadoEvent.builder()
+                .pedidoId(pedidoId)
+                .estado(estado)
+                .timestamp(LocalDateTime.now())
+                .build();
+
+        messagingTemplate.convertAndSend("/topic/kanban", evento);
+    }
+
     public void publicarEstadoSolicitud(Long solicitudId, String estado) {
 
         SolicitudDisenoEvent evento = SolicitudDisenoEvent.builder()

@@ -32,6 +32,9 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Aprobación/rechazo de cambios de datos por parte del
+                        // cliente (el token del correo es la credencial).
+                        .requestMatchers("/api/usuarios/cambios/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/productos/**").permitAll()

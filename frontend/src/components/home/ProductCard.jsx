@@ -1,4 +1,4 @@
-import { useState } from "react";
+ import { useState } from "react";
 import { FaHeart, FaShoppingCart, FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 

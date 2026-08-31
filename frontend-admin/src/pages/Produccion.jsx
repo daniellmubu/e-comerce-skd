@@ -12,6 +12,7 @@ import Button from "../components/Button";
 import Loading from "../components/Loading";
 import { getErrorMessage } from "../api/axios";
 import { obtenerKanban, cambiarEstadoPedido } from "../api/pedidosApi";
+import { useKanbanRealtime } from "../hooks/useKanbanRealtime";
 import { formatPrice, formatFechaHora } from "../utils/formato";
 
 // Estados del tablero de producción (coherentes con el backend).
@@ -58,6 +59,22 @@ function Produccion() {
   useEffect(() => {
     cargar();
   }, [cargar]);
+
+  // Recarga silenciosa (sin spinner) cuando llega un evento WebSocket del
+  // tablero (p. ej. cambio de estado desde la vista "Pedidos").
+  const recargarSilencioso = useCallback(async () => {
+    try {
+      const resultado = await obtenerKanban();
+      setTablero(resultado);
+      setError(null);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }, []);
+
+  // Mantiene el tablero sincronizado en tiempo real con los cambios de estado
+  // realizados desde "Pedidos" (o desde otra pestaña/ventana del panel).
+  useKanbanRealtime(recargarSilencioso);
 
   // --- Drag & drop ---
   const manejarDragStart = (e, pedido) => {

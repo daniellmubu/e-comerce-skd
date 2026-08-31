@@ -30,6 +30,9 @@ public class EmailServiceImpl implements EmailService {
     @Value("${spring.mail.username}")
     private String correoDestino;
 
+    @Value("${app.base-url:http://localhost:8080}")
+    private String baseUrl;
+
     @Async
     @Override
     public void enviarFacturaCompra(CheckoutCompletadoEvent evento) {
@@ -105,6 +108,58 @@ public class EmailServiceImpl implements EmailService {
 
         } catch (MessagingException | RuntimeException e) {
             log.error("No se pudo enviar el correo de restablecimiento a {}: {}",
+                    correo, e.getMessage(), e);
+        }
+    }
+
+    @Async
+    @Override
+    public void enviarConfirmacionCambioDatos(
+            String correo,
+            String nombre,
+            String resumenCambios,
+            String token,
+            String baseUrl) {
+
+        try {
+            String urlAprobar = baseUrl + "/api/usuarios/cambios/aprobar?token=" + token;
+            String urlRechazar = baseUrl + "/api/usuarios/cambios/rechazar?token=" + token;
+
+            MimeMessage mensaje = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mensaje, true, "UTF-8");
+
+            helper.setTo(correo);
+            helper.setSubject("Confirmación de cambio de tus datos - SKD");
+
+            String html = "<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1f2937;\">"
+                    + "<h2 style=\"color:#4f46e5;\">Hola " + nombre + ",</h2>"
+                    + "<p>Un administrador de SKD solicitó modificar los siguientes datos de tu cuenta:</p>"
+                    + "<div style=\"background:#eef2ff;border-radius:8px;padding:16px;margin:16px 0;\">"
+                    + resumenCambios
+                    + "</div>"
+                    + "<p><strong>Ningún dato se modificará hasta que confirmes.</strong></p>"
+                    + "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:24px 0;\">"
+                    + "<tr>"
+                    + "<td style=\"background:#16a34a;border-radius:8px;\">"
+                    + "<a href=\"" + urlAprobar + "\" style=\"display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:bold;\">Aprobar cambio</a>"
+                    + "</td>"
+                    + "<td style=\"width:12px;\"></td>"
+                    + "<td style=\"background:#dc2626;border-radius:8px;\">"
+                    + "<a href=\"" + urlRechazar + "\" style=\"display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:bold;\">Rechazar cambio</a>"
+                    + "</td>"
+                    + "</tr>"
+                    + "</table>"
+                    + "<p style=\"font-size:12px;color:#6b7280;\">Si no fuiste tú quien solicitó este cambio, puedes ignorar este correo o pulsar \"Rechazar cambio\". "
+                    + "Este enlace es válido por 48 horas.</p>"
+                    + "</div>";
+
+            helper.setText(html, true);
+
+            mailSender.send(mensaje);
+            log.info("Correo de confirmación de cambio enviado a {}", correo);
+
+        } catch (MessagingException | RuntimeException e) {
+            log.error("No se pudo enviar el correo de confirmación de cambio a {}: {}",
                     correo, e.getMessage(), e);
         }
     }

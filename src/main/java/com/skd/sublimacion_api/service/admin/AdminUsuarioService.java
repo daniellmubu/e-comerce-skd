@@ -1,5 +1,6 @@
 package com.skd.sublimacion_api.service.admin;
 
+import com.skd.sublimacion_api.dto.usuario.CambioPendienteResponse;
 import com.skd.sublimacion_api.dto.usuario.UsuarioRequest;
 import com.skd.sublimacion_api.dto.usuario.UsuarioResponse;
 import com.skd.sublimacion_api.entity.Rol;
@@ -7,7 +8,7 @@ import com.skd.sublimacion_api.entity.Rol;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-import com.skd.sublimacion_api.dto.usuario.CambiarRolRequest;
+import java.util.List;
 
 public interface AdminUsuarioService {
 
@@ -24,11 +25,15 @@ public interface AdminUsuarioService {
 
     UsuarioResponse guardar(UsuarioRequest request);
 
-    UsuarioResponse actualizar(Long id, UsuarioRequest request);
+    /**
+     * No modifica al usuario directamente: crea una solicitud pendiente que el
+     * cliente debe aprobar desde el correo (double opt-in).
+     */
+    CambioPendienteResponse actualizar(Long id, UsuarioRequest request);
 
     void bloquear(Long id);
 
     void desbloquear(Long id);
 
-    void cambiarRol(Long id, CambiarRolRequest request);
+    List<CambioPendienteResponse> listarCambiosPendientes(Long usuarioId);
 }

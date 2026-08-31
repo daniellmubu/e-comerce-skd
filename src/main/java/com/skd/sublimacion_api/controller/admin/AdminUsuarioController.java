@@ -1,9 +1,12 @@
 package com.skd.sublimacion_api.controller.admin;
 
+import com.skd.sublimacion_api.dto.usuario.CambioPendienteResponse;
 import com.skd.sublimacion_api.dto.usuario.UsuarioRequest;
 import com.skd.sublimacion_api.dto.usuario.UsuarioResponse;
 import com.skd.sublimacion_api.entity.Rol;
 import com.skd.sublimacion_api.service.admin.AdminUsuarioService;
+
+import java.util.List;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -16,7 +19,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-import com.skd.sublimacion_api.dto.usuario.CambiarRolRequest;
 
 @RestController
 @RequestMapping("/api/admin/usuarios")
@@ -112,10 +114,12 @@ public class AdminUsuarioController {
             @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
     })
     @PutMapping("/{id}")
-    public UsuarioResponse actualizar(
+    public CambioPendienteResponse actualizar(
             @PathVariable Long id,
             @Valid @RequestBody UsuarioRequest request) {
 
+        // No aplica el cambio directamente: crea una solicitud que el cliente
+        // debe aprobar desde el correo.
         return adminUsuarioService.actualizar(id, request);
     }
 
@@ -151,12 +155,15 @@ public class AdminUsuarioController {
         adminUsuarioService.desbloquear(id);
     }
 
-    @PatchMapping("/{id}/rol")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void cambiarRol(
-            @PathVariable Long id,
-            @Valid @RequestBody CambiarRolRequest request) {
+    @Operation(
+        summary = "Listar cambios pendientes",
+        description = "Lista las solicitudes de cambio de datos de un usuario "
+                + "que requieren la aprobación del cliente."
+    )
+    @GetMapping("/{id}/cambios")
+    public List<CambioPendienteResponse> listarCambiosPendientes(
+            @PathVariable Long id) {
 
-        adminUsuarioService.cambiarRol(id, request);
+        return adminUsuarioService.listarCambiosPendientes(id);
     }
 }

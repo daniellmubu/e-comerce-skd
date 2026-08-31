@@ -225,10 +225,10 @@ Base: `/api/admin/usuarios`
 | GET | `/api/admin/usuarios` | Listar paginado con filtros |
 | GET | `/api/admin/usuarios/{id}` | Obtener por id |
 | POST | `/api/admin/usuarios` | Crear (201) |
-| PUT | `/api/admin/usuarios/{id}` | Actualizar |
+| PUT | `/api/admin/usuarios/{id}` | Solicitar cambio de datos (doble confirmación) |
+| GET | `/api/admin/usuarios/{id}/cambios` | Listar solicitudes de cambio pendientes |
 | PATCH | `/api/admin/usuarios/{id}/bloquear` | Bloquear (204) |
 | PATCH | `/api/admin/usuarios/{id}/desbloquear` | Desbloquear (204) |
-| PATCH | `/api/admin/usuarios/{id}/rol` | Cambiar rol (204) |
 
 **Filtros del listado** (opcionales): `nombre`, `username`, `correo`, `rol` (admin/cliente), `bloqueado`, `verificado` + paginación.
 
@@ -260,7 +260,38 @@ Base: `/api/admin/usuarios`
 }
 ```
 
-**CambiarRolRequest** (`PATCH /{id}/rol`): `{ "rol": "admin" }`
+> **Privacidad del cliente (doble confirmación).** El `PUT /{id}` **no modifica al
+> usuario directamente**: crea una solicitud pendiente y envía un correo al
+> cliente con enlaces para **aprobar** o **rechazar** el cambio. El cambio se
+> aplica en la tabla `usuario` solo cuando el cliente lo aprueba desde el correo
+> (enlace válido por 48 h). El rol **no** se puede editar: solo se asigna al
+> crear el usuario; la contraseña tampoco se cambia desde el panel (el cliente
+> usa "¿Olvidaste tu contraseña?").
+
+**CambioPendienteResponse** (respuesta de `PUT /{id}` y `GET /{id}/cambios`):
+
+```json
+{
+  "id": 3,
+  "usuarioId": 7,
+  "estado": "PENDIENTE",
+  "nombre": "Daniel",
+  "username": "daniel",
+  "correo": "daniel@nuevo.com",
+  "telefono": "3001234567",
+  "fechaExpiracion": "2026-08-30T00:00:00",
+  "fechaCreacion": "2026-08-28T00:00:00"
+}
+```
+
+`estado` puede ser: `PENDIENTE`, `APROBADO`, `RECHAZADO` o `EXPIRADO`.
+
+**Endpoints públicos de confirmación** (los usa el enlace del correo, sin token de admin):
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/usuarios/cambios/aprobar?token={token}` | Aplica el cambio (devuelve HTML) |
+| GET | `/api/usuarios/cambios/rechazar?token={token}` | Invalida el cambio (devuelve HTML) |
 
 ---
 

@@ -6,6 +6,8 @@ import {
   FaUnlock,
   FaSearch,
   FaUsers,
+  FaEnvelope,
+  FaCheckCircle,
 } from "react-icons/fa";
 
 import Badge from "../components/Badge";
@@ -70,6 +72,7 @@ function Usuarios() {
   const [guardando, setGuardando] = useState(false);
   const [form, setForm] = useState(FORM_VACIO);
   const [formError, setFormError] = useState(null);
+  const [infoMessage, setInfoMessage] = useState(null);
 
   const cargar = useCallback(
     async (pagina = page, tamanio = size, filtrosActuales = filtrosAplicados) => {
@@ -121,6 +124,7 @@ function Usuarios() {
     setEditando(null);
     setForm(FORM_VACIO);
     setFormError(null);
+    setInfoMessage(null);
     setModalAbierto(true);
   };
 
@@ -135,6 +139,7 @@ function Usuarios() {
       contrasena: "",
     });
     setFormError(null);
+    setInfoMessage(null);
     setModalAbierto(true);
   };
 
@@ -179,6 +184,11 @@ function Usuarios() {
       }
       setModalAbierto(false);
       cargar();
+      setInfoMessage(
+        editando
+          ? "Se envió una solicitud de aprobación al correo del usuario. El cambio se aplicará solo cuando el cliente lo confirme."
+          : "Usuario creado correctamente."
+      );
     } catch (err) {
       setFormError(getErrorMessage(err));
     } finally {
@@ -217,6 +227,14 @@ function Usuarios() {
           Nuevo usuario
         </Button>
       </div>
+
+      {/* Mensaje de éxito / solicitud enviada */}
+      {infoMessage && (
+        <div className="flex items-start gap-3 rounded-2xl border border-green-300 bg-green-50 p-4 text-sm text-green-700 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-400">
+          <FaCheckCircle className="mt-0.5 shrink-0" />
+          <span>{infoMessage}</span>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="grid gap-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/60 md:grid-cols-2 xl:grid-cols-6">
@@ -416,9 +434,9 @@ function Usuarios() {
               type="submit"
               form="form-usuario"
               loading={guardando}
-              leftIcon={<FaPlus />}
+              leftIcon={editando ? <FaEnvelope /> : <FaPlus />}
             >
-              {editando ? "Guardar cambios" : "Crear usuario"}
+              {editando ? "Solicitar cambio" : "Crear usuario"}
             </Button>
           </>
         }
@@ -452,34 +470,40 @@ function Usuarios() {
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Select
-              label="Rol"
-              options={[
-                { value: "cliente", label: "Cliente" },
-                { value: "disenador", label: "Diseñador" },
-                { value: "admin", label: "Administrador" },
-              ]}
-              value={form.rol}
-              onChange={(e) => setForm({ ...form, rol: e.target.value })}
-            />
-            <Input
-              label={
-                editando
-                  ? "Contraseña (dejar en blanco para no cambiarla)"
-                  : "Contraseña"
-              }
-              type="password"
-              placeholder="••••••••"
-              value={form.contrasena}
-              onChange={(e) => setForm({ ...form, contrasena: e.target.value })}
-            />
-          </div>
+          {!editando && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Select
+                label="Rol"
+                options={[
+                  { value: "cliente", label: "Cliente" },
+                  { value: "disenador", label: "Diseñador" },
+                  { value: "admin", label: "Administrador" },
+                ]}
+                value={form.rol}
+                onChange={(e) => setForm({ ...form, rol: e.target.value })}
+              />
+              <Input
+                label="Contraseña"
+                type="password"
+                placeholder="••••••••"
+                value={form.contrasena}
+                onChange={(e) => setForm({ ...form, contrasena: e.target.value })}
+              />
+            </div>
+          )}
+          {editando && (
+            <p className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
+              El rol y la contraseña no se cambian desde el panel por seguridad.
+              El rol se asigna al crear el usuario y la contraseña la restablece
+              el propio usuario con "¿Olvidaste tu contraseña?".
+            </p>
+          )}
 
-          {editando && esMiPerfil(editando) && (
-            <p className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
-              Cuidado: estás editando tu propio usuario. Cambiar tu rol a
-              "cliente" o "diseñador" te quitaría el acceso al panel.
+          {editando && (
+            <p className="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-3 text-sm text-indigo-600 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-400">
+              Al guardar se enviará un correo al usuario con un enlace para
+              aprobar o rechazar el cambio. Ningún dato se modifica hasta que el
+              cliente lo confirme.
             </p>
           )}
 

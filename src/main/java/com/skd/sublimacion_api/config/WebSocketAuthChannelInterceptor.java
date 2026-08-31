@@ -1,6 +1,7 @@
 package com.skd.sublimacion_api.config;
 
 import com.skd.sublimacion_api.entity.Pedido;
+import com.skd.sublimacion_api.entity.Rol;
 import com.skd.sublimacion_api.entity.SolicitudDiseno;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.repository.PedidoRepository;
@@ -122,6 +123,16 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
             if (!destinatarioId.equals(usuario.getId())) {
                 throw new AccessDeniedException(
                         "No tienes permiso para suscribirte a las notificaciones de otro usuario");
+            }
+            return;
+        }
+
+        // El tablero de producción es exclusivo del personal (admin/diseñador).
+        if ("/topic/kanban".equals(destino)) {
+            Rol rol = usuario.getRol();
+            if (rol != Rol.admin && rol != Rol.disenador) {
+                throw new AccessDeniedException(
+                        "No tienes permiso para suscribirte al tablero de producción");
             }
         }
     }
