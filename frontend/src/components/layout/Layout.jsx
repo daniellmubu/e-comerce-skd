@@ -2,6 +2,7 @@ import Navbar from './Navbar';
 import Footer from './Footer';
 import CartDrawer from '../cart/CartDrawer';
 import ChatWidget from '../chat/ChatWidget';
+import WhatsAppButton from '../chat/WhatsAppButton';
 import { useAuth } from '../../context/AuthContext';
 
 function Layout({ children }) {
@@ -19,6 +20,7 @@ function Layout({ children }) {
       <Footer />
       {!esDisenador && <CartDrawer />}
       <ChatWidget />
+      <WhatsAppButton />
     </div>
   );
 }

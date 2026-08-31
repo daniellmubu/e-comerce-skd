@@ -125,7 +125,6 @@ function Generador() {
   };
 
   const handleGenerate = async () => {
-    console.log("🔥 Entró a handleGenerate");
 
     if (!prompt.trim() || isGenerating) return;
 
@@ -145,7 +144,6 @@ function Generador() {
         productoId: productoOrigen?.id ?? null,
       });
 
-      console.log("Respuesta:", resultado);
 
       const imagenUrl =
         resultado.imagenUrl ?? resultado.url ?? resultado.imagen ?? null;

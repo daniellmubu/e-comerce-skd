@@ -99,6 +99,12 @@ function DetalleProducto() {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (producto?.nombre) {
+      document.title = `${producto.nombre} | SKD Creando Sueños`;
+    }
+  }, [producto]);
+
   const meta = useMemo(
     () => (producto ? CATEGORY_META[producto.categoria] ?? DEFAULT_META : DEFAULT_META),
     [producto]
