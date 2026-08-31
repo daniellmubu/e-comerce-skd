@@ -4,7 +4,6 @@ import { FaPalette, FaRobot, FaPenNib, FaDownload, FaTrash, FaSpinner, FaExclama
 
 import { listarDisenosPorUsuario, eliminarDiseno, eliminarTodosDisenos } from "../services/disenoService";
 import { getErrorMessage } from "../services/api";
-import Loading from "../components/ui/Loading";
 
 async function descargarDiseno(diseno) {
   const url = diseno?.imagenUrl;
@@ -165,8 +164,20 @@ function MisDisenos() {
         )}
 
         {cargando ? (
-          <div className="flex justify-center py-14">
-            <Loading label="Cargando tus diseños..." />
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+              >
+                <div className="h-52 bg-gray-200 dark:bg-slate-800" />
+                <div className="space-y-3 p-4">
+                  <div className="h-4 w-3/4 rounded bg-gray-200 dark:bg-slate-700" />
+                  <div className="h-3 w-full rounded bg-gray-200 dark:bg-slate-700" />
+                  <div className="h-9 w-24 rounded-lg bg-gray-200 dark:bg-slate-700" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-red-300 py-14 text-center dark:border-red-500/30">

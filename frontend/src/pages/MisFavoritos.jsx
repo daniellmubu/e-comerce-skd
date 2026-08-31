@@ -6,7 +6,6 @@ import mug from "../assets/images/products/mug.png";
 
 import { listarMisFavoritos, eliminarFavorito } from "../services/favoritoService";
 import { getErrorMessage } from "../services/api";
-import Loading from "../components/ui/Loading";
 
 const CATEGORY_META = {
   Mugs: { image: mug, color: "from-violet-500 to-purple-700" },
@@ -79,8 +78,19 @@ function MisFavoritos() {
         </div>
 
         {loading && (
-          <div className="flex justify-center py-20">
-            <Loading label="Cargando tus favoritos..." />
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse overflow-hidden rounded-3xl border border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div className="h-64 bg-gray-200 dark:bg-slate-800" />
+                <div className="space-y-3 p-5">
+                  <div className="h-5 w-2/3 rounded bg-gray-200 dark:bg-slate-700" />
+                  <div className="h-4 w-24 rounded bg-gray-200 dark:bg-slate-700" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

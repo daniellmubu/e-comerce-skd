@@ -4,6 +4,7 @@ import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoRequest;
 import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoResponse;
 import com.skd.sublimacion_api.entity.Carrito;
 import com.skd.sublimacion_api.entity.Diseno;
+import com.skd.sublimacion_api.entity.ImagenProducto;
 import com.skd.sublimacion_api.entity.ItemCarrito;
 import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.entity.VarianteProducto;
@@ -11,6 +12,7 @@ import com.skd.sublimacion_api.exeption.BadRequestException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CarritoRepository;
 import com.skd.sublimacion_api.repository.DisenoRepository;
+import com.skd.sublimacion_api.repository.ImagenProductoRepository;
 import com.skd.sublimacion_api.repository.ItemCarritoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.repository.VarianteProductoRepository;
@@ -30,6 +32,7 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
     private final ProductoRepository productoRepository;
     private final DisenoRepository disenoRepository;
     private final VarianteProductoRepository varianteProductoRepository;
+    private final ImagenProductoRepository imagenProductoRepository;
 
     @Override
     public ItemCarritoResponse obtenerPorId(Long id) {
@@ -119,6 +122,7 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
                 .carritoId(detalle.getCarrito().getId())
                 .productoId(detalle.getProducto().getId())
                 .producto(detalle.getProducto().getNombre())
+                .imagenUrl(imagenProductoUrl(detalle.getProducto()))
                 .cantidad(detalle.getCantidad())
                 .precioUnitario(detalle.getPrecioUnitario())
                 .subtotal(subtotal)
@@ -128,5 +132,19 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
                 .talla(detalle.getVariante() != null ? detalle.getVariante().getTalla() : null)
                 .color(detalle.getVariante() != null ? detalle.getVariante().getColor() : null)
                 .build();
+    }
+
+    private String imagenProductoUrl(Producto producto) {
+
+        List<ImagenProducto> imagenes =
+                imagenProductoRepository.findByProductoId(producto.getId());
+        if (imagenes.isEmpty()) {
+            return null;
+        }
+        return imagenes.stream()
+                .filter(i -> Boolean.TRUE.equals(i.getEsPrincipal()))
+                .findFirst()
+                .orElse(imagenes.get(0))
+                .getUrl();
     }
 }
