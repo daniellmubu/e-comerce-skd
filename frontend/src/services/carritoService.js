@@ -24,10 +24,6 @@
   export async function listarItemsDelCarrito(carritoId) {
   const respuesta = await api.get(`/detalle-carrito/carrito/${carritoId}`);
 
-  console.log("========== RESPUESTA DEL BACKEND ==========");
-  console.log(respuesta);
-  console.log("respuesta.data =", respuesta.data);
-  console.log("¿Es arreglo?", Array.isArray(respuesta.data));
 
   return respuesta.data;
   }

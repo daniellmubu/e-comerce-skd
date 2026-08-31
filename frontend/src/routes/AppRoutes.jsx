@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 
 import Loading from "../components/ui/Loading";
@@ -15,6 +15,7 @@ const RestablecerPassword = lazy(() => import("../pages/RestablecerPassword"));
 const Legal = lazy(() => import("../pages/Legal"));
 const Contacto = lazy(() => import("../pages/Contacto"));
 const VerificarEmail = lazy(() => import("../pages/VerificarEmail"));
+const NoEncontrado = lazy(() => import("../pages/NoEncontrado"));
 const Catalogo = lazy(() => import("../pages/Catalogo"));
 const Dashboard = lazy(() => import("../pages/Dashboard"));
 const Generador = lazy(() => import("../pages/Generador"));
@@ -34,41 +35,48 @@ const DetalleProducto = lazy(() => import("../pages/DetalleProducto"));
 const SeguimientoPedido = lazy(() => import("../pages/SeguimientoPedido"));
 const Creditos = lazy(() => import("../pages/Creditos"));
 
-function Pagina({ children }) {
+function Pagina({ title, description, children }) {
+  useEffect(() => {
+    if (title) document.title = title;
+    if (description) {
+      const meta = document.querySelector('meta[name="description"]');
+      if (meta) meta.setAttribute("content", description);
+    }
+  }, [title, description]);
   return <Suspense fallback={<Loading label="Cargando…" />}>{children}</Suspense>;
 }
 
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Pagina><Home /></Pagina>} />
-      <Route path="/catalogo" element={<Pagina><Catalogo /></Pagina>} />
-      <Route path="/productos/:id" element={<Pagina><DetalleProducto /></Pagina>} />
-      <Route path="/login" element={<Pagina><Login /></Pagina>} />
-      <Route path="/registro" element={<Pagina><Registro /></Pagina>} />
-      <Route path="/olvide-password" element={<Pagina><OlvidePassword /></Pagina>} />
-      <Route path="/restablecer-password" element={<Pagina><RestablecerPassword /></Pagina>} />
+      <Route path="/" element={<Pagina title="SKD - Creando Sueños | Productos personalizados" description="Diseña y personaliza tus mugs, jarras, termos y más con IA. Sublimación de calidad en Colombia."><Home /></Pagina>} />
+      <Route path="/catalogo" element={<Pagina title="Catálogo | SKD Creando Sueños" description="Explora nuestros productos personalizados: mugs, jarras y más."><Catalogo /></Pagina>} />
+      <Route path="/productos/:id" element={<Pagina title="Producto | SKD Creando Sueños"><DetalleProducto /></Pagina>} />
+      <Route path="/login" element={<Pagina title="Iniciar sesión | SKD"><Login /></Pagina>} />
+      <Route path="/registro" element={<Pagina title="Registro | SKD"><Registro /></Pagina>} />
+      <Route path="/olvide-password" element={<Pagina title="Recuperar contraseña | SKD"><OlvidePassword /></Pagina>} />
+      <Route path="/restablecer-password" element={<Pagina title="Nueva contraseña | SKD"><RestablecerPassword /></Pagina>} />
       <Route path="/legal/:tipo" element={<Pagina><Legal /></Pagina>} />
-      <Route path="/contacto" element={<Pagina><Contacto /></Pagina>} />
-      <Route path="/verificar-email" element={<Pagina><VerificarEmail /></Pagina>} />
+      <Route path="/contacto" element={<Pagina title="Contacto | SKD"><Contacto /></Pagina>} />
+      <Route path="/verificar-email" element={<Pagina title="Verificar correo | SKD"><VerificarEmail /></Pagina>} />
       <Route
         path="/dashboard"
         element={
-          <Pagina>
+          <Pagina title="Mi panel | SKD">
             <RutaProtegida roles={ROLES_CLIENTE}>
               <Dashboard />
             </RutaProtegida>
           </Pagina>
         }
       />
-      <Route path="/generador" element={<Pagina><Generador /></Pagina>} />
-      <Route path="/personalizador" element={<Pagina><Personalizador /></Pagina>} />
-      <Route path="/galeria-clientes" element={<Pagina><GaleriaClientes /></Pagina>} />
-      <Route path="/creditos" element={<Pagina><Creditos /></Pagina>} />
+      <Route path="/generador" element={<Pagina title="Generador con IA | SKD"><Generador /></Pagina>} />
+      <Route path="/personalizador" element={<Pagina title="Personalizador | SKD"><Personalizador /></Pagina>} />
+      <Route path="/galeria-clientes" element={<Pagina title="Galería de clientes | SKD"><GaleriaClientes /></Pagina>} />
+      <Route path="/creditos" element={<Pagina title="Créditos 3D | SKD"><Creditos /></Pagina>} />
       <Route
         path="/carrito"
         element={
-          <Pagina>
+          <Pagina title="Carrito | SKD">
             <RutaProtegida roles={ROLES_CLIENTE}>
               <Carrito />
             </RutaProtegida>
@@ -78,7 +86,7 @@ function AppRoutes() {
       <Route
         path="/checkout"
         element={
-          <Pagina>
+          <Pagina title="Finalizar compra | SKD">
             <RutaProtegida roles={ROLES_CLIENTE}>
               <Checkout />
             </RutaProtegida>
@@ -88,7 +96,7 @@ function AppRoutes() {
       <Route
         path="/checkout/resultado"
         element={
-          <Pagina>
+          <Pagina title="Finalizar compra | SKD">
             <RutaProtegida roles={ROLES_CLIENTE}>
               <CheckoutResultado />
             </RutaProtegida>
@@ -98,7 +106,7 @@ function AppRoutes() {
       <Route
         path="/mis-pedidos"
         element={
-          <Pagina>
+          <Pagina title="Mis pedidos | SKD">
             <RutaProtegida roles={ROLES_CLIENTE}>
               <MisPedidos />
             </RutaProtegida>
@@ -108,7 +116,7 @@ function AppRoutes() {
       <Route
         path="/mis-cupones"
         element={
-          <Pagina>
+          <Pagina title="Mis cupones | SKD">
             <RutaProtegida roles={ROLES_CLIENTE}>
               <MisCupones />
             </RutaProtegida>
@@ -118,7 +126,7 @@ function AppRoutes() {
       <Route
         path="/mis-favoritos"
         element={
-          <Pagina>
+          <Pagina title="Mis favoritos | SKD">
             <RutaProtegida roles={ROLES_CLIENTE}>
               <MisFavoritos />
             </RutaProtegida>
@@ -128,7 +136,7 @@ function AppRoutes() {
       <Route
         path="/mis-disenos"
         element={
-          <Pagina>
+          <Pagina title="Mis diseños | SKD">
             <RutaProtegida>
               <MisDisenos />
             </RutaProtegida>
@@ -138,7 +146,7 @@ function AppRoutes() {
       <Route
         path="/solicitar-diseno"
         element={
-          <Pagina>
+          <Pagina title="Diseño asistido | SKD">
             <RutaProtegida>
               <SolicitarDiseno />
             </RutaProtegida>
@@ -148,7 +156,7 @@ function AppRoutes() {
       <Route
         path="/disenador"
         element={
-          <Pagina>
+          <Pagina title="Panel diseñador | SKD">
             <RutaProtegida roles={ROLES_DISENADOR}>
               <PanelDisenador />
             </RutaProtegida>
@@ -158,7 +166,7 @@ function AppRoutes() {
       <Route
         path="/bandeja"
         element={
-          <Pagina>
+          <Pagina title="Bandeja de entrada | SKD">
             <RutaProtegida>
               <Bandeja />
             </RutaProtegida>
@@ -168,13 +176,14 @@ function AppRoutes() {
       <Route
         path="/pedidos/:id/seguimiento"
         element={
-          <Pagina>
+          <Pagina title="Seguimiento del pedido | SKD">
             <RutaProtegida roles={ROLES_CLIENTE}>
               <SeguimientoPedido />
             </RutaProtegida>
           </Pagina>
         }
       />
+      <Route path="*" element={<Pagina title="Página no encontrada | SKD"><NoEncontrado /></Pagina>} />
     </Routes>
   );
 }
