@@ -16,4 +16,6 @@ public interface EmailService {
 
     void enviarEstadoPedido(String correo, String nombre, Long pedidoId, String estado);
 
+    void enviarVerificacionEmail(String correo, String nombre, String token);
+
 }

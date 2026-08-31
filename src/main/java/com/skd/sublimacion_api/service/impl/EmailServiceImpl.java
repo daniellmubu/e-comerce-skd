@@ -195,4 +195,32 @@ public class EmailServiceImpl implements EmailService {
                     pedidoId, correo, e.getMessage(), e);
         }
     }
+
+    @Async
+    @Override
+    public void enviarVerificacionEmail(String correo, String nombre, String token) {
+
+        try {
+            MimeMessage mime = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mime, false, "UTF-8");
+
+            helper.setTo(correo);
+            helper.setSubject("SKD - Tu código de verificación");
+            helper.setText("Hola " + nombre + ",\n\n"
+                    + "Tu código de verificación de SKD es:\n\n"
+                    + "CÓDIGO: " + token + "\n\n"
+                    + "Ingrésalo en la sección 'Verifica tu correo' de tu panel para "
+                    + "confirmar tu cuenta (válido por 24 horas).\n\n"
+                    + "También puedes confirmar desde este enlace:\n"
+                    + frontendUrl + "/verificar-email?token=" + token + "\n\n"
+                    + "Si no creaste una cuenta en SKD, ignora este correo.");
+
+            mailSender.send(mime);
+            log.info("Correo de verificación enviado a {}", correo);
+
+        } catch (MessagingException | RuntimeException e) {
+            log.error("No se pudo enviar el correo de verificación a {}: {}",
+                    correo, e.getMessage(), e);
+        }
+    }
 }

@@ -19,5 +19,6 @@ public class AuthResponse {
     private String username;
     private String correo;
     private String rol;
+    private Boolean verificado;
     private CuponBienvenidaResponse cuponBienvenida;
 }

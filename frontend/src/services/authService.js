@@ -107,3 +107,13 @@ export async function restablecerPassword(token, password) {
   });
   return data;
 }
+
+export async function verificarEmail(token) {
+  const { data } = await api.post("/auth/verificar-email", { token });
+  return data;
+}
+
+export async function reenviarVerificacion(correo) {
+  const { data } = await api.post("/auth/reenviar-verificacion", { correo });
+  return data;
+}
