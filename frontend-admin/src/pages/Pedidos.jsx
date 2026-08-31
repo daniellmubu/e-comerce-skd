@@ -6,6 +6,7 @@ import {
   FaSearch,
   FaPalette,
   FaImage,
+  FaCheck,
 } from "react-icons/fa";
 
 import Badge from "../components/Badge";
@@ -21,6 +22,7 @@ import {
   listarPedidos,
   obtenerPedidoPorId,
   cambiarEstadoPedido,
+  aprobarPago,
 } from "../api/pedidosApi";
 import { formatPrice, formatFechaHora, capitalizar } from "../utils/formato";
 
@@ -52,6 +54,7 @@ function Pedidos() {
   const [detalleLoading, setDetalleLoading] = useState(false);
   const [nuevoEstado, setNuevoEstado] = useState("");
   const [guardandoEstado, setGuardandoEstado] = useState(false);
+  const [aprobandoPago, setAprobandoPago] = useState(false);
   const [detalleError, setDetalleError] = useState(null);
   // URL del diseño a ampliar en la vista previa
   const [imagenEnVista, setImagenEnVista] = useState(null);
@@ -128,6 +131,22 @@ function Pedidos() {
       setDetalleError(getErrorMessage(err));
     } finally {
       setGuardandoEstado(false);
+    }
+  };
+
+  const aprobarPagoPedido = async () => {
+    if (!detalle) return;
+    setAprobandoPago(true);
+    setDetalleError(null);
+    try {
+      const actualizado = await aprobarPago(detalle.id);
+      setDetalle(actualizado);
+      setNuevoEstado(actualizado.estado);
+      cargar();
+    } catch (err) {
+      setDetalleError(getErrorMessage(err));
+    } finally {
+      setAprobandoPago(false);
     }
   };
 
@@ -387,6 +406,30 @@ function Pedidos() {
                 <span>{formatPrice(detalle.total)}</span>
               </div>
             </div>
+
+            {detalle.metodoPago && detalle.estadoPago !== "aprobado" && (
+              <div className="rounded-xl border border-emerald-200 p-4 dark:border-emerald-500/30">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">
+                      Pago
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-slate-400">
+                      Método: {capitalizar(detalle.metodoPago)} · Estado:{" "}
+                      {capitalizar(detalle.estadoPago)}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={aprobarPagoPedido}
+                    loading={aprobandoPago}
+                    leftIcon={<FaCheck />}
+                    className="!bg-emerald-600"
+                  >
+                    Aprobar pago
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Cambiar estado */}
             <div className="rounded-xl border border-gray-200 p-4 dark:border-slate-700">

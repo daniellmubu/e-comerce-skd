@@ -11,7 +11,7 @@ import {
 import { listarEmpaques } from "../services/empaqueService";
 import { listarCupones, listarMisCupones } from "../services/cuponService";
 import { procesarCheckout } from "../services/checkoutService";
-import { iniciarPagoWompi } from "../services/pagoService";
+import { iniciarPagoWompi, simularPagoTarjeta } from "../services/pagoService";
 import { calcularEnvio } from "../services/envioService";
 import { getErrorMessage } from "../services/api";
 import Button from "../components/ui/Button";
@@ -37,8 +37,13 @@ function obtenerFechaMinimaHoy() {
 
 const METODOS_PAGO = [
   { value: "tarjeta", label: "Tarjeta de crédito/débito" },
+  { value: "pse", label: "PSE" },
+  { value: "nequi", label: "Nequi" },
   { value: "efectivo", label: "Contraentrega" },
 ];
+
+// Número de Nequi del negocio para pagos por transferencia (sin Wompi).
+const NEQUI_NUMERO = import.meta.env.VITE_NEQUI_NUMBER || "3223458419";
 
 function Checkout() {
   const navigate = useNavigate();
@@ -60,6 +65,10 @@ function Checkout() {
   const [cuponAplicado, setCuponAplicado] = useState(null);
   const [errorCupon, setErrorCupon] = useState(null);
   const [metodoPago, setMetodoPago] = useState(METODOS_PAGO[0].value);
+  const [numeroTarjeta, setNumeroTarjeta] = useState("");
+  const [fechaExpiracion, setFechaExpiracion] = useState("");
+  const [cvv, setCvv] = useState("");
+  const [errorTarjeta, setErrorTarjeta] = useState(null);
   const [fechaEntregaDeseada, setFechaEntregaDeseada] = useState("");
   const fechaMinima = obtenerFechaMinimaHoy();
 
@@ -259,6 +268,21 @@ function Checkout() {
     setProcesando(true);
     setErrorCheckout(null);
     try {
+      if (metodoPago === "tarjeta") {
+        if (!/^\d{13,19}$/.test(numeroTarjeta)) {
+          setErrorTarjeta("Número de tarjeta inválido (13 a 19 dígitos).");
+          return;
+        }
+        if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(fechaExpiracion)) {
+          setErrorTarjeta("La fecha de expiración debe tener el formato MM/AA.");
+          return;
+        }
+        if (!/^\d{3}$/.test(cvv)) {
+          setErrorTarjeta("El CVV debe tener 3 dígitos.");
+          return;
+        }
+      }
+
       const respuesta = await procesarCheckout({
         direccionId: Number(direccionId),
         empaqueId: Number(empaqueId),
@@ -266,10 +290,23 @@ function Checkout() {
         fechaEntregaDeseada: fechaEntregaDeseada || null,
         metodoPago,
       });
-      if (metodoPago === "tarjeta") {
+
+      if (metodoPago === "pse") {
         const wompi = await iniciarPagoWompi(respuesta.pagoId);
         window.location.href = wompi.url;
         return;
+      }
+
+      if (metodoPago === "tarjeta") {
+        const simulacion = await simularPagoTarjeta(respuesta.pagoId, {
+          numeroTarjeta,
+          fechaExpiracion,
+          cvv,
+        });
+        if (!simulacion.aprobado) {
+          setErrorCheckout(simulacion.mensaje || "El pago fue rechazado.");
+          return;
+        }
       }
 
       setResultado(respuesta);
@@ -286,8 +323,16 @@ function Checkout() {
       <section className="flex min-h-screen items-center justify-center bg-gray-50 px-6 py-16 text-gray-900 dark:bg-slate-950 dark:text-white">
         <div className="w-full max-w-lg rounded-3xl border border-gray-200 bg-white p-10 text-center dark:border-slate-800 dark:bg-slate-900/80">
           <FaCheckCircle className="mx-auto mb-6 text-5xl text-emerald-400" />
-          <h1 className="text-3xl font-bold">¡Pedido confirmado!</h1>
-          <p className="mt-2 text-gray-500 dark:text-slate-400">{resultado.mensaje}</p>
+          <h1 className="text-3xl font-bold">
+            {metodoPago === "nequi" || metodoPago === "efectivo"
+              ? "¡Pedido recibido!"
+              : "¡Pedido confirmado!"}
+          </h1>
+          <p className="mt-2 text-gray-500 dark:text-slate-400">
+            {metodoPago === "nequi" || metodoPago === "efectivo"
+              ? "Tu pedido está pendiente de pago. Te confirmaremos cuando recibamos el pago."
+              : resultado.mensaje}
+          </p>
 
           <div className="mt-8 space-y-2 rounded-2xl border border-gray-200 bg-gray-50 p-6 text-left text-sm text-gray-600 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-300">
             <div className="flex justify-between">
@@ -317,6 +362,20 @@ function Checkout() {
               <span>{formatPrice(resultado.total)}</span>
             </div>
           </div>
+
+          {metodoPago === "nequi" && (
+            <div className="mt-6 rounded-2xl border border-emerald-300 bg-emerald-50 p-5 text-left dark:border-emerald-500/30 dark:bg-emerald-500/10">
+              <p className="font-semibold text-emerald-700 dark:text-emerald-300">
+                Pago con Nequi
+              </p>
+              <p className="mt-1 text-sm text-emerald-700/80 dark:text-emerald-300/80">
+                Transfiere{" "}
+                <strong>{formatPrice(resultado.total)}</strong> al Nequi{" "}
+                <strong>{NEQUI_NUMERO}</strong> y confirma el pago en tu app.
+                Tu pedido se procesa cuando confirmemos la transferencia.
+              </p>
+            </div>
+          )}
 
           <Button fullWidth className="mt-8" onClick={() => navigate("/mis-pedidos")}>
             Ver mis pedidos
@@ -562,6 +621,56 @@ function Checkout() {
                     ))}
                   </select>
                 </div>
+
+                {metodoPago === "tarjeta" && (
+                  <div className="mb-4 space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-slate-800 dark:bg-slate-950/50">
+                    <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">
+                      Datos de la tarjeta
+                    </p>
+                    <Input
+                      label="Número de tarjeta"
+                      placeholder="0000 0000 0000 0000"
+                      inputMode="numeric"
+                      value={numeroTarjeta}
+                      onChange={(e) =>
+                        setNumeroTarjeta(
+                          e.target.value.replace(/\D/g, "").slice(0, 19)
+                        )
+                      }
+                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input
+                        label="Expiración (MM/AA)"
+                        placeholder="12/28"
+                        inputMode="numeric"
+                        value={fechaExpiracion}
+                        onChange={(e) => {
+                          let v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                          if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2);
+                          setFechaExpiracion(v);
+                        }}
+                      />
+                      <Input
+                        label="CVV"
+                        placeholder="123"
+                        type="password"
+                        inputMode="numeric"
+                        value={cvv}
+                        onChange={(e) =>
+                          setCvv(e.target.value.replace(/\D/g, "").slice(0, 3))
+                        }
+                      />
+                    </div>
+                    {errorTarjeta && (
+                      <p className="rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+                        {errorTarjeta}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400 dark:text-slate-500">
+                      Demo: cualquier CVV aprueba, excepto 000 (rechaza).
+                    </p>
+                  </div>
+                )}
 
                 <Input
                   type="date"

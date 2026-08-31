@@ -24,6 +24,13 @@ export async function obtenerPedidoPorId(id) {
   return data;
 }
 
+// PATCH /api/admin/pedidos/{id}/aprobar-pago
+// Aprueba el pago (Nequi/contraentrega) y mueve el pedido a disenando.
+export async function aprobarPago(id) {
+  const { data } = await api.patch(`/admin/pedidos/${id}/aprobar-pago`);
+  return data;
+}
+
 // PATCH /api/admin/pedidos/{id}/estado
 // Estados válidos: recibido, disenando, enviado, entregado, cancelado
 export async function cambiarEstadoPedido(id, estado) {

@@ -101,4 +101,10 @@ public class AdminPedidoController {
 
         return adminPedidoService.cambiarEstado(id, request.getEstado());
     }
+
+    @PatchMapping("/{id}/aprobar-pago")
+    public PedidoResponse aprobarPago(@PathVariable Long id) {
+
+        return adminPedidoService.aprobarPago(id);
+    }
 }

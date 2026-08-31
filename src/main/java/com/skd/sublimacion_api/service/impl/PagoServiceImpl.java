@@ -113,7 +113,7 @@ public class PagoServiceImpl implements PagoService {
     public IniciarPagoWompiResponse iniciarPagoWompi(Long pagoId, Long usuarioId) {
 
         Pago pago = obtenerPagoPropio(pagoId, usuarioId);
-        validarPagoConTarjeta(pago);
+        validarPagoParaWompi(pago);
 
         WompiService.LinkPago link = wompiService.crearLinkPago(
                 pago.getMonto(),
@@ -206,10 +206,13 @@ public class PagoServiceImpl implements PagoService {
         return pago;
     }
 
-    private void validarPagoConTarjeta(Pago pago) {
+    private void validarPagoParaWompi(Pago pago) {
 
-        if (!"tarjeta".equalsIgnoreCase(pago.getMetodo())) {
-            throw new BadRequestException("Este pago no se puede pagar con tarjeta porque su método es otro.");
+        boolean esTarjeta = "tarjeta".equalsIgnoreCase(pago.getMetodo());
+        boolean esPse = "pse".equalsIgnoreCase(pago.getMetodo());
+
+        if (!esTarjeta && !esPse) {
+            throw new BadRequestException("Este método de pago no se procesa en Wompi.");
         }
 
         if ("aprobado".equalsIgnoreCase(pago.getEstado())) {

@@ -4,9 +4,11 @@ import com.skd.sublimacion_api.dto.pedido.ItemPedidoResponse;
 import com.skd.sublimacion_api.dto.pedido.PedidoKanbanResponse;
 import com.skd.sublimacion_api.dto.pedido.PedidoResponse;
 import com.skd.sublimacion_api.entity.ItemPedido;
+import com.skd.sublimacion_api.entity.Pago;
 import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.ItemPedidoRepository;
+import com.skd.sublimacion_api.repository.PagoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
 import com.skd.sublimacion_api.service.EmailService;
 import com.skd.sublimacion_api.service.NotificacionService;
@@ -36,6 +38,7 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
                     "enviado", "entregado", "cancelado");
 
     private final PedidoRepository pedidoRepository;
+    private final PagoRepository pagoRepository;
     private final ItemPedidoRepository itemPedidoRepository;
     private final WebSocketService webSocketService;
     private final NotificacionService notificacionService;
@@ -95,6 +98,48 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
                     "Tu pedido cambió de estado",
                     "Tu pedido #" + pedido.getId()
                             + " ahora está en estado: " + pedido.getEstado() + ".");
+            emailService.enviarEstadoPedido(
+                    pedido.getUsuario().getCorreo(),
+                    pedido.getUsuario().getNombre(),
+                    pedido.getId(),
+                    pedido.getEstado());
+        }
+
+        return response;
+    }
+
+    @Override
+    public PedidoResponse aprobarPago(Long id) {
+
+        Pedido pedido = obtenerPedido(id);
+
+        Pago pago = pagoRepository.findByPedidoId(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "El pedido no tiene un pago registrado"));
+
+        if ("aprobado".equalsIgnoreCase(pago.getEstado())) {
+            throw new IllegalArgumentException("El pago de este pedido ya fue aprobado.");
+        }
+
+        pago.setEstado("aprobado");
+        pago.setProcesadoEn(java.time.LocalDateTime.now());
+        pagoRepository.save(pago);
+
+        String estadoAnterior = pedido.getEstado();
+        if ("recibido".equalsIgnoreCase(pedido.getEstado())) {
+            pedido.setEstado("disenando");
+            pedidoRepository.save(pedido);
+        }
+
+        PedidoResponse response = convertir(pedido);
+
+        if (!estadoAnterior.equals(pedido.getEstado())) {
+            webSocketService.publicarEstadoPedido(pedido.getId(), pedido.getEstado());
+            notificacionService.crear(
+                    pedido.getUsuario().getId(),
+                    "PAGO_APROBADO",
+                    "Pago aprobado",
+                    "Tu pago del pedido #" + pedido.getId() + " fue aprobado.");
             emailService.enviarEstadoPedido(
                     pedido.getUsuario().getCorreo(),
                     pedido.getUsuario().getNombre(),
@@ -171,6 +216,8 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
                 .map(this::convertirItem)
                 .toList();
 
+        Pago pago = pagoRepository.findByPedidoId(pedido.getId()).orElse(null);
+
         return PedidoResponse.builder()
                 .id(pedido.getId())
                 .usuarioId(pedido.getUsuario().getId())
@@ -182,6 +229,8 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
                 .descuento(pedido.getDescuento())
                 .total(pedido.getTotal())
                 .items(items)
+                .metodoPago(pago != null ? pago.getMetodo() : null)
+                .estadoPago(pago != null ? pago.getEstado() : null)
                 .build();
     }
 
