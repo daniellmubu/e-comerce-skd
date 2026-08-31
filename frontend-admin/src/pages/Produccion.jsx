@@ -15,21 +15,22 @@ import { obtenerKanban, cambiarEstadoPedido } from "../api/pedidosApi";
 import { useKanbanRealtime } from "../hooks/useKanbanRealtime";
 import { formatPrice, formatFechaHora } from "../utils/formato";
 
-// Estados del tablero de producción (coherentes con el backend).
+// Estados del tablero de producción: los MISMOS que se gestionan en la vista
+// "Pedidos" (recibido, disenando, enviado, entregado, cancelado).
 const COLUMNAS = [
   { estado: "recibido", titulo: "Recibido", color: "cyan" },
   { estado: "disenando", titulo: "Diseñando", color: "violet" },
-  { estado: "imprimiendo", titulo: "Imprimiendo", color: "purple" },
-  { estado: "empacando", titulo: "Empacando", color: "amber" },
-  { estado: "enviado", titulo: "Enviado", color: "green" },
+  { estado: "enviado", titulo: "Enviado", color: "amber" },
+  { estado: "entregado", titulo: "Entregado", color: "green" },
+  { estado: "cancelado", titulo: "Cancelado", color: "red" },
 ];
 
 const COLOR_HEADER = {
   cyan: "bg-cyan-500/15 text-cyan-500 border-cyan-500/30",
   violet: "bg-violet-500/15 text-violet-500 border-violet-500/30",
-  purple: "bg-purple-500/15 text-purple-500 border-purple-500/30",
   amber: "bg-amber-500/15 text-amber-500 border-amber-500/30",
   green: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
+  red: "bg-red-500/15 text-red-500 border-red-500/30",
 };
 
 function Produccion() {

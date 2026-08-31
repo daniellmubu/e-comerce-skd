@@ -46,6 +46,13 @@ const FORM_VACIO = {
   categoriaId: "",
 };
 
+// Solo las prendas con talla (camisas y sudaderas) admiten variantes.
+// Filtro por palabra clave en el nombre de la categoría.
+const esPrendaConTalla = (categoria) => {
+  const nombre = (categoria || "").toLowerCase();
+  return nombre.includes("camis") || nombre.includes("sudadera");
+};
+
 const FILTROS_INICIALES = {
   search: "",
   categoriaId: "",
@@ -610,14 +617,16 @@ function Productos() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => irAVariantes(producto)}
-                          leftIcon={<FaTshirt />}
-                        >
-                          Variantes
-                        </Button>
+                        {esPrendaConTalla(producto.categoria) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => irAVariantes(producto)}
+                            leftIcon={<FaTshirt />}
+                          >
+                            Variantes
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"

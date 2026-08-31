@@ -34,6 +34,14 @@ const FORM_VACIO = {
   sku: "",
 };
 
+// Solo se gestionan variantes para prendas con talla (camisas y sudaderas).
+// El filtro es por palabra clave en el nombre de la categoría para cubrir
+// variantes de escritura (Camisas/Camisetas y Sudaderas/Sudadera).
+const esPrendaConTalla = (categoria) => {
+  const nombre = (categoria || "").toLowerCase();
+  return nombre.includes("camis") || nombre.includes("sudadera");
+};
+
 function Variantes() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -60,14 +68,17 @@ function Variantes() {
   const [eliminando, setEliminando] = useState(null);
   const [eliminandoLoading, setEliminandoLoading] = useState(false);
 
-  // Carga los productos para el selector.
+  // Carga los productos para el selector (solo prendas con talla).
   const cargarProductos = useCallback(async () => {
     try {
       const resultado = await listarProductos({ size: 100, activo: true });
-      setProductos(resultado?.content ?? []);
+      const productosFiltrados = (resultado?.content ?? []).filter((p) =>
+        esPrendaConTalla(p.categoria)
+      );
+      setProductos(productosFiltrados);
       // Si no vino un producto por URL, tomamos el primero.
-      if (!productoIdInicial && resultado?.content?.length > 0) {
-        const primero = resultado.content[0];
+      if (!productoIdInicial && productosFiltrados.length > 0) {
+        const primero = productosFiltrados[0];
         setProductoId(String(primero.id));
         setProductoNombre(primero.nombre);
       }
@@ -103,6 +114,19 @@ function Variantes() {
   useEffect(() => {
     cargarVariantes(productoId);
   }, [cargarVariantes, productoId]);
+
+  // Defensa: si el producto seleccionado por URL no es una prenda con talla
+  // (p. ej. llegó por un enlace directo), se reemplaza por el primero apto.
+  useEffect(() => {
+    if (productoId && productos.length > 0) {
+      const existe = productos.some((p) => String(p.id) === String(productoId));
+      if (!existe) {
+        const primero = productos[0];
+        setProductoId(String(primero.id));
+        setProductoNombre(primero.nombre);
+      }
+    }
+  }, [productoId, productos]);
 
   const cambiarProducto = (e) => {
     const id = e.target.value;
@@ -213,7 +237,7 @@ function Variantes() {
             Variantes
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            Gestiona tallas, colores, stock y precio de cada producto.
+            Gestiona tallas, colores, stock y precio de camisas y sudaderas.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -258,8 +282,16 @@ function Variantes() {
       {!productoId ? (
         <EmptyState
           icon={<FaBoxOpen />}
-          title="Selecciona un producto"
-          description="Elige un producto para ver y gestionar sus variantes."
+          title={
+            productos.length === 0
+              ? "No hay prendas con talla"
+              : "Selecciona un producto"
+          }
+          description={
+            productos.length === 0
+              ? "Solo se gestionan variantes de camisas y sudaderas. Crea productos en esas categorías."
+              : "Elige un producto para ver y gestionar sus variantes."
+          }
         />
       ) : loading ? (
         <div className="flex justify-center py-20">

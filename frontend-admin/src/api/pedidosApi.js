@@ -32,8 +32,8 @@ export async function cambiarEstadoPedido(id, estado) {
 }
 
 // GET /api/admin/pedidos/kanban
-// Respuesta: { recibido: [...], disenando: [...], imprimiendo: [...],
-//   empacando: [...], enviado: [...] }
+// Respuesta: { recibido: [...], disenando: [...], enviado: [...],
+//   entregado: [...], cancelado: [...] }
 // Cada elemento: { id, usuarioId, usuario, estado, total, creadoEn,
 //   cantidadItems, tieneDiseno, guiaEnvio }
 export async function obtenerKanban() {

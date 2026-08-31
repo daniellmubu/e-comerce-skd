@@ -108,8 +108,9 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
     @Override
     public Map<String, List<PedidoKanbanResponse>> kanban() {
 
+        // Mismos estados que gestiona la vista "Pedidos" del panel.
         List<String> estadosProduccion = List.of(
-                "recibido", "disenando", "imprimiendo", "empacando", "enviado");
+                "recibido", "disenando", "enviado", "entregado", "cancelado");
 
         Map<String, List<PedidoKanbanResponse>> tablero = new LinkedHashMap<>();
         estadosProduccion.forEach(estado ->
