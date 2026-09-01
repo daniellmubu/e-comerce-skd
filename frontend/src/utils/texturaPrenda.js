@@ -495,6 +495,85 @@ export async function componerMugPrintReady({
   return { canvas: canvasBleed, dataUrl: canvasBleed.toDataURL("image/png"), ancho, alto, bleedPx, anchoConBleed: wBleed, altoConBleed: hBleed };
 }
 
+// ========================================================================
+// VISTA PREVIA CON MOCKUP (mismo WxH y mismas capas que print-ready,
+// pero compuesta SOBRE la foto/silueta del vaso de esa cara)
+// ========================================================================
+// Reutiliza 100% la lógica de capas: componerCanvasMugRectangularInterno
+// (x/100*W, y/100*H, anchoBase*escala*INSET, factorRect, rotación).
+// Solo añade debajo: fondo blanco + imagen mockup centrada con `contain`
+// (como Panel2D con object-contain) + tinte opcional multiply.
+const ZOOM_MOCKUP_PREVIEW = {
+  // Debe coincidir con ZOOM_MOCKUP de Editor2D.jsx — bbox 24% frente necesita 1.75x, 51% laterales 1.30x
+  mug: { frente: 1.75, izquierda: 1.30, derecha: 1.30 },
+  mug_magico: { frente: 1.75, izquierda: 1.30, derecha: 1.30 },
+  jarra_cervecera: { frente: 1.85, izquierda: 1.55, derecha: 1.55 },
+};
+
+export async function componerMugMockupPreview({
+  disenos = [],
+  textos = [],
+  ancho = MUG_PRINT_WIDTH_PX,
+  alto = MUG_PRINT_HEIGHT_PX,
+  anchoBase = ANCHO_IMAGEN_MUG_TEX,
+  mockupUrl = null,
+  colorProducto = null,
+  cara = "frente",
+  selectedProduct = "mug",
+} = {}) {
+  const canvasDiseno = await componerCanvasMugRectangularInterno({ disenos, textos, ancho, alto, anchoBase });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = ancho;
+  canvas.height = alto;
+  const ctx = canvas.getContext("2d");
+
+  // Fondo blanco igual que Panel2D (bg-white)
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, ancho, alto);
+
+  if (mockupUrl) {
+    try {
+      const mockupImg = await cargarImagen(mockupUrl, "anonymous");
+      const zoom = ZOOM_MOCKUP_PREVIEW[selectedProduct]?.[cara] ?? 1;
+      const escala = Math.min(ancho / mockupImg.naturalWidth, alto / mockupImg.naturalHeight) * zoom;
+      const dw = mockupImg.naturalWidth * escala;
+      const dh = mockupImg.naturalHeight * escala;
+      const dx = (ancho - dw) / 2;
+      const dy = (alto - dh) / 2;
+
+      if (colorProducto) {
+        // Mockup + tinte multiply recortado a la silueta (source-in),
+        // igual que componerImagenFinal / Panel2D (opacity 0.18).
+        const tmp = document.createElement("canvas");
+        tmp.width = ancho;
+        tmp.height = alto;
+        const tctx = tmp.getContext("2d");
+        tctx.drawImage(mockupImg, dx, dy, dw, dh);
+        tctx.globalCompositeOperation = "source-in";
+        tctx.fillStyle = colorProducto;
+        tctx.fillRect(0, 0, ancho, alto);
+        // Dibujar mockup base y luego tinte con multiply
+        ctx.drawImage(mockupImg, dx, dy, dw, dh);
+        ctx.globalCompositeOperation = "multiply";
+        ctx.globalAlpha = 0.18;
+        ctx.drawImage(tmp, 0, 0);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.drawImage(mockupImg, dx, dy, dw, dh);
+      }
+    } catch {
+      // Si falla la carga del mockup, se deja solo fondo blanco + diseño
+    }
+  }
+
+  // Capa de diseño transparente encima, con posiciones idénticas al print-ready
+  ctx.drawImage(canvasDiseno, 0, 0);
+
+  return { canvas, dataUrl: canvas.toDataURL("image/png"), ancho, alto };
+}
+
 export async function componerTexturaSolida(color, disenoUrl, { anchoFraccion, circunferencia, altura, texto = null, textos = null, disenos = null, fondoTransparente = null }) {
   const texW = 512;
   const texH = 512;

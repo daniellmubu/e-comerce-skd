@@ -25,9 +25,16 @@ import { guardarPersonalizacion } from "../services/personalizacionService";
 import { generarDiseno, subirDiseno } from "../services/disenoService";
 import { listarPlantillas } from "../services/plantillaService";
 import { listarProductos } from "../services/productService";
-import { getErrorMessage } from "../services/api";
-import pocilloFrente from "../assets/images/products/base/pocillo-frente.png";
-import pocilloAsa from "../assets/images/products/base/pocillo-asa.png";
+import { getErrorMessage, getMensajeAmigableIA } from "../services/api";
+import mugFrente from "../assets/images/products/base/mug-frente.png";
+import mugIzquierda from "../assets/images/products/base/mug-izquierda.png";
+import mugDerecha from "../assets/images/products/base/mug-derecha.png";
+import mugMagicoFrente from "../assets/images/products/base/mug-magico-frente.png";
+import mugMagicoIzquierda from "../assets/images/products/base/mug-magico-izquierda.png";
+import mugMagicoDerecha from "../assets/images/products/base/mug-magico-derecha.png";
+import jarraFrente from "../assets/images/products/base/jarra-cervecera-frente.png";
+import jarraIzquierda from "../assets/images/products/base/jarra-cervecera-izquierda.png";
+import jarraDerecha from "../assets/images/products/base/jarra-cervecera-derecha.png";
 // 3D oculto temporalmente — constantes de escala para slider 2D (antes en Prenda3D)
 const ESCALA_MIN_3D = 0.2;
 const ESCALA_MAX_3D = 4.5;
@@ -46,6 +53,7 @@ import {
   BLEED_PX_300DPI,
   BLEED_MM_DEFECTO,
   componerMugPrintReady,
+  componerMugMockupPreview,
   MUG_PRINT_WIDTH_PX,
   MUG_PRINT_HEIGHT_PX,
   JARRA_PRINT_WIDTH_PX,
@@ -68,31 +76,36 @@ const ANCHO_IMAGEN_BASE = 0.38;
 // Mockups base (foto de la prenda con fondo transparente) usados solo para
 // componer la imagen final que se guarda como miniatura.
 const IMAGENES_MOCKUP = {
-  mug: pocilloFrente,
-  mug_magico: pocilloFrente,
-  jarra_cervecera: pocilloFrente,
+  mug: mugFrente,
+  mug_magico: mugMagicoFrente,
+  jarra_cervecera: jarraFrente,
 };
 
 const BASES_MOCKUP_POR_CARA = {
   mug: {
-    frente: pocilloFrente,
-    atras: pocilloAsa,
+    frente: mugFrente,
+    izquierda: mugIzquierda,
+    derecha: mugDerecha,
   },
   mug_magico: {
-    frente: pocilloFrente,
-    atras: pocilloAsa,
+    frente: mugMagicoFrente,
+    izquierda: mugMagicoIzquierda,
+    derecha: mugMagicoDerecha,
   },
   jarra_cervecera: {
-    frente: pocilloFrente,
-    atras: pocilloAsa,
+    frente: jarraFrente,
+    izquierda: jarraIzquierda,
+    derecha: jarraDerecha,
   },
 };
 
 function obtenerBaseMockup(tipo, cara) {
+  // Retrocompatibilidad: "atras"/"asa" -> izquierda (vista lateral que antes mostraba el asa)
+  const caraNormalizada = cara === "atras" || cara === "asa" ? "izquierda" : cara;
   return (
-    (cara && BASES_MOCKUP_POR_CARA[tipo]?.[cara]) ||
+    (caraNormalizada && BASES_MOCKUP_POR_CARA[tipo]?.[caraNormalizada]) ||
     IMAGENES_MOCKUP[tipo] ||
-    pocilloFrente
+    mugFrente
   );
 }
 
@@ -115,10 +128,11 @@ function detectarTipoPorNombre(nombre = "") {
   return "mug";
 }
 
-// Ubicaciones del pocillo/mug: de frente y desde atrás (donde se ve el asa).
+// Ubicaciones del mug/jarra: frente y ambos costados (no hay vista "atrás" para estos productos).
 const CARAS_MUG = [
   { id: "frente", label: "Frente" },
-  { id: "atras", label: "Atrás" },
+  { id: "izquierda", label: "Izquierda" },
+  { id: "derecha", label: "Derecha" },
 ];
 
 const CARAS_POR_TIPO = {
@@ -368,6 +382,7 @@ function Personalizador() {
   // Guardado del diseño compuesto en "Mis diseños" (endpoint /disenos/subir).
   const [guardandoDiseno, setGuardandoDiseno] = useState(false);
   const [descargandoPrint, setDescargandoPrint] = useState(false);
+  const [descargandoMockup, setDescargandoMockup] = useState(false);
   const [mostrarGuiasImpresion, setMostrarGuiasImpresion] = useState(true);
   const [mensaje, setMensaje] = useState(null);
   const [procesandoImagen, setProcesandoImagen] = useState(false);
@@ -971,11 +986,11 @@ function Personalizador() {
       } else {
         setMensaje({
           tipo: "error",
-          texto: "La IA no pudo generar un diseño. Intenta de nuevo.",
+          texto: "Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.",
         });
       }
     } catch (error) {
-      setMensaje({ tipo: "error", texto: getErrorMessage(error) });
+      setMensaje({ tipo: "error", texto: getMensajeAmigableIA(error) });
     } finally {
       setGenerandoIA(false);
     }
@@ -1166,26 +1181,33 @@ function Personalizador() {
   // --- PRINT-READY VINCULADO AL VISOR 3D ---
   // Config idéntica a la usada en Prenda3D.jsx/prepararModeloCamiseta/Mug para
   // garantizar paridad visual exacta. Cambiar aquí debe reflejar allí y viceversa.
+  // Para mugs/jarras las 3 vistas son imprimibles (cilindro desplegado) por eso
+  // las 3 llevan conTexto:true — cada vista exporta solo su propio contenido.
   const CONFIG_SUPERFICIE_PRINT = {
     mug: {
       frente: { mapearTorso: false, conTexto: true, anchoBase: 0.22 },
-      atras: { mapearTorso: false, conTexto: false, anchoBase: 0.22 },
+      izquierda: { mapearTorso: false, conTexto: true, anchoBase: 0.22 },
+      derecha: { mapearTorso: false, conTexto: true, anchoBase: 0.22 },
     },
     mug_magico: {
       frente: { mapearTorso: false, conTexto: true, anchoBase: 0.22 },
-      atras: { mapearTorso: false, conTexto: false, anchoBase: 0.22 },
+      izquierda: { mapearTorso: false, conTexto: true, anchoBase: 0.22 },
+      derecha: { mapearTorso: false, conTexto: true, anchoBase: 0.22 },
     },
     jarra_cervecera: {
       frente: { mapearTorso: false, conTexto: true, anchoBase: 0.28 },
-      atras: { mapearTorso: false, conTexto: false, anchoBase: 0.28 },
+      izquierda: { mapearTorso: false, conTexto: true, anchoBase: 0.28 },
+      derecha: { mapearTorso: false, conTexto: true, anchoBase: 0.28 },
     },
   };
 
   function agruparDisenosPorCaraLocal(imagenesLista) {
-    const CARAS_VALIDAS = ["frente", "atras"];
+    const CARAS_VALIDAS = ["frente", "izquierda", "derecha"];
     const grupos = {};
     for (const d of imagenesLista ?? []) {
-      const caraNorm = d.cara === "asa" ? "atras" : d.cara;
+      // Retrocompatibilidad: diseños antiguos guardados con "atras"/"asa" -> "izquierda"
+      let caraNorm = d.cara;
+      if (caraNorm === "asa" || caraNorm === "atras") caraNorm = "izquierda";
       const cara = CARAS_VALIDAS.includes(caraNorm) ? caraNorm : "frente";
       (grupos[cara] ??= []).push(d);
     }
@@ -1273,24 +1295,125 @@ function Personalizador() {
     return dataUrl;
   };
 
-  // Versión que genera las 4 caras con contenido (cada una como archivo separado)
+  // Versión que genera las 3 caras con contenido (cada una como archivo separado)
   // Para mantener simpleza, el botón actual exporta solo la cara activa; esta
   // función deja preparado el soporte para exportar todas si se necesita.
   const componerTodasCarasPrintReady = async () => {
     const caras = CARAS_POR_TIPO[selectedProduct] ?? CARAS_MUG;
     const resultados = [];
     const grupos = agruparDisenosPorCaraLocal(imagenes);
-    // Texto global se evalúa por cara según conTexto
     for (const cara of caras) {
       const cfg = CONFIG_SUPERFICIE_PRINT[selectedProduct]?.[cara.id];
       if (!cfg) continue;
       const tieneDiseno = (grupos[cara.id]?.length ?? 0) > 0;
-      const tieneTexto = cfg.conTexto && (textoDiseno.trim() || emojis.length > 0);
+      const tieneCapasTexto = capasTexto.filter((t) => (t.cara ?? "frente") === cara.id).length > 0;
+      const tieneEmojis = emojis.filter((e) => (e.cara ?? "frente") === cara.id).length > 0;
+      const tieneTextoLegacy = cfg.conTexto && textoDiseno.trim().length > 0;
+      const tieneTexto = cfg.conTexto && (tieneCapasTexto || tieneEmojis || tieneTextoLegacy);
       if (!tieneDiseno && !tieneTexto) continue;
       const dataUrl = await componerImagenPrintReady(cara.id);
       if (dataUrl) resultados.push({ cara: cara.id, label: cara.label, dataUrl });
     }
     return resultados;
+  };
+
+  // --- EXPORTACIÓN CON MOCKUP (misma lógica WYSIWYG que print-ready, pero sobre silueta) ---
+  const componerImagenMockupPreview = async (caraDestino = caraActiva) => {
+    if (!imagenes.length && !emojis.length && !capasTexto.length && !textoDiseno.trim()) return null;
+    const cfg = CONFIG_SUPERFICIE_PRINT[selectedProduct]?.[caraDestino] ?? CONFIG_SUPERFICIE_PRINT.mug.frente;
+    const grupos = agruparDisenosPorCaraLocal(imagenes);
+    const disenosCara = grupos[caraDestino] ?? [];
+    const textosConfig = [];
+    if (capasTexto.length) {
+      for (const capa of capasTexto) {
+        if ((capa.cara ?? "frente") !== caraDestino && cfg.conTexto) {
+          if (caraDestino !== (capa.cara ?? "frente")) continue;
+        }
+        textosConfig.push({
+          contenido: capa.contenido,
+          color: capa.color,
+          fuente: capa.fuente,
+          tamano: capa.tamano,
+          negrita: capa.negrita,
+          cursiva: capa.cursiva,
+          subrayado: capa.subrayado,
+          x: capa.x,
+          y: capa.y,
+          rotacion: capa.rotacion,
+          escala: capa.escala,
+        });
+      }
+    } else if (textoDiseno && textoDiseno.trim()) {
+      textosConfig.push({
+        contenido: textoDiseno,
+        color: colorTexto,
+        fuente: fuenteTexto,
+        tamano: tamanoTexto,
+        negrita: esNegrita,
+        cursiva: esCursiva,
+        subrayado: esSubrayado,
+        x: posicionTexto.x,
+        y: posicionTexto.y,
+        rotacion: rotacionTexto,
+        escala: escalaTexto,
+      });
+    }
+    for (const em of emojis ?? []) {
+      if ((em.cara ?? "frente") !== caraDestino && cfg.conTexto) continue;
+      textosConfig.push({
+        contenido: em.emoji,
+        color: "#000000",
+        fuente: '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
+        tamano: em.tamano ?? 48,
+        x: em.x,
+        y: em.y,
+        rotacion: em.rotacion ?? 0,
+        escala: em.escala ?? 1,
+      });
+    }
+    const textosCara = cfg.conTexto ? textosConfig : [];
+    const esJarra = selectedProduct === "jarra_cervecera";
+    const anchoPreview = esJarra ? JARRA_PRINT_WIDTH_PX : MUG_PRINT_WIDTH_PX;
+    const altoPreview = esJarra ? JARRA_PRINT_HEIGHT_PX : MUG_PRINT_HEIGHT_PX;
+    const mockupUrl = obtenerBaseMockup(selectedProduct, caraDestino);
+    const colorPreview = colorSeleccionado ?? (selectedProduct === "mug_magico" ? "#1a1a1a" : null);
+    const { dataUrl } = await componerMugMockupPreview({
+      disenos: disenosCara,
+      textos: textosCara,
+      ancho: anchoPreview,
+      alto: altoPreview,
+      anchoBase: cfg.anchoBase,
+      mockupUrl,
+      colorProducto: colorPreview,
+      cara: caraDestino,
+      selectedProduct,
+    });
+    return dataUrl;
+  };
+
+  const handleDescargarMockup = async () => {
+    if (!hayDiseno) {
+      setMensaje({ tipo: "error", texto: "No hay diseño para exportar." });
+      return;
+    }
+    setDescargandoMockup(true);
+    try {
+      const dataUrl = await componerImagenMockupPreview(caraActiva);
+      if (!dataUrl) {
+        setMensaje({ tipo: "error", texto: "Esa cara no tiene contenido para previsualizar." });
+        return;
+      }
+      const esJarra = selectedProduct === "jarra_cervecera";
+      const anchoPreview = esJarra ? JARRA_PRINT_WIDTH_PX : MUG_PRINT_WIDTH_PX;
+      const altoPreview = esJarra ? JARRA_PRINT_HEIGHT_PX : MUG_PRINT_HEIGHT_PX;
+      descargarDataUrl(dataUrl, `skd-preview-${selectedProduct}-${caraActiva}-${anchoPreview}x${altoPreview}-mockup.png`);
+      setMensaje({ tipo: "ok", texto: `Vista previa ${anchoPreview}×${altoPreview}px con mockup (${caraActiva}) descargada — mismas posiciones que el print-ready.` });
+    } catch (e) {
+      console.error("Error mockup preview:", e);
+      setMensaje({ tipo: "error", texto: "No se pudo generar la vista previa con mockup." });
+    } finally {
+      setDescargandoMockup(false);
+    }
   };
 
   const handleDescargarPrintReady = async () => {
@@ -1455,7 +1578,7 @@ function Personalizador() {
     else setColorSeleccionado(null);
   };
 
-  // 3D oculto — helpers solo para 2D (frente / atrás desplegados)
+  // 3D oculto — helpers solo para 2D (frente / izquierda / derecha desplegados)
   const handleColocar2D = (cara, x, y) => {
     colocarImagen({ uv: { u: x / 100, v: y / 100 }, posicion: [0, 0, 0.18], cara });
   };
@@ -1616,7 +1739,7 @@ function Personalizador() {
                   <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
                     Vista de la prenda
                   </p>
-                  <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-gray-200 p-1 dark:border-slate-700">
+                  <div className="mb-5 grid grid-cols-3 gap-1 rounded-xl border border-gray-200 p-1 dark:border-slate-700">
                     {carasProducto.map((cara) => (
                       <button
                         key={cara.id}
@@ -2185,11 +2308,11 @@ function Personalizador() {
             )}
           </div>
 
-          {/* Editor 2D: dos vistas frente y espalda editables */}
+          {/* Editor 2D: tres vistas frente / izquierda / derecha editables */}
           <div className="flex min-h-[560px] flex-1 flex-col rounded-2xl border border-gray-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400">
-                Editor 2D · Frente y Atrás
+                Editor 2D · Frente, Izquierda y Derecha
               </h2>
               {hayDiseno && (
                 <button
@@ -2221,49 +2344,52 @@ function Personalizador() {
                 {imagenPendiente && <span className="ml-auto text-[11px] font-semibold text-indigo-600 dark:text-cyan-300">↳ Coloca en {etiquetaCaraActiva}</span>}
               </div>
 
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                {carasProducto.map((cara) => (
-                  <Panel2D
-                    key={cara.id}
-                    cara={cara.id}
-                    titulo={cara.label}
-                    selectedProduct={selectedProduct}
-                    imagenes={imagenes.filter((im) => (im.cara ?? "frente") === cara.id)}
-                    emojis={emojis.filter((em) => (em.cara ?? "frente") === cara.id)}
-                    capasTexto={capasTexto.filter((t) => (t.cara ?? "frente") === cara.id)}
-                    imagenActivaId={imagenActivaId}
-                    textoActivoId={textoActivoId}
-                    emojiActivoId={emojiActivoId}
-                    imagenPendiente={imagenPendiente}
-                    onColocar={handleColocar2D}
-                    onMoverImagen={handleMoverImagen2D}
-                    onMoverTexto={handleMoverTexto2D}
-                    onMoverEmoji={handleMoverEmoji2D}
-                    onSeleccionarImagen={seleccionarImagen}
-                    onSeleccionarTexto={seleccionarCapaTexto}
-                    onSeleccionarEmoji={seleccionarEmoji}
-                    onDeseleccionarTodo={handleDeseleccionarTodo}
-                    activa={caraActiva === cara.id}
-                    colorProducto={colorProducto2D}
-                  />
-                ))}
-              </div>
+              {/* Un solo lienzo grande — la cara que marque la pestaña (como la camiseta) */}
+              {(() => {
+                const caraActual = carasProducto.find((c) => c.id === caraActiva) ?? carasProducto[0];
+                return (
+                  <div className="mx-auto w-full max-w-[720px] lg:max-w-[760px]">
+                    <Panel2D
+                      cara={caraActual.id}
+                      titulo={caraActual.label}
+                      selectedProduct={selectedProduct}
+                      baseImagen={obtenerBaseMockup(selectedProduct, caraActual.id)}
+                      imagenes={imagenes.filter((im) => (im.cara ?? "frente") === caraActual.id)}
+                      emojis={emojis.filter((em) => (em.cara ?? "frente") === caraActual.id)}
+                      capasTexto={capasTexto.filter((t) => (t.cara ?? "frente") === caraActual.id)}
+                      imagenActivaId={imagenActivaId}
+                      textoActivoId={textoActivoId}
+                      emojiActivoId={emojiActivoId}
+                      imagenPendiente={imagenPendiente}
+                      onColocar={handleColocar2D}
+                      onMoverImagen={handleMoverImagen2D}
+                      onMoverTexto={handleMoverTexto2D}
+                      onMoverEmoji={handleMoverEmoji2D}
+                      onSeleccionarImagen={seleccionarImagen}
+                      onSeleccionarTexto={seleccionarCapaTexto}
+                      onSeleccionarEmoji={seleccionarEmoji}
+                      onDeseleccionarTodo={handleDeseleccionarTodo}
+                      activa={true}
+                      colorProducto={colorProducto2D}
+                    />
+                  </div>
+                );
+              })()}
 
               <div className="rounded-xl bg-indigo-50 p-3 dark:bg-cyan-500/10">
-                <p className="text-xs font-semibold text-indigo-700 dark:text-cyan-300">¿Cómo editar en 2D?</p>
+                <p className="text-xs font-semibold text-indigo-700 dark:text-cyan-300">¿Cómo editar? — como el 3D pero en 2D grande</p>
                 <ul className="mt-1 list-disc pl-4 text-[11px] leading-relaxed text-indigo-600/80 dark:text-cyan-200/70">
-                  <li><b>Frente</b> y <b>Atrás</b> son lienzos rectangulares desplegados (cilindro → plano).</li>
-                  <li>Lo que ves es idéntico al archivo <b>print-ready 2362×1063</b> (mug) / 2835×1417 (jarra) con fondo transparente.</li>
-                  <li>Haz clic en un lienzo para <b>colocar</b> la imagen pendiente en esa cara.</li>
-                  <li>Selecciona y <b>arrastra</b> cualquier elemento para moverlo. Tamaño/rotación en el panel izquierdo.</li>
-                  <li>Cambia la <b>cara activa</b> para decidir dónde cae la próxima subida/plantilla/IA.</li>
+                  <li><b>Frente</b>, <b>Izquierda</b> y <b>Derecha</b> son fotos del vaso a tamaño grande — <b>haz clic directamente sobre el vaso</b> para colocar la imagen.</li>
+                  <li>El vaso se ve grande y editable, igual que el visor 3D. Arrastra sobre el vaso para mover. El archivo <b>print-ready 2362×1063</b> (mug) / 2835×1417 (jarra) se genera igual.</li>
+                  <li>Selecciona y <b>arrastra</b> cualquier elemento sobre el vaso para moverlo. Tamaño/rotación en el panel izquierdo.</li>
+                  <li>Cambia la <b>cara activa</b> o haz clic en otro vaso para decidir dónde cae la próxima subida/plantilla/IA.</li>
                 </ul>
               </div>
             </div>
             <p className="pt-3 text-center text-xs text-gray-400 dark:text-slate-500">
               {imagenPendiente
-                ? `Haz clic en el lienzo ${etiquetaCaraActiva} para colocar la imagen.`
-                : "Tip: sube o genera una imagen y haz clic en Frente o Atrás para colocarla. Luego arrastra para ajustar."}
+                ? `Haz clic sobre el vaso en ${etiquetaCaraActiva} para colocar la imagen (vaso grande).`
+                : "Tip: sube o genera una imagen y haz clic directamente sobre el vaso grande (Frente, Izquierda o Derecha). Luego arrastra sobre el vaso."}
             </p>
           </div>
 
@@ -2287,11 +2413,12 @@ function Personalizador() {
               {guardandoDiseno ? "Guardando..." : "Guardar diseño"}
             </button>
 
+            {/* TEMP: Print-ready oculto — descomentar para restaurar exportación transparente 2362×1063 para producción
             <button
               type="button"
               onClick={handleDescargarPrintReady}
               disabled={descargandoPrint || !hayDiseno}
-              title="PNG a 3000px con sangrado y marcas de corte para imprenta"
+              title="PNG 2362×1063 (mug) / 2835×1417 (jarra) a 300 DPI, fondo transparente, solo diseño — archivo real para imprenta"
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
             >
               {descargandoPrint ? (
@@ -2301,6 +2428,25 @@ function Personalizador() {
               )}
               {descargandoPrint ? "Generando print..." : "Descargar print-ready"}
             </button>
+            */}
+
+            <button
+              type="button"
+              onClick={handleDescargarMockup}
+              disabled={descargandoMockup || !hayDiseno}
+              title="Misma resolución que print-ready pero compuesta sobre la silueta/foto del vaso de la cara activa (Frente/Izquierda/Derecha) — solo para previsualización, no para imprenta"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-300 bg-white py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-500/30 dark:bg-slate-800 dark:text-cyan-300 dark:hover:bg-slate-700"
+            >
+              {descargandoMockup ? (
+                <FaSpinner className="animate-spin" />
+              ) : (
+                <FaImages />
+              )}
+              {descargandoMockup ? "Generando vista..." : "Descargar vista previa (con mockup)"}
+            </button>
+            <p className="mt-1 text-center text-[10px] leading-tight text-gray-400 dark:text-slate-500">
+              Vista previa {(() => { const esJ = selectedProduct === "jarra_cervecera"; return `${esJ ? JARRA_PRINT_WIDTH_PX : MUG_PRINT_WIDTH_PX}×${esJ ? JARRA_PRINT_HEIGHT_PX : MUG_PRINT_HEIGHT_PX}px`; })()} · {caraActiva} · con silueta del vaso
+            </p>
 
             <button
               type="button"

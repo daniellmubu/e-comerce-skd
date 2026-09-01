@@ -6,7 +6,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import mug from "../assets/images/products/mug.png";
 import { useAuth } from "../context/AuthContext";
 import { generarDiseno } from "../services/disenoService";
-import { getErrorMessage } from "../services/api";
+import { getErrorMessage, getMensajeAmigableIA } from "../services/api";
 import Prenda3D from "../components/ui/Prenda3D";
 
 const PRODUCT_TYPES = [
@@ -162,7 +162,7 @@ function Generador() {
     } catch (error) {
       console.error(error);
       console.error(error.response);
-      setErrorGeneracion(getErrorMessage(error));
+      setErrorGeneracion(getMensajeAmigableIA(error));
     } finally {
       setIsGenerating(false);
     }

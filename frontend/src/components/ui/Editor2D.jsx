@@ -7,13 +7,22 @@ import {
 } from "../../utils/texturaPrenda";
 
 /**
- * Editor 2D por cara (frente / atrás) para mugs y jarras.
+ * Editor 2D por cara (frente / izquierda / derecha) para mugs y jarras.
  * Muestra el área desplegada rectangular (cilindro -> plano) y permite
  * colocar y arrastrar imágenes, textos y emojis en 2D.
  * Las coordenadas x/y son % del rectángulo (0-100), idénticas a las que
  * usa el visor 3D (u*100, v*100) y al print-ready, para paridad WYSIWYG.
  */
 const FACTOR_CILINDRICO_BASE = (2 * Math.PI * 1.1) / 2.0; // 3.4558
+
+// Zoom por cara para que el vaso se vea GRANDE al editar (mide bbox real de los PNG).
+// Frente 2400x1319 con bbox 579x909 (24%x69%) queda minúsculo sin zoom; laterales ya ocupan 51%.
+// Valores calculados para que bbox llene ~38-42% ancho sin recortar mucho alto (overflow hidden).
+const ZOOM_MOCKUP = {
+  mug: { frente: 1.75, izquierda: 1.30, derecha: 1.30 },
+  mug_magico: { frente: 1.75, izquierda: 1.30, derecha: 1.30 },
+  jarra_cervecera: { frente: 1.85, izquierda: 1.55, derecha: 1.55 },
+};
 
 function getDimensiones(selectedProduct) {
   const esJarra = selectedProduct === "jarra_cervecera";
@@ -29,6 +38,7 @@ export function Panel2D({
   cara,
   titulo,
   selectedProduct,
+  baseImagen, // url de la foto base del vaso para esta cara (mug-frente, izquierda, derecha...)
   imagenes = [],
   emojis = [],
   capasTexto = [],
@@ -50,10 +60,35 @@ export function Panel2D({
   const ref = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [drag, setDrag] = useState(null); // { tipo, id }
+  const [imgRatio, setImgRatio] = useState(null); // ancho/alto de la foto base para que el vaso se vea grande
 
   const { ancho, alto, anchoBase } = getDimensiones(selectedProduct);
   const factorRect = FACTOR_CILINDRICO_BASE / (ancho / alto);
   const INSET = 0.88;
+
+  // Detecta la relación de aspecto real de la foto del vaso para que el lienzo
+  // se adapte al producto y el vaso se vea GRANDE (como el visor 3D), no pequeño
+  // dentro de un rectángulo apaisado de impresión.
+  useEffect(() => {
+    if (!baseImagen) {
+      setImgRatio(null);
+      return;
+    }
+    let cancelado = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelado && img.naturalWidth && img.naturalHeight) {
+        setImgRatio(img.naturalWidth / img.naturalHeight);
+      }
+    };
+    img.onerror = () => {
+      if (!cancelado) setImgRatio(null);
+    };
+    img.src = baseImagen;
+    return () => {
+      cancelado = true;
+    };
+  }, [baseImagen]);
 
   useEffect(() => {
     const el = ref.current;
@@ -172,6 +207,10 @@ export function Panel2D({
 
   const cmW = getDimensiones(selectedProduct).ancho === MUG_PRINT_WIDTH_PX ? 20 : 24;
   const cmH = getDimensiones(selectedProduct).alto === MUG_PRINT_HEIGHT_PX ? 9 : 12;
+  // Si hay foto base, el vaso se muestra GRANDE ocupando todo el lienzo (como el 3D).
+  // El lienzo adopta la proporción real de la foto; si aún no cargó, usa 3/4 vertical.
+  const displayAspect = baseImagen ? (imgRatio ? `${imgRatio}` : "3 / 4") : `${ancho} / ${alto}`;
+  const zoomMockup = ZOOM_MOCKUP[selectedProduct]?.[cara] ?? 1;
 
   return (
     <div className={`flex flex-col gap-2 rounded-2xl border-2 bg-white p-3 dark:bg-slate-900 ${activa ? "border-indigo-500 dark:border-cyan-400" : "border-gray-200 dark:border-slate-700"}`}>
@@ -180,7 +219,7 @@ export function Panel2D({
           {titulo} {activa && <span className="ml-2 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] text-white dark:bg-cyan-500">Activa</span>}
         </h3>
         <span className="text-[10px] text-gray-400 dark:text-slate-500">
-          {cmW}×{cmH} cm · {ancho}×{alto}px · 300 DPI
+          {baseImagen ? `Vista ${titulo}` : `${cmW}×${cmH} cm · ${ancho}×${alto}px · 300 DPI`}
         </span>
       </div>
 
@@ -190,36 +229,50 @@ export function Panel2D({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
-        className="relative select-none overflow-hidden rounded-xl border border-dashed bg-gray-50 dark:bg-slate-950"
+        className="relative select-none overflow-hidden rounded-xl border bg-white dark:bg-slate-900 shadow-sm"
         style={{
-          aspectRatio: `${ancho} / ${alto}`,
-          backgroundColor: colorProducto ? `${colorProducto}14` : undefined, // 8% opacity
+          aspectRatio: displayAspect,
+          backgroundColor: colorProducto && !baseImagen ? `${colorProducto}14` : "#ffffff",
           borderColor: activa ? "#6366f1" : undefined,
-          cursor: imagenPendiente ? "crosshair" : drag ? "grabbing" : "default",
+          borderWidth: activa ? "2px" : "1px",
+          borderStyle: activa ? "solid" : "dashed",
+          cursor: imagenPendiente ? "crosshair" : drag ? "grabbing" : "pointer",
           touchAction: "none",
         }}
         title={
           imagenPendiente
-            ? "Haz clic para colocar la imagen aquí"
-            : "Haz clic para seleccionar la cara. Arrastra los elementos para moverlos."
+            ? `Haz clic sobre el vaso (${titulo}) para colocar la imagen`
+            : `Haz clic sobre el vaso (${titulo}) para activar. Arrastra los elementos sobre el vaso.`
         }
       >
-        {/* cuadrícula sutil */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.06]"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, #000 1px, transparent 1px), linear-gradient(to bottom, #000 1px, transparent 1px)",
-            backgroundSize: "20% 20%",
-          }}
-        />
+        {/* Foto base del vaso GRANDE — ocupa todo el lienzo como en el visor 3D */}
+        {baseImagen ? (
+          <img
+            src={baseImagen}
+            alt={`${titulo} - ${selectedProduct}`}
+            draggable={false}
+            className="pointer-events-none absolute inset-0 h-full w-full object-contain bg-white dark:bg-slate-950"
+            style={{ transform: `scale(${zoomMockup})`, transformOrigin: "center center" }}
+          />
+        ) : (
+          // Fallback si no hay foto: cuadrícula del área de impresión
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.06]"
+            style={{
+              backgroundImage:
+                "linear-gradient(to right, #000 1px, transparent 1px), linear-gradient(to bottom, #000 1px, transparent 1px)",
+              backgroundSize: "20% 20%",
+            }}
+          />
+        )}
 
-        {/* marca de área: centro */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="rounded-full border border-gray-300 bg-white/70 px-2 py-0.5 text-[9px] tracking-widest text-gray-400 dark:border-slate-600 dark:bg-slate-800/70 dark:text-slate-500">
-            {titulo.toUpperCase()}
-          </span>
-        </div>
+        {/* Tinte del color del producto sobre el vaso (muy sutil, no tapa la foto) */}
+        {baseImagen && colorProducto && (
+          <div
+            className="pointer-events-none absolute inset-0 mix-blend-multiply opacity-[0.18]"
+            style={{ backgroundColor: colorProducto }}
+          />
+        )}
 
         {/* imágenes */}
         {imagenes.map((img) => {

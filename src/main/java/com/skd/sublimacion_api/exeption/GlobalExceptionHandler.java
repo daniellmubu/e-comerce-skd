@@ -131,14 +131,15 @@ public class GlobalExceptionHandler {
                 "Credenciales inválidas");
     }
     
-    // Cualquier otro error
+    // Cualquier otro error — nunca exponer detalles técnicos al cliente
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleGeneral(Exception ex) {
-
+        org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class)
+                .error("Error no controlado", ex);
         return buildError(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Internal Server Error",
-                ex.getMessage());
+                "Ocurrió un error. Inténtalo de nuevo más tarde.");
     }
 
     private ResponseEntity<Map<String, Object>> buildError(

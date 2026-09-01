@@ -282,30 +282,29 @@ public class DisenoServiceImpl implements DisenoService {
                     .timeout(TIMEOUT_CLOUDFLARE)
                     .block();
         } catch (WebClientResponseException ex) {
-            // Cloudflare respondió con un error HTTP (4xx/5xx): mostramos el detalle real.
             String detalle = ex.getResponseBodyAsString();
             log.error("Cloudflare respondió {} al generar imagen: {}", ex.getStatusCode().value(), detalle);
             throw new BadRequestException(
-                    "Cloudflare rechazó la solicitud (" + ex.getStatusCode().value() + "): " + detalle);
+                    "Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.");
         } catch (RuntimeException ex) {
             if (ex.getCause() instanceof TimeoutException) {
                 throw new BadRequestException(
-                        "Cloudflare tardó demasiado en responder. Intenta de nuevo en unos segundos.");
+                        "Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.");
             }
             log.error("Error inesperado al llamar a Cloudflare", ex);
             throw new BadRequestException(
-                    "Cloudflare no pudo generar la imagen: " + ex.getMessage());
+                    "Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.");
         }
 
         if (respuesta == null || Boolean.FALSE.equals(respuesta.get("success"))) {
             String errores = respuesta == null ? "sin respuesta" : String.valueOf(respuesta.get("errors"));
             log.error("Cloudflare devolvió success=false. errors={}", errores);
-            throw new BadRequestException("Cloudflare no pudo generar la imagen. Detalle: " + errores);
+            throw new BadRequestException("Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.");
         }
 
         Map<String, Object> result = (Map<String, Object>) respuesta.get("result");
         if (result == null || result.get("image") == null) {
-            throw new BadRequestException("La IA no devolvió ninguna imagen. Intenta con otro prompt.");
+            throw new BadRequestException("Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.");
         }
 
         String base64 = (String) result.get("image");
@@ -354,26 +353,26 @@ public class DisenoServiceImpl implements DisenoService {
             String detalle = ex.getResponseBodyAsString();
             log.error("Cloudflare respondió {} al generar imagen con referencia: {}", ex.getStatusCode().value(), detalle);
             throw new BadRequestException(
-                    "Cloudflare rechazó la solicitud (" + ex.getStatusCode().value() + "): " + detalle);
+                    "Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.");
         } catch (RuntimeException ex) {
             if (ex.getCause() instanceof TimeoutException) {
                 throw new BadRequestException(
-                        "Cloudflare tardó demasiado en responder. Intenta de nuevo en unos segundos.");
+                        "Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.");
             }
             log.error("Error inesperado al llamar a Cloudflare (referencia)", ex);
             throw new BadRequestException(
-                    "Cloudflare no pudo generar la imagen: " + ex.getMessage());
+                    "Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.");
         }
 
         if (respuesta == null || Boolean.FALSE.equals(respuesta.get("success"))) {
             String errores = respuesta == null ? "sin respuesta" : String.valueOf(respuesta.get("errors"));
             log.error("Cloudflare devolvió success=false (referencia). errors={}", errores);
-            throw new BadRequestException("Cloudflare no pudo generar la imagen. Detalle: " + errores);
+            throw new BadRequestException("Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.");
         }
 
         Map<String, Object> result = (Map<String, Object>) respuesta.get("result");
         if (result == null || result.get("image") == null) {
-            throw new BadRequestException("La IA no devolvió ninguna imagen. Intenta con otro prompt.");
+            throw new BadRequestException("Ocurrió un error al generar el diseño. Inténtalo de nuevo más tarde.");
         }
 
         String base64 = (String) result.get("image");
