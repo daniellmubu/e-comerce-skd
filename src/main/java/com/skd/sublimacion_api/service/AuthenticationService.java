@@ -93,6 +93,7 @@ public class AuthenticationService {
                 .correo(usuario.getCorreo())
                 .rol(usuario.getRol().name())
                 .verificado(usuario.getVerificado())
+                .creadoEn(usuario.getCreadoEn())
                 .cuponBienvenida(CuponBienvenidaResponse.builder()
                         .codigo(cuponBienvenida.getCodigo())
                         .descuentoPorcentaje(cuponBienvenida.getDescuentoPorcentaje())
@@ -189,6 +190,7 @@ public class AuthenticationService {
                 .correo(usuario.getCorreo())
                 .rol(usuario.getRol().name())
                 .verificado(usuario.getVerificado())
+                .creadoEn(usuario.getCreadoEn())
                 .build();
     }
 
@@ -233,6 +235,31 @@ public class AuthenticationService {
         resetToken.setUsado(true);
         resetToken.setFechaUso(LocalDateTime.now());
         passwordResetTokenRepository.save(resetToken);
+    }
+
+    public void verificarPasswordActual(Long usuarioId, String passwordActual) {
+
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        if (!passwordEncoder.matches(passwordActual, usuario.getContrasenaHash())) {
+            throw new IllegalArgumentException("La contraseña actual es incorrecta.");
+        }
+    }
+
+    public void cambiarPassword(Long usuarioId, String passwordActual, String nuevaPassword) {
+
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        if (!passwordEncoder.matches(passwordActual, usuario.getContrasenaHash())) {
+            throw new IllegalArgumentException("La contraseña actual es incorrecta.");
+        }
+
+        usuario.setContrasenaHash(passwordEncoder.encode(nuevaPassword));
+        usuarioRepository.save(usuario);
+
+        emailService.enviarPasswordCambiada(usuario.getCorreo(), usuario.getNombre());
     }
 
     public void verificarEmail(String token) {
