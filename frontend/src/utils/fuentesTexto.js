@@ -4,6 +4,7 @@
 // y uso sin conexión.
 
 export const FUENTES_TEXTO = [
+  // Básicas
   {
     id: "clasica",
     nombre: "Clásica",
@@ -23,6 +24,67 @@ export const FUENTES_TEXTO = [
     css: 'Georgia, "Times New Roman", serif',
   },
   {
+    id: "opensans",
+    nombre: "Open Sans",
+    categoria: "basicas",
+    css: '"Open Sans", Arial, sans-serif',
+  },
+  {
+    id: "montserrat",
+    nombre: "Montserrat",
+    categoria: "basicas",
+    css: '"Montserrat", Arial, sans-serif',
+  },
+  {
+    id: "poppins",
+    nombre: "Poppins",
+    categoria: "basicas",
+    css: '"Poppins", Arial, sans-serif',
+  },
+  {
+    id: "lato",
+    nombre: "Lato",
+    categoria: "basicas",
+    css: '"Lato", Arial, sans-serif',
+  },
+  {
+    id: "nunito",
+    nombre: "Nunito",
+    categoria: "basicas",
+    css: '"Nunito", Arial, sans-serif',
+  },
+  {
+    id: "quicksand",
+    nombre: "Quicksand",
+    categoria: "basicas",
+    css: '"Quicksand", Arial, sans-serif',
+  },
+  {
+    id: "inter",
+    nombre: "Inter",
+    categoria: "basicas",
+    css: '"Inter", Arial, sans-serif',
+  },
+  {
+    id: "outfit",
+    nombre: "Outfit",
+    categoria: "basicas",
+    css: '"Outfit", Arial, sans-serif',
+  },
+  {
+    id: "ubuntu",
+    nombre: "Ubuntu",
+    categoria: "basicas",
+    css: '"Ubuntu", Arial, sans-serif',
+  },
+  {
+    id: "comfortaa",
+    nombre: "Comfortaa",
+    categoria: "basicas",
+    css: '"Comfortaa", Arial, sans-serif',
+  },
+  // Condensadas / Display condensado
+  {
     id: "oswald",
     nombre: "Oswald",
     categoria: "condensadas",
@@ -41,6 +103,25 @@ export const FUENTES_TEXTO = [
     css: '"Anton", Impact, sans-serif',
   },
   {
+    id: "teko",
+    nombre: "Teko",
+    categoria: "condensadas",
+    css: '"Teko", "Arial Narrow", sans-serif',
+  },
+  {
+    id: "staatliches",
+    nombre: "Staatliches",
+    categoria: "condensadas",
+    css: '"Staatliches", Impact, sans-serif',
+  },
+  {
+    id: "amatic",
+    nombre: "Amatic SC",
+    categoria: "condensadas",
+    css: '"Amatic SC", "Arial Narrow", cursive',
+  },
+  // Elegantes / Serif
+  {
     id: "playfair",
     nombre: "Playfair",
     categoria: "elegantes",
@@ -53,11 +134,42 @@ export const FUENTES_TEXTO = [
     css: '"Merriweather", Georgia, serif',
   },
   {
+    id: "cinzel",
+    nombre: "Cinzel",
+    categoria: "elegantes",
+    css: '"Cinzel", Georgia, serif',
+  },
+  {
+    id: "abril",
+    nombre: "Abril Fatface",
+    categoria: "elegantes",
+    css: '"Abril Fatface", Georgia, serif',
+  },
+  {
+    id: "greatvibes",
+    nombre: "Great Vibes",
+    categoria: "elegantes",
+    css: '"Great Vibes", "Segoe Script", cursive',
+  },
+  {
     id: "dancing",
     nombre: "Dancing Script",
     categoria: "elegantes",
     css: '"Dancing Script", "Segoe Script", cursive',
   },
+  {
+    id: "patua",
+    nombre: "Patua One",
+    categoria: "elegantes",
+    css: '"Patua One", Georgia, serif',
+  },
+  {
+    id: "alfa",
+    nombre: "Alfa Slab One",
+    categoria: "elegantes",
+    css: '"Alfa Slab One", Georgia, serif',
+  },
+  // Divertidas / Handwritten
   {
     id: "lobster",
     nombre: "Lobster",
@@ -89,6 +201,74 @@ export const FUENTES_TEXTO = [
     css: '"Fredoka", "Trebuchet MS", sans-serif',
   },
   {
+    id: "chewy",
+    nombre: "Chewy",
+    categoria: "divertidas",
+    css: '"Chewy", "Comic Sans MS", cursive',
+  },
+  {
+    id: "luckiest",
+    nombre: "Luckiest Guy",
+    categoria: "divertidas",
+    css: '"Luckiest Guy", Impact, cursive',
+  },
+  {
+    id: "bungee",
+    nombre: "Bungee",
+    categoria: "divertidas",
+    css: '"Bungee", Impact, sans-serif',
+  },
+  {
+    id: "baloo",
+    nombre: "Baloo 2",
+    categoria: "divertidas",
+    css: '"Baloo 2", "Comic Sans MS", cursive',
+  },
+  // Manuscritas
+  {
+    id: "satisfy",
+    nombre: "Satisfy",
+    categoria: "manuscritas",
+    css: '"Satisfy", "Brush Script MT", cursive',
+  },
+  {
+    id: "caveat",
+    nombre: "Caveat",
+    categoria: "manuscritas",
+    css: '"Caveat", "Segoe Script", cursive',
+  },
+  {
+    id: "shadows",
+    nombre: "Shadows Into Light",
+    categoria: "manuscritas",
+    css: '"Shadows Into Light", "Segoe Script", cursive',
+  },
+  {
+    id: "indie",
+    nombre: "Indie Flower",
+    categoria: "manuscritas",
+    css: '"Indie Flower", "Comic Sans MS", cursive',
+  },
+  {
+    id: "courgette",
+    nombre: "Courgette",
+    categoria: "manuscritas",
+    css: '"Courgette", "Segoe Script", cursive',
+  },
+  {
+    id: "kalam",
+    nombre: "Kalam",
+    categoria: "manuscritas",
+    css: '"Kalam", "Comic Sans MS", cursive',
+  },
+  {
+    id: "architects",
+    nombre: "Architects Daughter",
+    categoria: "manuscritas",
+    css: '"Architects Daughter", "Comic Sans MS", cursive',
+  },
+  // Retro / Display
+  {
     id: "righteous",
     nombre: "Righteous",
     categoria: "retro",
@@ -101,32 +281,51 @@ export const FUENTES_TEXTO = [
     css: '"Press Start 2P", monospace',
   },
   {
-    id: "opensans",
-    nombre: "Open Sans",
-    categoria: "basicas",
-    css: '"Open Sans", Arial, sans-serif',
+    id: "titan",
+    nombre: "Titan One",
+    categoria: "retro",
+    css: '"Titan One", Impact, sans-serif',
   },
   {
-    id: "montserrat",
-    nombre: "Montserrat",
-    categoria: "basicas",
-    css: '"Montserrat", Arial, sans-serif',
+    id: "monoton",
+    nombre: "Monoton",
+    categoria: "retro",
+    css: '"Monoton", Impact, cursive',
   },
   {
-    id: "poppins",
-    nombre: "Poppins",
-    categoria: "basicas",
-    css: '"Poppins", Arial, sans-serif',
+    id: "creepster",
+    nombre: "Creepster",
+    categoria: "retro",
+    css: '"Creepster", Impact, cursive',
   },
   {
-    id: "cinzel",
-    nombre: "Cinzel",
-    categoria: "elegantes",
-    css: '"Cinzel", Georgia, serif',
+    id: "blackops",
+    nombre: "Black Ops One",
+    categoria: "retro",
+    css: '"Black Ops One", Impact, sans-serif',
+  },
+  // Futuristas / Tecnológicas
+  {
+    id: "orbitron",
+    nombre: "Orbitron",
+    categoria: "futuristas",
+    css: '"Orbitron", monospace',
+  },
+  {
+    id: "russo",
+    nombre: "Russo One",
+    categoria: "futuristas",
+    css: '"Russo One", Arial, sans-serif',
+  },
+  {
+    id: "spacegrotesk",
+    nombre: "Space Grotesk",
+    categoria: "futuristas",
+    css: '"Space Grotesk", Arial, sans-serif',
   },
 ];
 
-// Fuente aplicada por defecto (equivalente al sans-serif anterior).
+ // Fuente aplicada por defecto (equivalente al sans-serif anterior).
 export const FUENTE_TEXTO_DEFECTO = FUENTES_TEXTO[0].css;
 
 export const CATEGORIAS_FUENTE = [
@@ -135,7 +334,9 @@ export const CATEGORIAS_FUENTE = [
   { id: "condensadas", label: "Condensadas" },
   { id: "elegantes", label: "Elegantes" },
   { id: "divertidas", label: "Divertidas" },
+  { id: "manuscritas", label: "Manuscritas" },
   { id: "retro", label: "Retro" },
+  { id: "futuristas", label: "Futuristas" },
 ];
 
 export function buscarFuente(css) {

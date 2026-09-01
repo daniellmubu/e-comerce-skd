@@ -44,9 +44,16 @@ import procesarDiseno from "../utils/quitarFondoBlanco";
 import {
   FUENTES_TEXTO,
   FUENTE_TEXTO_DEFECTO,
+  CATEGORIAS_FUENTE,
   buscarFuente,
   cargarFuenteParaCanvas,
 } from "../utils/fuentesTexto";
+import {
+  EMOJIS,
+  CATEGORIAS as CATEGORIAS_EMOJI,
+  buscarEmojis,
+  emojiDesdeCodigo,
+} from "../utils/emojis";
 import {
   componerTexturaCamisetaAltaResolucion,
   TAMANO_TEX_ALTA_RESOLUCION,
@@ -363,6 +370,7 @@ function Personalizador() {
   const [colorTexto, setColorTexto] = useState("#111111");
   const [fuenteTexto, setFuenteTexto] = useState(FUENTE_TEXTO_DEFECTO);
   const [busquedaFuente, setBusquedaFuente] = useState("");
+  const [categoriaFuente, setCategoriaFuente] = useState("todas");
   const [tamanoTexto, setTamanoTexto] = useState(32);
   // Formato del texto: negrita, cursiva y subrayado (se aplica en el lienzo
   // 2D, en la proyección 3D y en la imagen final guardada).
@@ -405,6 +413,12 @@ function Personalizador() {
   const [categoriaPlantilla, setCategoriaPlantilla] = useState("todas");
   const plantillasCargadasRef = useRef(false);
 
+  // Picker de emojis ampliado: búsqueda, categoría y entrada por código
+  const [busquedaEmoji, setBusquedaEmoji] = useState("");
+  const [categoriaEmoji, setCategoriaEmoji] = useState("Todas");
+  const [codigoEmoji, setCodigoEmoji] = useState("");
+  const [errorCodigoEmoji, setErrorCodigoEmoji] = useState(null);
+
   // Al seleccionar otro texto, des-minimizar el panel para mostrar herramientas
   useEffect(() => {
     if (textoActivoId) setEditorTextoMinimizado(false);
@@ -435,19 +449,16 @@ function Personalizador() {
 
   const total = useMemo(() => precioBase + COSTO_PERSONALIZACION, [precioBase]);
 
-// Fuentes del menú, filtradas por búsqueda en tiempo real.
-  const fuentesVisibles = useMemo(
-    () => {
-      const bajo = busquedaFuente.toLowerCase();
-      if (!busquedaFuente) return FUENTES_TEXTO;
-      return FUENTES_TEXTO.filter(
-        (f) =>
-          f.nombre.toLowerCase().includes(bajo) ||
-          f.css.toLowerCase().includes(bajo)
-      );
-    },
-    [busquedaFuente]
-  );
+  // Fuentes del menú, filtradas por categoría (variedades) + búsqueda en tiempo real.
+  const fuentesVisibles = useMemo(() => {
+    const bajo = busquedaFuente.toLowerCase().trim();
+    return FUENTES_TEXTO.filter((f) => {
+      const porCategoria = categoriaFuente === "todas" || f.categoria === categoriaFuente;
+      if (!porCategoria) return false;
+      if (!bajo) return true;
+      return f.nombre.toLowerCase().includes(bajo) || f.css.toLowerCase().includes(bajo) || f.categoria.toLowerCase().includes(bajo);
+    });
+  }, [busquedaFuente, categoriaFuente]);
 
   // --- Galería de plantillas prediseñadas ---
 
@@ -491,6 +502,26 @@ function Personalizador() {
       ),
     [plantillas, categoriaPlantilla, selectedProduct]
   );
+
+  // Emojis visibles: búsqueda + categoría
+  const emojisVisibles = useMemo(() => {
+    let lista = buscarEmojis(busquedaEmoji);
+    if (categoriaEmoji !== "Todas") {
+      lista = lista.filter((e) => e.categoria === categoriaEmoji);
+    }
+    return lista;
+  }, [busquedaEmoji, categoriaEmoji]);
+
+  const handleAgregarEmojiPorCodigo = () => {
+    const emoji = emojiDesdeCodigo(codigoEmoji);
+    if (!emoji) {
+      setErrorCodigoEmoji("Código no reconocido. Prueba: 😀 , U+1F600 , 1F600 , 0x1F600 , :heart: , &#128512;");
+      return;
+    }
+    setErrorCodigoEmoji(null);
+    agregarEmoji(emoji);
+    setCodigoEmoji("");
+  };
 
   // Aplica la plantilla como imagen de diseño en la cara activa: mismo camino
   // que subir una imagen, así queda seleccionada, arrastrable y redimensionable
@@ -2220,55 +2251,174 @@ function Personalizador() {
 
                 {/* Selector de fuente para texto nuevo (y edición rápida) */}
                 <label className="mb-2 mt-4 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Fuente para texto nuevo ({fuentesVisibles.length})
+                  Fuente para texto nuevo ({fuentesVisibles.length} / {FUENTES_TEXTO.length})
                 </label>
                 <div className="mb-2 flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder="Buscar fuente..."
+                    placeholder="Buscar fuente... nombre o categoría"
                     value={busquedaFuente}
                     onChange={(e) => setBusquedaFuente(e.target.value)}
                     className="flex-1 rounded-xl border border-gray-200 bg-gray-50 p-2 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                   />
-                </div>
-                <div className="grid max-h-36 grid-cols-2 gap-1.5 overflow-y-auto rounded-xl border border-gray-100 p-1.5 dark:border-slate-800">
-                  {fuentesVisibles.slice(0, 20).map((fuente) => {
-                    const activa = fuenteTexto === fuente.css;
-                    return (
-                      <button
-                        key={fuente.id}
-                        type="button"
-                        onClick={() => {
-                          setFuenteTexto(fuente.css);
-                          if (textoActivoLayer) actualizarCapaTexto(textoActivoLayer.id, { fuente: fuente.css });
-                        }}
-                        style={{ fontFamily: fuente.css }}
-                        className={`flex flex-col items-center justify-center rounded-lg border px-1 py-2 text-sm ${activa ? "border-indigo-500 bg-indigo-50 dark:bg-cyan-500/10" : "border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900"}`}
-                      >
-                        <span className="text-lg leading-none">Aa</span>
-                        <span className="w-full truncate text-center text-[9px] text-gray-400">{fuente.nombre}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="my-4 border-t border-gray-200 dark:border-slate-800" />
-                {/* Emojis Canva */}
-                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Emojis (capas movibles)
-                </label>
-                <div className="mb-3 flex flex-wrap gap-1.5">
-                  {EMOJIS_RAPIDOS.map((emoji) => (
+                  {busquedaFuente && (
                     <button
-                      key={emoji}
                       type="button"
-                      onClick={() => agregarEmoji(emoji)}
-                      title="Agregar capa emoji movible"
-                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-lg transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:hover:border-cyan-400"
+                      onClick={() => setBusquedaFuente("")}
+                      className="rounded-lg border border-gray-200 px-2 py-2 text-xs dark:border-slate-700"
+                      title="Limpiar"
                     >
-                      {emoji}
+                      <FaTimes size={10} />
+                    </button>
+                  )}
+                </div>
+                {/* Variedades / categorías de fuentes */}
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {CATEGORIAS_FUENTE.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setCategoriaFuente(cat.id)}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                        categoriaFuente === cat.id
+                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
+                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400"
+                      }`}
+                    >
+                      {cat.label}
                     </button>
                   ))}
+                </div>
+                <div className="grid max-h-48 grid-cols-2 gap-1.5 overflow-y-auto rounded-xl border border-gray-100 p-1.5 dark:border-slate-800">
+                  {fuentesVisibles.length === 0 ? (
+                    <p className="col-span-2 py-6 text-center text-xs text-gray-400">Sin resultados para "{busquedaFuente}" en {CATEGORIAS_FUENTE.find((c)=>c.id===categoriaFuente)?.label}</p>
+                  ) : (
+                    fuentesVisibles.slice(0, 50).map((fuente) => {
+                      const activa = fuenteTexto === fuente.css;
+                      return (
+                        <button
+                          key={fuente.id}
+                          type="button"
+                          onClick={() => {
+                            setFuenteTexto(fuente.css);
+                            if (textoActivoLayer) actualizarCapaTexto(textoActivoLayer.id, { fuente: fuente.css });
+                          }}
+                          style={{ fontFamily: fuente.css }}
+                          title={`${fuente.nombre} · ${fuente.categoria}`}
+                          className={`flex flex-col items-center justify-center rounded-lg border px-1 py-2 text-sm ${activa ? "border-indigo-500 bg-indigo-50 dark:bg-cyan-500/10" : "border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900"}`}
+                        >
+                          <span className="text-lg leading-none">Aa</span>
+                          <span className="w-full truncate text-center text-[9px] text-gray-400">{fuente.nombre}</span>
+                          <span className="w-full truncate text-center text-[7px] uppercase tracking-wider text-gray-300 dark:text-slate-600">{fuente.categoria}</span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+                {fuentesVisibles.length > 50 && (
+                  <p className="mt-1 text-center text-[10px] text-gray-400">Mostrando 50 de {fuentesVisibles.length} · afina búsqueda o cambia categoría</p>
+                )}
+
+                <div className="my-4 border-t border-gray-200 dark:border-slate-800" />
+                {/* Emojis Canva — catálogo completo con búsqueda y por código */}
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Emojis (capas movibles) · {EMOJIS.length} disponibles
+                </label>
+                {/* Buscador único */}
+                <div className="mb-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Buscar emoji... nombre, :codigo:, U+1F600"
+                    value={busquedaEmoji}
+                    onChange={(e) => setBusquedaEmoji(e.target.value)}
+                    className="flex-1 rounded-xl border border-gray-200 bg-gray-50 p-2 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                  {busquedaEmoji && (
+                    <button
+                      type="button"
+                      onClick={() => setBusquedaEmoji("")}
+                      className="rounded-lg border border-gray-200 px-2 py-2 text-xs dark:border-slate-700"
+                      title="Limpiar"
+                    >
+                      <FaTimes size={10} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Categorías */}
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {["Todas", ...CATEGORIAS_EMOJI].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setCategoriaEmoji(cat)}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                        categoriaEmoji === cat
+                          ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
+                          : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Grid catálogo */}
+                <div className="mb-2 max-h-48 overflow-y-auto rounded-xl border border-gray-100 p-2 dark:border-slate-800">
+                  {emojisVisibles.length === 0 ? (
+                    <p className="py-6 text-center text-xs text-gray-400">Sin resultados para "{busquedaEmoji}"</p>
+                  ) : (
+                    <div className="grid grid-cols-8 gap-1.5">
+                      {emojisVisibles.slice(0, 200).map((item) => (
+                        <button
+                          key={`${item.emoji}-${item.codigo}`}
+                          type="button"
+                          onClick={() => agregarEmoji(item.emoji)}
+                          title={`${item.emoji} ${item.nombre} · ${item.codigo} · ${item.keywords}`}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-lg transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-900"
+                        >
+                          {item.emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {emojisVisibles.length > 200 && (
+                    <p className="mt-2 text-center text-[10px] text-gray-400">Mostrando 200 de {emojisVisibles.length} · afina la búsqueda</p>
+                  )}
+                </div>
+                <p className="mb-3 text-[10px] text-gray-400 dark:text-slate-500">
+                  {emojisVisibles.length} emojis · toca uno para agregarlo como capa movible. Cada código se muestra al pasar el mouse.
+                </p>
+
+                {/* Entrada por código */}
+                <div className="mb-3 rounded-xl border border-dashed border-gray-300 p-3 dark:border-slate-700">
+                  <p className="mb-2 text-xs font-medium text-gray-600 dark:text-slate-300">Agregar por código / pegar emoji</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={codigoEmoji}
+                      onChange={(e) => { setCodigoEmoji(e.target.value); if (errorCodigoEmoji) setErrorCodigoEmoji(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAgregarEmojiPorCodigo(); } }}
+                      placeholder="Ej: 😀  U+1F600  1F600  0x1F600  :heart:  &#128512;"
+                      className="flex-1 rounded-lg border border-gray-200 bg-white p-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAgregarEmojiPorCodigo}
+                      disabled={!codigoEmoji.trim()}
+                      className="shrink-0 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-40 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+                    >
+                      Agregar
+                    </button>
+                  </div>
+                  {errorCodigoEmoji ? (
+                    <p className="mt-2 text-[11px] text-red-500">{errorCodigoEmoji}</p>
+                  ) : (
+                    <p className="mt-2 text-[10px] leading-tight text-gray-400 dark:text-slate-500">
+                      Soporta: emoji pegado, <code>U+1F600</code>, <code>1F600</code>, <code>0x1F600</code>, decimal <code>128512</code>, <code>:heart:</code>, <code>&amp;#128512;</code>.
+                      Para secuencias (familia, bandera) separa con espacio: <code>U+1F468 U+200D U+1F469</code>.
+                    </p>
+                  )}
                 </div>
 
                 {emojis.length > 0 && (
@@ -2280,6 +2430,7 @@ function Personalizador() {
                           key={em.id}
                           type="button"
                           onClick={() => seleccionarEmoji(em.id)}
+                          title={`${em.emoji} · clic para seleccionar`}
                           className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg ${em.id === emojiActivoId ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300 dark:bg-cyan-500/10" : "border-gray-200 bg-gray-50 dark:border-slate-700 dark:bg-slate-950"}`}
                         >
                           {em.emoji}

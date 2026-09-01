@@ -266,11 +266,23 @@ export function Panel2D({
           />
         )}
 
-        {/* Tinte del color del producto sobre el vaso (muy sutil, no tapa la foto) */}
+        {/* Tinte del color del producto — SOLO sobre la silueta del mug (mask), no sobre el fondo blanco */}
         {baseImagen && colorProducto && (
           <div
-            className="pointer-events-none absolute inset-0 mix-blend-multiply opacity-[0.18]"
-            style={{ backgroundColor: colorProducto }}
+            className="pointer-events-none absolute inset-0 mix-blend-multiply opacity-[0.32]"
+            style={{
+              backgroundColor: colorProducto,
+              WebkitMaskImage: `url(${baseImagen})`,
+              maskImage: `url(${baseImagen})`,
+              WebkitMaskSize: "contain",
+              maskSize: "contain",
+              WebkitMaskRepeat: "no-repeat",
+              maskRepeat: "no-repeat",
+              WebkitMaskPosition: "center",
+              maskPosition: "center",
+              transform: `scale(${zoomMockup})`,
+              transformOrigin: "center center",
+            }}
           />
         )}
 
