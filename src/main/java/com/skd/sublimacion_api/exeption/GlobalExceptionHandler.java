@@ -49,6 +49,14 @@ public class GlobalExceptionHandler {
                 ex.getMessage());
     }
 
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<?> handleTooManyRequests(TooManyRequestsException ex) {
+        return buildError(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "Too Many Requests",
+                ex.getMessage());
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<?> handleIllegalArgument(IllegalArgumentException ex) {
 
