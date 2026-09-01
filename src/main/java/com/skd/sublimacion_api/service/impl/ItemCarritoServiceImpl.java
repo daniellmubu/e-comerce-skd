@@ -4,6 +4,7 @@ import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoRequest;
 import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoResponse;
 import com.skd.sublimacion_api.entity.Carrito;
 import com.skd.sublimacion_api.entity.Diseno;
+import com.skd.sublimacion_api.entity.EstadoPublicacionDiseno;
 import com.skd.sublimacion_api.entity.ImagenProducto;
 import com.skd.sublimacion_api.entity.ItemCarrito;
 import com.skd.sublimacion_api.entity.Producto;
@@ -61,8 +62,13 @@ public class ItemCarritoServiceImpl implements ItemCarritoService {
             diseno = disenoRepository.findById(request.getDisenoId())
                     .orElseThrow(() -> new ResourceNotFoundException("Diseño no encontrado"));
 
-            if (!diseno.getUsuario().getId().equals(usuarioId)) {
-                throw new BadRequestException("Ese diseño no te pertenece.");
+            // Se permite el diseño propio y también cualquier diseño aprobado
+            // en la galería pública (así los usuarios pueden "usar" creaciones
+            // de otros, lo que alimenta la métrica de popularidad por usos).
+            boolean esPropio = diseno.getUsuario().getId().equals(usuarioId);
+            boolean esPublico = diseno.getEstadoPublicacion() == EstadoPublicacionDiseno.PUBLICADO;
+            if (!esPropio && !esPublico) {
+                throw new BadRequestException("Ese diseño no te pertenece o no está publicado.");
             }
         }
 

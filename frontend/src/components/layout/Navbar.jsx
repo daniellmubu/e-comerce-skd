@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt, FaHeart, FaBars, FaInbox } from "react-icons/fa";
+import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt, FaHeart, FaBars, FaInbox, FaPalette } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -86,6 +86,9 @@ function Navbar() {
               <Link to="/catalogo" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
                 Catálogo
               </Link>
+              <Link to="/galeria-disenos" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
+                Diseños de la comunidad
+              </Link>
               <Link to="/personalizador" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
                 Diseña con IA
               </Link>
@@ -161,6 +164,14 @@ function Navbar() {
                         >
                           <FaHeart className="text-indigo-500 dark:text-cyan-400" />
                           Favoritos
+                        </Link>
+                        <Link
+                          to="/mis-disenos"
+                          onClick={cerrarMenu}
+                          className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <FaPalette className="text-indigo-500 dark:text-cyan-400" />
+                          Mis diseños
                         </Link>
                         <Link
                           to="/bandeja"

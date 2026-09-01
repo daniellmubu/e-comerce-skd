@@ -54,6 +54,25 @@ public class Diseno {
     @Builder.Default @Column(nullable = false)
     private Boolean usado = false;
 
+    // ---- Publicación pública (galería de diseños de usuarios) ----
+    @Column(length = 120)
+    private String titulo;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_publicacion", length = 20)
+    private EstadoPublicacionDiseno estadoPublicacion;
+
+    @Column(name = "motivo_rechazo", columnDefinition = "TEXT")
+    private String motivoRechazo;
+
+    // Número de veces que el diseño se agregó a un pedido (popularidad por uso).
+    @Builder.Default
+    @Column(name = "veces_usado", nullable = false)
+    private Integer vecesUsado = 0;
+
+    @Column(name = "publicado_en")
+    private LocalDateTime publicadoEn;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

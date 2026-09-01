@@ -29,6 +29,7 @@ const MisFavoritos = lazy(() => import("../pages/MisFavoritos"));
 const MisDisenos = lazy(() => import("../pages/MisDisenos"));
 const Bandeja = lazy(() => import("../pages/Bandeja"));
 const GaleriaClientes = lazy(() => import("../pages/GaleriaClientes"));
+const GaleriaDisenos = lazy(() => import("../pages/GaleriaDisenos"));
 const SolicitarDiseno = lazy(() => import("../pages/SolicitarDiseno"));
 const PanelDisenador = lazy(() => import("../pages/PanelDisenador"));
 const DetalleProducto = lazy(() => import("../pages/DetalleProducto"));
@@ -72,6 +73,7 @@ function AppRoutes() {
       <Route path="/generador" element={<Pagina title="Generador con IA | SKD"><Generador /></Pagina>} />
       <Route path="/personalizador" element={<Pagina title="Personalizador | SKD"><Personalizador /></Pagina>} />
       <Route path="/galeria-clientes" element={<Pagina title="Galería de clientes | SKD"><GaleriaClientes /></Pagina>} />
+      <Route path="/galeria-disenos" element={<Pagina title="Galería de diseños | SKD" description="Explora los diseños publicados por la comunidad, dales me gusta y úsalos en tus productos."><GaleriaDisenos /></Pagina>} />
       <Route path="/creditos" element={<Pagina title="Créditos 3D | SKD"><Creditos /></Pagina>} />
       <Route
         path="/carrito"

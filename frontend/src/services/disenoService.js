@@ -58,3 +58,50 @@ export async function eliminarTodosDisenos() {
   const { data } = await api.delete("/disenos");
   return data;
 }
+
+// ---------------------------------------------------------------------------
+// Publicación pública (galería de diseños de usuarios)
+// ---------------------------------------------------------------------------
+
+/**
+ * Envía un diseño propio a la galería pública. El admin debe aprobarlo
+ * antes de que sea visible para todos.
+ */
+export async function publicarDiseno({ id, titulo }) {
+  const { data } = await api.post(`/disenos/${id}/publicar`, { titulo });
+  return data;
+}
+
+/**
+ * Lista los diseños públicos aprobados (galería).
+ * orden: "recientes" (default) | "megusta" | "usos"
+ */
+export async function listarDisenosPublicos({ page = 0, size = 12, orden = "recientes" } = {}) {
+  const { data } = await api.get("/disenos/publicos", {
+    params: { page, size, orden },
+  });
+  return data;
+}
+
+export async function obtenerDisenoPublico(id) {
+  const { data } = await api.get(`/disenos/publicos/${id}`);
+  return data;
+}
+
+/** Da "me gusta" a un diseño público (requiere sesión). */
+export async function darMeGustaDiseno(id) {
+  const { data } = await api.post(`/disenos/${id}/megusta`);
+  return data;
+}
+
+/** Quita el "me gusta" (requiere sesión). */
+export async function quitarMeGustaDiseno(id) {
+  const { data } = await api.delete(`/disenos/${id}/megusta`);
+  return data;
+}
+
+/** Estado del "me gusta" del usuario autenticado sobre un diseño. */
+export async function estadoMeGustaDiseno(id) {
+  const { data } = await api.get(`/disenos/${id}/megusta`);
+  return data;
+}

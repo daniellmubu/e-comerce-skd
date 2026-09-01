@@ -365,6 +365,9 @@ public class CheckoutServiceImpl implements CheckoutService {
                 .filter(diseno -> diseno != null)
                 .forEach(diseno -> {
                     diseno.setUsado(true);
+                    diseno.setVecesUsado(
+                            (diseno.getVecesUsado() == null ? 0 : diseno.getVecesUsado())
+                                    + 1);
                     disenoRepository.save(diseno);
                 });
     }

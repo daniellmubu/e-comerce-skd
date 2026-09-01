@@ -1,13 +1,17 @@
 package com.skd.sublimacion_api.service.impl;
 
+import com.skd.sublimacion_api.dto.diseno.DisenoPublicoResponse;
 import com.skd.sublimacion_api.dto.diseno.DisenoRequest;
 import com.skd.sublimacion_api.dto.diseno.DisenoResponse;
 import com.skd.sublimacion_api.entity.Diseno;
+import com.skd.sublimacion_api.entity.DisenoMeGusta;
+import com.skd.sublimacion_api.entity.EstadoPublicacionDiseno;
 import com.skd.sublimacion_api.entity.OrigenDiseno;
 import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.exeption.BadRequestException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
+import com.skd.sublimacion_api.repository.DisenoMeGustaRepository;
 import com.skd.sublimacion_api.repository.DisenoRepository;
 import com.skd.sublimacion_api.repository.ItemCarritoRepository;
 import com.skd.sublimacion_api.repository.ItemPedidoRepository;
@@ -19,6 +23,8 @@ import com.skd.sublimacion_api.service.SupabaseStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -47,6 +53,7 @@ import java.util.concurrent.TimeoutException;
 public class DisenoServiceImpl implements DisenoService {
 
     private final DisenoRepository disenoRepository;
+    private final DisenoMeGustaRepository disenoMeGustaRepository;
     private final UsuarioRepository usuarioRepository;
     private final ProductoRepository productoRepository;
     private final SolicitudDisenoRepository solicitudDisenoRepository;
@@ -188,6 +195,7 @@ public class DisenoServiceImpl implements DisenoService {
             throw new BadRequestException("No se puede borrar: el diseño ya está usado en un pedido o solicitud.");
         }
 
+        disenoMeGustaRepository.deleteByDisenoId(id);
         disenoRepository.delete(diseno);
     }
 
@@ -203,11 +211,137 @@ public class DisenoServiceImpl implements DisenoService {
                     || itemPedidoRepository.existsByDisenoId(d.getId())
                     || itemCarritoRepository.existsByDisenoId(d.getId());
             if (!usado) {
+                disenoMeGustaRepository.deleteByDisenoId(d.getId());
                 disenoRepository.delete(d);
                 borrados++;
             }
         }
         return borrados;
+    }
+
+    // ------------------------------------------------------------------
+    // Publicación pública (galería de diseños de usuarios)
+    // ------------------------------------------------------------------
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public DisenoResponse publicar(Long disenoId, String titulo, Long usuarioId) {
+
+        Diseno diseno = disenoRepository.findById(disenoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Diseño no encontrado"));
+
+        if (!diseno.getUsuario().getId().equals(usuarioId)) {
+            throw new BadRequestException("No puedes publicar un diseño que no te pertenece.");
+        }
+
+        if (titulo == null || titulo.isBlank()) {
+            throw new BadRequestException("Debes escribir un título para tu diseño.");
+        }
+
+        String tituloLimpio = titulo.trim();
+        if (tituloLimpio.length() > 120) {
+            throw new BadRequestException("El título no puede superar los 120 caracteres.");
+        }
+
+        // Si ya estaba publicada o pendiente, solo se actualiza el título.
+        diseno.setTitulo(tituloLimpio);
+        diseno.setMotivoRechazo(null);
+        if (diseno.getEstadoPublicacion() == null
+                || diseno.getEstadoPublicacion() == EstadoPublicacionDiseno.RECHAZADO
+                || diseno.getEstadoPublicacion() == EstadoPublicacionDiseno.OCULTO) {
+            diseno.setEstadoPublicacion(EstadoPublicacionDiseno.PENDIENTE);
+        }
+
+        return convertir(disenoRepository.save(diseno));
+    }
+
+    @Override
+    public Page<DisenoPublicoResponse> listarPublicos(String orden, Pageable pageable, Long usuarioId) {
+
+        String ordenNormalizado = (orden == null || orden.isBlank()) ? "recientes" : orden.trim().toLowerCase();
+        Page<Diseno> pagina;
+
+        switch (ordenNormalizado) {
+            case "megusta" ->
+                pagina = disenoRepository.listarPublicosPorMeGusta(EstadoPublicacionDiseno.PUBLICADO, pageable);
+            case "usos" ->
+                pagina = disenoRepository.listarPublicosPorUsos(EstadoPublicacionDiseno.PUBLICADO, pageable);
+            default ->
+                // Más recientes (sort aplicado desde el Pageable del controller).
+                pagina = disenoRepository.findByEstadoPublicacion(EstadoPublicacionDiseno.PUBLICADO, pageable);
+        }
+
+        return pagina.map(d -> convertirPublico(d, usuarioId));
+    }
+
+    @Override
+    public DisenoPublicoResponse obtenerPublico(Long id, Long usuarioId) {
+
+        Diseno diseno = disenoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Diseño no encontrado"));
+
+        if (diseno.getEstadoPublicacion() != EstadoPublicacionDiseno.PUBLICADO) {
+            throw new ResourceNotFoundException("Diseño no encontrado");
+        }
+
+        return convertirPublico(diseno, usuarioId);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public boolean darMeGusta(Long disenoId, Long usuarioId) {
+
+        Diseno diseno = disenoRepository.findById(disenoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Diseño no encontrado"));
+
+        if (diseno.getEstadoPublicacion() != EstadoPublicacionDiseno.PUBLICADO) {
+            throw new BadRequestException("Este diseño no está publicado.");
+        }
+
+        if (disenoMeGustaRepository.existsByDisenoIdAndUsuarioId(disenoId, usuarioId)) {
+            return false;
+        }
+
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+
+        disenoMeGustaRepository.save(DisenoMeGusta.builder()
+                .diseno(diseno)
+                .usuario(usuario)
+                .build());
+        return true;
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public boolean quitarMeGusta(Long disenoId, Long usuarioId) {
+
+        return disenoMeGustaRepository
+                .findByDisenoIdAndUsuarioId(disenoId, usuarioId)
+                .map(like -> {
+                    disenoMeGustaRepository.delete(like);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    @Override
+    public boolean estaEnMeGusta(Long disenoId, Long usuarioId) {
+        if (usuarioId == null) {
+            return false;
+        }
+        return disenoMeGustaRepository.existsByDisenoIdAndUsuarioId(disenoId, usuarioId);
+    }
+
+    /** Incrementa el contador de usos cuando el diseño se incluye en un pedido. */
+    @org.springframework.transaction.annotation.Transactional
+    public void incrementarUsos(Long disenoId, int cantidad) {
+
+        Diseno diseno = disenoRepository.findById(disenoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Diseño no encontrado"));
+
+        diseno.setVecesUsado((diseno.getVecesUsado() == null ? 0 : diseno.getVecesUsado()) + cantidad);
+        disenoRepository.save(diseno);
     }
 
     private void validarLimiteDiario(Long usuarioId) {
@@ -520,6 +654,30 @@ public class DisenoServiceImpl implements DisenoService {
                 .producto(diseno.getProducto() != null ? diseno.getProducto().getNombre() : null)
                 .imagenUrl(diseno.getImagenUrl())
                 .origen(diseno.getOrigen() != null ? diseno.getOrigen().name() : null)
+                .titulo(diseno.getTitulo())
+                .estadoPublicacion(diseno.getEstadoPublicacion() != null
+                        ? diseno.getEstadoPublicacion().name() : null)
+                .motivoRechazo(diseno.getMotivoRechazo())
+                .meGusta(disenoMeGustaRepository.countByDisenoId(diseno.getId()))
+                .vecesUsado(diseno.getVecesUsado() == null ? 0 : diseno.getVecesUsado())
+                .publicadoEn(diseno.getPublicadoEn())
+                .build();
+    }
+
+    private DisenoPublicoResponse convertirPublico(Diseno diseno, Long usuarioId) {
+        return DisenoPublicoResponse.builder()
+                .id(diseno.getId())
+                .titulo(diseno.getTitulo())
+                .imagenUrl(diseno.getImagenUrl())
+                .prompt(diseno.getPrompt())
+                .productoId(diseno.getProducto() != null ? diseno.getProducto().getId() : null)
+                .producto(diseno.getProducto() != null ? diseno.getProducto().getNombre() : null)
+                .usuarioNombre(diseno.getUsuario() != null ? diseno.getUsuario().getNombre() : null)
+                .origen(diseno.getOrigen() != null ? diseno.getOrigen().name() : null)
+                .meGusta(disenoMeGustaRepository.countByDisenoId(diseno.getId()))
+                .vecesUsado(diseno.getVecesUsado() == null ? 0 : diseno.getVecesUsado())
+                .publicadoEn(diseno.getPublicadoEn())
+                .meGustaPropio(estaEnMeGusta(diseno.getId(), usuarioId))
                 .build();
     }
 

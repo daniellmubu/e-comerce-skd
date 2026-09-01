@@ -15,6 +15,7 @@ import Cupones from "../pages/Cupones";
 import Empaques from "../pages/Empaques";
 import TarifasEnvio from "../pages/TarifasEnvio";
 import Reportes from "../pages/Reportes";
+import Disenos from "../pages/Disenos";
 
 function AppRoutes() {
   return (
@@ -43,6 +44,7 @@ function AppRoutes() {
         <Route path="pedidos" element={<Pedidos />} />
         <Route path="produccion" element={<Produccion />} />
         <Route path="resenas" element={<Resenas />} />
+        <Route path="disenos" element={<Disenos />} />
         <Route path="usuarios" element={<Usuarios />} />
         <Route path="tarifas-envio" element={<TarifasEnvio />} />
         <Route path="reportes" element={<Reportes />} />

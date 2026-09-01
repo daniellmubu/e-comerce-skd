@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaPalette, FaRobot, FaPenNib, FaDownload, FaTrash, FaSpinner, FaExclamationTriangle } from "react-icons/fa";
+import { FaPalette, FaRobot, FaPenNib, FaDownload, FaTrash, FaSpinner, FaExclamationTriangle, FaShareAlt, FaHourglassHalf, FaCheckCircle, FaRegTimesCircle } from "react-icons/fa";
 
-import { listarDisenosPorUsuario, eliminarDiseno, eliminarTodosDisenos } from "../services/disenoService";
+import { listarDisenosPorUsuario, eliminarDiseno, eliminarTodosDisenos, publicarDiseno } from "../services/disenoService";
 import { getErrorMessage } from "../services/api";
 
 async function descargarDiseno(diseno) {
@@ -51,6 +51,12 @@ function MisDisenos() {
   const [mostrarConfirmEliminar, setMostrarConfirmEliminar] = useState(false);
   const [disenoAEliminar, setDisenoAEliminar] = useState(null);
   const [mensaje, setMensaje] = useState(null);
+
+  // Publicación en la galería pública
+  const [disenoAPublicar, setDisenoAPublicar] = useState(null);
+  const [mostrarPublicar, setMostrarPublicar] = useState(false);
+  const [tituloPublicacion, setTituloPublicacion] = useState("");
+  const [publicandoId, setPublicandoId] = useState(null);
 
   useEffect(() => {
     let activo = true;
@@ -133,6 +139,58 @@ function MisDisenos() {
       setMensaje({ tipo: "error", texto: getErrorMessage(err) });
     } finally {
       setBorrandoTodos(false);
+    }
+  };
+
+  const abrirPublicar = (diseno) => {
+    setDisenoAPublicar(diseno);
+    setTituloPublicacion(diseno.titulo || "");
+    setMostrarPublicar(true);
+  };
+
+  const handlePublicar = async () => {
+    if (!disenoAPublicar) return;
+    if (!tituloPublicacion.trim()) {
+      setMensaje({ tipo: "error", texto: "Escribe un título para tu diseño." });
+      return;
+    }
+    setPublicandoId(disenoAPublicar.id);
+    setMensaje(null);
+    try {
+      const actualizado = await publicarDiseno({
+        id: disenoAPublicar.id,
+        titulo: tituloPublicacion.trim(),
+      });
+      setDisenos((prev) =>
+        prev.map((d) => (d.id === actualizado.id ? { ...d, ...actualizado } : d))
+      );
+      setMensaje({
+        tipo: "ok",
+        texto: "Diseño enviado a revisión. El equipo lo publicará si cumple las normas.",
+      });
+      setMostrarPublicar(false);
+      setDisenoAPublicar(null);
+      setTituloPublicacion("");
+    } catch (err) {
+      setMensaje({ tipo: "error", texto: getErrorMessage(err) });
+    } finally {
+      setPublicandoId(null);
+    }
+  };
+
+  // Etiqueta y estilo del estado de publicación.
+  const etiquetaEstadoPublicacion = (estado) => {
+    switch (estado) {
+      case "PUBLICADO":
+        return { texto: "Publicado", icono: <FaCheckCircle />, clase: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300" };
+      case "PENDIENTE":
+        return { texto: "En revisión", icono: <FaHourglassHalf />, clase: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300" };
+      case "RECHAZADO":
+        return { texto: "Rechazado", icono: <FaRegTimesCircle />, clase: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300" };
+      case "OCULTO":
+        return { texto: "Oculto", icono: <FaRegTimesCircle />, clase: "bg-gray-200 text-gray-700 dark:bg-slate-700 dark:text-slate-300" };
+      default:
+        return null;
     }
   };
 
@@ -251,6 +309,14 @@ function MisDisenos() {
                     {diseno.origen === "USUARIO" ? <FaPenNib /> : diseno.origen === "CONTACTO_EMPRESA" ? <FaPalette /> : <FaRobot />}
                     {diseno.origen === "USUARIO" ? "Tu diseño" : diseno.origen === "CONTACTO_EMPRESA" ? "Diseñador" : "IA"}
                   </span>
+                  {etiquetaEstadoPublicacion(diseno.estadoPublicacion) && (
+                    <span
+                      className={`absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${etiquetaEstadoPublicacion(diseno.estadoPublicacion).clase}`}
+                    >
+                      {etiquetaEstadoPublicacion(diseno.estadoPublicacion).icono}
+                      {etiquetaEstadoPublicacion(diseno.estadoPublicacion).texto}
+                    </span>
+                  )}
                 </div>
 
                 <div className="p-4">
@@ -264,7 +330,23 @@ function MisDisenos() {
                       {diseno.prompt}
                     </p>
                   )}
-                  <div className="mt-3 flex justify-between">
+                  {diseno.motivoRechazo && (
+                    <p className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+                      <strong>Motivo:</strong> {diseno.motivoRechazo}
+                    </p>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {(!diseno.estadoPublicacion ||
+                      diseno.estadoPublicacion === "RECHAZADO" ||
+                      diseno.estadoPublicacion === "OCULTO") && (
+                      <button
+                        type="button"
+                        onClick={() => abrirPublicar(diseno)}
+                        className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+                      >
+                        <FaShareAlt /> Publicar
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -383,6 +465,68 @@ function MisDisenos() {
                     <FaTrash />
                   )}{" "}
                   Sí, borrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {mostrarPublicar && disenoAPublicar && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900">
+              <h3 className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white">
+                <FaShareAlt className="text-indigo-500 dark:text-cyan-400" /> Publicar en la galería
+              </h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-slate-300">
+                Tu diseño será revisado por el equipo antes de hacerse público.
+                Si lo aprueban, todos podrán verlo, darle me gusta y usarlo en sus productos.
+              </p>
+              {disenoAPublicar.imagenUrl && (
+                <img
+                  src={disenoAPublicar.imagenUrl}
+                  alt="Diseño a publicar"
+                  className="mt-4 h-36 w-full rounded-xl border border-gray-200 object-contain bg-gray-50 p-2 dark:border-slate-700 dark:bg-slate-800"
+                />
+              )}
+              <label className="mt-4 block text-xs font-semibold text-gray-700 dark:text-slate-300">
+                Título del diseño
+              </label>
+              <input
+                type="text"
+                value={tituloPublicacion}
+                onChange={(e) => setTituloPublicacion(e.target.value)}
+                maxLength={120}
+                placeholder="Ej: Mascota en caricatura"
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+              {disenoAPublicar.motivoRechazo && (
+                <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+                  Motivo anterior: {disenoAPublicar.motivoRechazo}
+                </p>
+              )}
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMostrarPublicar(false);
+                    setDisenoAPublicar(null);
+                  }}
+                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm dark:border-slate-700 dark:text-slate-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePublicar}
+                  disabled={publicandoId === disenoAPublicar.id}
+                  className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {publicandoId === disenoAPublicar.id ? (
+                    <FaSpinner className="animate-spin" />
+                  ) : (
+                    <FaShareAlt />
+                  )}{" "}
+                  Publicar
                 </button>
               </div>
             </div>

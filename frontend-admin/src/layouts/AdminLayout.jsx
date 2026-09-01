@@ -13,6 +13,7 @@ import {
   FaTshirt,
   FaStarHalfAlt,
   FaIndustry,
+  FaPalette,
 } from "react-icons/fa";
 
 import Navbar from "../components/Navbar";
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { label: "Pedidos", to: "/pedidos", icon: <FaClipboardList /> },
   { label: "Producción", to: "/produccion", icon: <FaIndustry /> },
   { label: "Reseñas", to: "/resenas", icon: <FaStarHalfAlt /> },
+  { label: "Diseños", to: "/disenos", icon: <FaPalette /> },
   { label: "Usuarios", to: "/usuarios", icon: <FaUsers /> },
   { label: "Tarifas de envío", to: "/tarifas-envio", icon: <FaTruck /> },
   { label: "Reportes", to: "/reportes", icon: <FaFileAlt /> },
@@ -45,6 +47,7 @@ const TITULOS = {
   "/pedidos": "Pedidos",
   "/produccion": "Producción",
   "/resenas": "Reseñas",
+  "/disenos": "Diseños",
   "/usuarios": "Usuarios",
   "/tarifas-envio": "Tarifas de envío",
   "/reportes": "Reportes",

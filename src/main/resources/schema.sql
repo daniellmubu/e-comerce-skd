@@ -15,3 +15,21 @@ CREATE TABLE IF NOT EXISTS email_verification_token (
     fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_uso TIMESTAMP
 );
+
+-- Galería pública de diseños creados por usuarios (moderación + métricas).
+-- estado_publicacion: null (no publicado) | PENDIENTE | PUBLICADO | RECHAZADO | OCULTO
+ALTER TABLE diseno ADD COLUMN IF NOT EXISTS titulo VARCHAR(120);
+ALTER TABLE diseno ADD COLUMN IF NOT EXISTS estado_publicacion VARCHAR(20);
+ALTER TABLE diseno ADD COLUMN IF NOT EXISTS motivo_rechazo TEXT;
+ALTER TABLE diseno ADD COLUMN IF NOT EXISTS veces_usado INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE diseno ADD COLUMN IF NOT EXISTS publicado_en TIMESTAMP;
+
+-- "Me gusta" de los usuarios hacia los diseños publicados.
+CREATE TABLE IF NOT EXISTS diseno_me_gusta (
+    id BIGSERIAL PRIMARY KEY,
+    diseno_id BIGINT NOT NULL REFERENCES diseno(id) ON DELETE CASCADE,
+    usuario_id BIGINT NOT NULL REFERENCES usuario(id) ON DELETE CASCADE,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_diseno_usuario UNIQUE (diseno_id, usuario_id)
+);
+CREATE INDEX IF NOT EXISTS idx_diseno_me_gusta_diseno ON diseno_me_gusta(diseno_id);

@@ -50,6 +50,10 @@ public class SecurityConfig {
                         // Las reseñas por producto son públicas; crearlas exige
                         // autenticación (queda cubierta por anyRequest()).
                         .requestMatchers("/api/resenas/producto/**").permitAll()
+                        // Galería pública de diseños de usuarios (solo lectura).
+                        // Publicar, dar me gusta y gestionar diseños propios exigen
+                        // autenticación (cubierto por anyRequest()).
+                        .requestMatchers("/api/disenos/publicos/**").permitAll()
                         // Formulario de contacto público (no requiere sesión).
                         .requestMatchers("/api/contacto/**").permitAll()
                         // El enum Rol define admin, disenador y cliente (en minúsculas).

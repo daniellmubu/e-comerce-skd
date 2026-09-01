@@ -28,12 +28,13 @@
   return respuesta.data;
   }
 
-  export async function agregarItem({ carritoId, productoId, cantidad, varianteId = null }) {
+  export async function agregarItem({ carritoId, productoId, cantidad, varianteId = null, disenoId = null }) {
     const { data } = await api.post("/detalle-carrito", {
       carritoId,
       productoId,
       cantidad,
       varianteId,
+      disenoId,
     });
     return data;
   }
