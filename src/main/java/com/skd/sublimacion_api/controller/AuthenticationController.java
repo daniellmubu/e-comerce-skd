@@ -1,14 +1,17 @@
 package com.skd.sublimacion_api.controller;
 
 import com.skd.sublimacion_api.dto.AuthResponse;
+import com.skd.sublimacion_api.dto.CambiarPasswordRequest;
 import com.skd.sublimacion_api.dto.LoginRequest;
 import com.skd.sublimacion_api.dto.OlvidePasswordRequest;
 import com.skd.sublimacion_api.dto.RegistroRequest;
 import com.skd.sublimacion_api.dto.RestablecerPasswordRequest;
+import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.service.AuthenticationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -28,6 +31,27 @@ public class AuthenticationController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authenticationService.login(request));
+    }
+
+    @PostMapping("/verificar-password")
+    public ResponseEntity<Map<String, String>> verificarPassword(
+            @AuthenticationPrincipal Usuario usuario,
+            @RequestBody Map<String, String> body) {
+
+        authenticationService.verificarPasswordActual(usuario.getId(), body.get("passwordActual"));
+
+        return ResponseEntity.ok(Map.of("message", "Contraseña verificada"));
+    }
+
+    @PostMapping("/cambiar-password")
+    public ResponseEntity<Map<String, String>> cambiarPassword(
+            @AuthenticationPrincipal Usuario usuario,
+            @Valid @RequestBody CambiarPasswordRequest request) {
+
+        authenticationService.cambiarPassword(
+                usuario.getId(), request.getPasswordActual(), request.getNuevaPassword());
+
+        return ResponseEntity.ok(Map.of("message", "Contraseña actualizada correctamente"));
     }
 
     @PostMapping("/olvide-password")

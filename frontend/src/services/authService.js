@@ -117,3 +117,16 @@ export async function reenviarVerificacion(correo) {
   const { data } = await api.post("/auth/reenviar-verificacion", { correo });
   return data;
 }
+
+export async function verificarPasswordActual(passwordActual) {
+  const { data } = await api.post("/auth/verificar-password", { passwordActual });
+  return data;
+}
+
+export async function cambiarPassword({ passwordActual, nuevaPassword }) {
+  const { data } = await api.post("/auth/cambiar-password", {
+    passwordActual,
+    nuevaPassword,
+  });
+  return data;
+}

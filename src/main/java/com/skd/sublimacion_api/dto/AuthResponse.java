@@ -20,5 +20,6 @@ public class AuthResponse {
     private String correo;
     private String rol;
     private Boolean verificado;
+    private java.time.LocalDateTime creadoEn;
     private CuponBienvenidaResponse cuponBienvenida;
 }

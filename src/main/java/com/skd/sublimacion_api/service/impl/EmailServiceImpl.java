@@ -253,6 +253,29 @@ public class EmailServiceImpl implements EmailService {
 
     @Async
     @Override
+    public void enviarPasswordCambiada(String correo, String nombre) {
+
+        try {
+            MimeMessage mime = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mime, false, "UTF-8");
+
+            helper.setTo(correo);
+            helper.setSubject("SKD - Tu contraseña fue cambiada");
+            helper.setText("Hola " + nombre + ",\n\n"
+                    + "Te confirmamos que tu contraseña de SKD fue actualizada correctamente.\n\n"
+                    + "Si no fuiste tú, contacta con nosotros lo antes posible desde la página de contacto.");
+
+            mailSender.send(mime);
+            log.info("Correo de cambio de contraseña enviado a {}", correo);
+
+        } catch (MessagingException | RuntimeException e) {
+            log.error("No se pudo enviar el correo de cambio de contraseña a {}: {}",
+                    correo, e.getMessage(), e);
+        }
+    }
+
+    @Async
+    @Override
     public void enviarVerificacionEmail(String correo, String nombre, String token) {
 
         try {
