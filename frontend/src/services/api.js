@@ -43,6 +43,14 @@ export function getErrorMessage(error) {
     return data;
   }
 
+  // Errores de validación con formato { message: "Error de validación", fields: { campo: "mensaje" } }
+  if (data.fields && typeof data.fields === "object") {
+    const primer = Object.values(data.fields)[0];
+    if (primer && typeof primer === "string") {
+      return primer;
+    }
+  }
+
   if (data.message) {
     return data.message;
   }
@@ -51,7 +59,7 @@ export function getErrorMessage(error) {
     return data.error;
   }
 
-  // Errores de validación de Spring (@Valid): objeto { campo: "mensaje" }
+  // Fallback: objeto plano { campo: "mensaje" }
   const primeraClave = Object.keys(data)[0];
   if (primeraClave && typeof data[primeraClave] === "string") {
     return data[primeraClave];

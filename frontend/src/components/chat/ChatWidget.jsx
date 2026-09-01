@@ -1,11 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FaCommentDots, FaTimes, FaPaperPlane } from "react-icons/fa";
-
-// Nota: este widget es una simulación en el frontend (respuestas fijas).
-// No existe todavía un backend de chat/asistente — si se quiere una IA real
-// respondiendo, hay que decidir el proveedor y crear un endpoint dedicado.
-const RESPUESTA_AUTOMATICA =
-  "Gracias por tu mensaje. Un asesor te responderá pronto. Mientras tanto, puedes revisar el estado de tus pedidos en 'Mis pedidos'.";
+import { enviarMensajeChat } from "../../services/chatService";
+import { getErrorMessage } from "../../services/api";
 
 function ChatWidget() {
   const [abierto, setAbierto] = useState(false);
@@ -13,17 +9,62 @@ function ChatWidget() {
     { autor: "bot", texto: "Hola, ¿en qué puedo ayudarte?" },
   ]);
   const [texto, setTexto] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const listaRef = useRef(null);
 
-  const enviarMensaje = () => {
-    if (!texto.trim()) return;
+  const scrollAlFinal = () => {
+    if (listaRef.current) {
+      listaRef.current.scrollTop = listaRef.current.scrollHeight;
+    }
+  };
 
-    const mensajeUsuario = { autor: "usuario", texto: texto.trim() };
-    setMensajes((prev) => [...prev, mensajeUsuario]);
+  useEffect(() => {
+    scrollAlFinal();
+  }, [mensajes, cargando]);
+
+  const SALUDO_INICIAL = "Hola, ¿en qué puedo ayudarte?";
+
+  const mapearHistorial = (msgs) => {
+    // El saludo inicial del bot no debe enviarse al backend: Gemini exige que
+    // contents empiece con role "user", y ese saludo como rol "model" provoca 400.
+    const filtrado = msgs.filter(
+      (m) => !(m.autor === "bot" && m.texto === SALUDO_INICIAL)
+    );
+    const mapeado = filtrado.map((m) => ({
+      rol: m.autor === "usuario" ? "user" : "model",
+      texto: m.texto,
+    }));
+    // Eliminar mensajes iniciales con rol "model" por si queda alguno (defensa extra)
+    while (mapeado.length > 0 && mapeado[0].rol !== "user") {
+      mapeado.shift();
+    }
+    // Respetar límite del backend (max 20)
+    return mapeado.slice(-20);
+  };
+
+  const enviarMensaje = async () => {
+    const limpio = texto.trim();
+    if (!limpio || cargando) return;
+
+    const mensajeUsuario = { autor: "usuario", texto: limpio };
+    const nuevosMensajes = [...mensajes, mensajeUsuario];
+    setMensajes(nuevosMensajes);
     setTexto("");
+    setCargando(true);
 
-    setTimeout(() => {
-      setMensajes((prev) => [...prev, { autor: "bot", texto: RESPUESTA_AUTOMATICA }]);
-    }, 700);
+    // Historial previo en formato backend (excluye el saludo inicial si se quiere mantener, lo enviamos igual)
+    const historial = mapearHistorial(nuevosMensajes.slice(0, -1));
+
+    try {
+      const data = await enviarMensajeChat(limpio, historial);
+      const respuesta = data?.respuesta || "Gracias por tu mensaje.";
+      setMensajes((prev) => [...prev, { autor: "bot", texto: respuesta }]);
+    } catch (error) {
+      const msg = getErrorMessage(error);
+      setMensajes((prev) => [...prev, { autor: "error", texto: msg }]);
+    } finally {
+      setCargando(false);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -62,19 +103,31 @@ function ChatWidget() {
         </button>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div ref={listaRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {mensajes.map((m, i) => (
           <div
             key={i}
             className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
               m.autor === "bot"
                 ? "bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200"
+                : m.autor === "error"
+                ? "bg-red-50 text-red-600 dark:bg-red-500/20 dark:text-red-300"
                 : "ml-auto bg-indigo-50 text-indigo-900 dark:bg-cyan-500/20 dark:text-cyan-100"
             }`}
           >
             {m.texto}
           </div>
         ))}
+        {cargando && (
+          <div className="max-w-[85%] rounded-2xl bg-gray-100 px-4 py-2 text-sm text-gray-500 dark:bg-slate-800 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1">
+              Escribiendo
+              <span className="animate-bounce [animation-delay:0ms]">.</span>
+              <span className="animate-bounce [animation-delay:150ms]">.</span>
+              <span className="animate-bounce [animation-delay:300ms]">.</span>
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="border-t border-gray-200 p-3 dark:border-slate-800">
@@ -85,13 +138,16 @@ function ChatWidget() {
             onChange={(e) => setTexto(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Escribe tu mensaje..."
-            className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500 dark:focus:border-cyan-400"
+            maxLength={500}
+            disabled={cargando}
+            className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-indigo-400 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500 dark:focus:border-cyan-400"
           />
           <button
             type="button"
             onClick={enviarMensaje}
+            disabled={cargando || !texto.trim()}
             aria-label="Enviar mensaje"
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:scale-105 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
           >
             <FaPaperPlane className="text-sm" />
           </button>
