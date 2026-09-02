@@ -116,7 +116,7 @@ function ProductCard({
   return (
     <div className="group overflow-hidden rounded-3xl border border-gray-200 bg-white transition-all duration-500 hover:-translate-y-2 hover:border-indigo-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:hover:border-cyan-500 dark:hover:shadow-[0_0_35px_rgba(34,211,238,0.15)]">
       <div
-        className={`relative flex h-72 items-center justify-center bg-gradient-to-br ${gradiente}`}
+        className={`relative flex aspect-square items-center justify-center overflow-hidden bg-gradient-to-br ${gradiente}`}
       >
         <button
           type="button"
@@ -136,7 +136,7 @@ function ProductCard({
           src={producto.imagenUrl || imagenFallback}
           alt={producto.nombre}
           loading="lazy"
-          className="h-64 object-contain transition duration-500 group-hover:scale-110"
+          className="h-full w-full object-contain transition duration-500 group-hover:scale-110"
         />
       </div>
 
