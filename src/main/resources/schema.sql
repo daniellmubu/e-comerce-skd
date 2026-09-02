@@ -55,3 +55,11 @@ CREATE INDEX IF NOT EXISTS idx_sesion_activa_jti ON sesion_activa(token_jti);
 -- Empaque de regalo: destinatario y ocasión del pedido.
 ALTER TABLE pedido ADD COLUMN IF NOT EXISTS destinatario_regalo TEXT;
 ALTER TABLE pedido ADD COLUMN IF NOT EXISTS ocasion_regalo TEXT;
+
+-- Newsletter: correos suscritos.
+CREATE TABLE IF NOT EXISTS newsletter_suscripcion (
+    id BIGSERIAL PRIMARY KEY,
+    correo VARCHAR(255) NOT NULL UNIQUE,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    activo BOOLEAN NOT NULL DEFAULT TRUE
+);
