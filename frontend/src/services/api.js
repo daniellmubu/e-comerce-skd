@@ -1,7 +1,11 @@
 import axios from "axios";
 
+// En producción, VITE_API_URL debe apuntar al backend (ej. https://backend.onrender.com).
+// Si se configura solo la raíz (sin /api), se agrega el sufijo para que las rutas
+// /auth/login, /productos, etc. resuelvan contra /api/... del backend.
+const raizApi = (import.meta.env.VITE_API_URL || "http://localhost:8080/api").replace(/\/$/, "");
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8080/api",
+  baseURL: raizApi.endsWith("/api") ? raizApi : `${raizApi}/api`,
 });
 
 api.interceptors.request.use((config) => {
