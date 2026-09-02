@@ -17,4 +17,8 @@ public class CheckoutRequest {
 
     private String metodoPago;
 
+    private String destinatarioRegalo;
+
+    private String ocasionRegalo;
+
 }

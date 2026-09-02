@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaCheckCircle } from "react-icons/fa";
+import { FaCheckCircle, FaBoxOpen, FaBox, FaGift, FaCheck } from "react-icons/fa";
 
 import { useCart } from "../context/CartContext";
 import { obtenerUsuarioActual, obtenerUsuarioId } from "../services/authService";
@@ -45,6 +45,23 @@ const METODOS_PAGO = [
 // Número de Nequi del negocio para pagos por transferencia (sin Wompi).
 const NEQUI_NUMERO = import.meta.env.VITE_NEQUI_NUMBER || "3223458419";
 
+const EMPAQUE_META = {
+  Estandar: { icon: FaBoxOpen, bubble: "from-slate-400 to-slate-600", tag: "Incluido" },
+  Premium: { icon: FaBox, bubble: "from-indigo-500 to-violet-600", tag: "Recomendado" },
+  Regalo: { icon: FaGift, bubble: "from-pink-500 to-rose-600", tag: "Especial" },
+};
+const EMPAQUE_DEFAULT = { icon: FaBox, bubble: "from-slate-500 to-slate-700", tag: "" };
+
+const OCASIONES_REGALO = [
+  "Cumpleaños",
+  "Aniversario",
+  "Navidad",
+  "Día de la madre",
+  "Día del padre",
+  "San Valentín",
+  "Otro",
+];
+
 function Checkout() {
   const navigate = useNavigate();
   const { items, total, cantidadProductos, recargarCarrito } = useCart();
@@ -69,6 +86,8 @@ function Checkout() {
   const [fechaExpiracion, setFechaExpiracion] = useState("");
   const [cvv, setCvv] = useState("");
   const [errorTarjeta, setErrorTarjeta] = useState(null);
+  const [destinatarioRegalo, setDestinatarioRegalo] = useState("");
+  const [ocasionRegalo, setOcasionRegalo] = useState("");
   const [fechaEntregaDeseada, setFechaEntregaDeseada] = useState("");
   const fechaMinima = obtenerFechaMinimaHoy();
 
@@ -265,9 +284,17 @@ function Checkout() {
       return;
     }
 
+    const esEmpaqueRegalo =
+      empaqueSeleccionado?.tipo?.toLowerCase() === "regalo";
+
     setProcesando(true);
     setErrorCheckout(null);
     try {
+      if (esEmpaqueRegalo && !destinatarioRegalo.trim()) {
+        setErrorCheckout("Si eliges empaque de regalo, indica para quién es.");
+        return;
+      }
+
       if (metodoPago === "tarjeta") {
         if (!/^\d{13,19}$/.test(numeroTarjeta)) {
           setErrorTarjeta("Número de tarjeta inválido (13 a 19 dígitos).");
@@ -289,6 +316,8 @@ function Checkout() {
         cuponId: cuponId ? Number(cuponId) : null,
         fechaEntregaDeseada: fechaEntregaDeseada || null,
         metodoPago,
+        destinatarioRegalo: esEmpaqueRegalo ? destinatarioRegalo.trim() : undefined,
+        ocasionRegalo: esEmpaqueRegalo ? ocasionRegalo.trim() : undefined,
       });
 
       if (metodoPago === "pse") {
@@ -503,34 +532,109 @@ function Checkout() {
 
               {/* Empaque */}
               <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/60">
-                <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Tipo de empaque</h2>
+                <h2 className="mb-1 text-lg font-semibold text-gray-900 dark:text-white">Tipo de empaque</h2>
+                <p className="mb-4 text-sm text-gray-500 dark:text-slate-400">
+                  Elige cómo quieres recibir tu pedido.
+                </p>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  {empaques.map((emp) => (
-                    <label
-                      key={emp.id}
-                      className={`cursor-pointer rounded-xl border p-4 text-sm transition ${
-                        String(emp.id) === empaqueId
-                          ? "border-indigo-400 bg-indigo-50 dark:border-cyan-400 dark:bg-cyan-400/5"
-                          : "border-gray-200 dark:border-slate-700"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="empaque"
-                        className="sr-only"
-                        checked={String(emp.id) === empaqueId}
-                        onChange={() => setEmpaqueId(String(emp.id))}
-                      />
-                      <p className="font-semibold text-gray-900 dark:text-white">{emp.tipo}</p>
-                      <p className="mt-1 text-gray-500 dark:text-slate-400">{emp.descripcion}</p>
-                      <p className="mt-2 text-indigo-600 dark:text-cyan-300">
-                        {Number(emp.costoAdicional) > 0
-                          ? `+${formatPrice(emp.costoAdicional)}`
-                          : "Gratis"}
-                      </p>
-                    </label>
-                  ))}
+                  {empaques.map((emp) => {
+                    const meta = EMPAQUE_META[emp.tipo] || EMPAQUE_DEFAULT;
+                    const Icono = meta.icon;
+                    const seleccionado = String(emp.id) === empaqueId;
+                    return (
+                      <label
+                        key={emp.id}
+                        className={`group relative cursor-pointer overflow-hidden rounded-2xl border p-4 text-left transition-all ${
+                          seleccionado
+                            ? "border-indigo-400 bg-indigo-50/70 ring-2 ring-indigo-400/30 dark:border-cyan-400 dark:bg-cyan-400/10 dark:ring-cyan-400/20"
+                            : "border-gray-200 hover:border-gray-300 hover:shadow-sm dark:border-slate-700 dark:hover:border-slate-500"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="empaque"
+                          className="sr-only"
+                          checked={seleccionado}
+                          onChange={() => setEmpaqueId(String(emp.id))}
+                        />
+                        {seleccionado && (
+                          <FaCheckCircle className="absolute right-3 top-3 text-lg text-indigo-500 dark:text-cyan-300" />
+                        )}
+                        <div
+                          className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${meta.bubble} text-lg text-white shadow`}
+                        >
+                          <Icono />
+                        </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <p className="font-semibold text-gray-900 dark:text-white">{emp.tipo}</p>
+                          {meta.tag && (
+                            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-600 dark:bg-cyan-500/20 dark:text-cyan-300">
+                              {meta.tag}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-slate-400">
+                          {emp.descripcion}
+                        </p>
+                        <p
+                          className={`mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
+                            Number(emp.costoAdicional) > 0
+                              ? "bg-indigo-100 text-indigo-700 dark:bg-cyan-500/20 dark:text-cyan-300"
+                              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
+                          }`}
+                        >
+                          {Number(emp.costoAdicional) > 0 ? (
+                            <>
+                              <FaCheck /> {formatPrice(emp.costoAdicional)}
+                            </>
+                          ) : (
+                            "Gratis"
+                          )}
+                        </p>
+                      </label>
+                    );
+                  })}
                 </div>
+
+                {empaqueSeleccionado?.tipo?.toLowerCase() === "regalo" && (
+                  <div className="mt-5 rounded-2xl border border-pink-200 bg-pink-50/60 p-5 dark:border-rose-500/30 dark:bg-rose-500/5">
+                    <div className="flex items-center gap-2">
+                      <FaGift className="text-rose-500" />
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        Detalles del regalo
+                      </p>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                      Lo incluiremos en la tarjeta del regalo.
+                    </p>
+                    <div className="mt-4 space-y-4">
+                      <Input
+                        label="¿Para quién es? (nombre del destinatario)"
+                        placeholder="Ej: Para Mamá"
+                        value={destinatarioRegalo}
+                        onChange={(e) => setDestinatarioRegalo(e.target.value)}
+                        maxLength={60}
+                      />
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-600 dark:text-slate-300">
+                          ¿Qué celebramos?
+                        </label>
+                        <select
+                          value={ocasionRegalo}
+                          onChange={(e) => setOcasionRegalo(e.target.value)}
+                          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none transition focus:border-rose-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-rose-400"
+                        >
+                          <option value="">Selecciona una ocasión...</option>
+                          {OCASIONES_REGALO.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Cupón y método de pago */}

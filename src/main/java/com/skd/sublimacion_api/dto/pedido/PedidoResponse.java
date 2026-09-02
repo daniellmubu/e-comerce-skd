@@ -35,8 +35,14 @@ public class PedidoResponse {
 
     private String numeroFactura;
 
+    private String empaque;
+
     private String metodoPago;
 
     private String estadoPago;
+
+    private String destinatarioRegalo;
+
+    private String ocasionRegalo;
 
 }

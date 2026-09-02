@@ -51,3 +51,7 @@ CREATE TABLE IF NOT EXISTS sesion_activa (
 );
 CREATE INDEX IF NOT EXISTS idx_sesion_activa_usuario ON sesion_activa(usuario_id);
 CREATE INDEX IF NOT EXISTS idx_sesion_activa_jti ON sesion_activa(token_jti);
+
+-- Empaque de regalo: destinatario y ocasión del pedido.
+ALTER TABLE pedido ADD COLUMN IF NOT EXISTS destinatario_regalo TEXT;
+ALTER TABLE pedido ADD COLUMN IF NOT EXISTS ocasion_regalo TEXT;
