@@ -1,3 +1,4 @@
+import { Toaster } from 'sonner';
 import AppRoutes from './routes/AppRoutes';
 import Layout from './components/layout/Layout';
 import { AuthProvider } from './context/AuthContext';
@@ -12,6 +13,7 @@ function App() {
           <Layout>
             <AppRoutes />
           </Layout>
+          <Toaster position="bottom-right" richColors />
         </CartProvider>
       </AuthProvider>
     </ThemeProvider>

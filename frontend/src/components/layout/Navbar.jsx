@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Menu, X, Search } from "lucide-react";
 import { FaUserCircle, FaSignOutAlt, FaSearch, FaSun, FaMoon, FaTicketAlt, FaHeart, FaBars, FaInbox, FaPalette } from "react-icons/fa";
 
 import { useAuth } from "../../context/AuthContext";
@@ -16,7 +17,8 @@ function Navbar() {
   const { limpiarCarrito } = useCart();
   const [busqueda, setBusqueda] = useState("");
   const [menuAbierto, setMenuAbierto] = useState(false);
-  const [menuMovil, setMenuMovil] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef(null);
   const [noLeidas, setNoLeidas] = useState(0);
   const esDisenador = usuario?.rol === "disenador";
   const esAdmin = usuario?.rol === "admin";
@@ -43,8 +45,29 @@ function Navbar() {
 
   const toggleMenu = () => setMenuAbierto((v) => !v);
   const cerrarMenu = () => setMenuAbierto(false);
-  const toggleMenuMovil = () => setMenuMovil((v) => !v);
-  const cerrarMenuMovil = () => setMenuMovil(false);
+  const toggleMobileMenu = () => setIsMobileMenuOpen((prev) => !prev);
+  const closeMobileMenu = () => setIsMobileMenuOpen(false);
+
+  // Cerrar menú al cambiar de ruta
+  useEffect(() => {
+    closeMobileMenu();
+  }, [location.pathname]);
+
+  // Cerrar menú al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target)) {
+        closeMobileMenu();
+      }
+    };
+
+    if (isMobileMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isMobileMenuOpen]);
 
   // El buscador superior es la puerta de entrada al catálogo: navega con
   // ?q= para que el catálogo lo recoja y filtre.
@@ -55,30 +78,29 @@ function Navbar() {
   };
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
-      <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-6">
-        <Link
-          to="/"
-          className="shrink-0 text-2xl font-bold text-indigo-600 dark:bg-gradient-to-r dark:from-cyan-400 dark:to-violet-500 dark:bg-clip-text dark:text-transparent"
-        >
-          SKD
-        </Link>
+    <nav ref={mobileMenuRef} className="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:gap-6 sm:px-6">
+        {/* LADO IZQUIERDO: Botón Hamburguesa (Móvil) + Logo */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggleMobileMenu}
+            type="button"
+            className="lg:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none"
+            aria-label={isMobileMenuOpen ? "Cerrar menú de navegación" : "Abrir menú de navegación"}
+            aria-expanded={isMobileMenuOpen}
+          >
+            {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
 
-        {/* Buscador estilo Figma (imagen 1) */}
-        {!esDisenador && (
-          <div className="relative hidden flex-1 max-w-md md:block">
-            <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
-            <input
-              type="text"
-              placeholder="Buscar productos..."
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              onKeyDown={handleBuscar}
-              className="w-full rounded-lg border border-gray-200 bg-gray-100 py-2 pl-10 pr-3 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:placeholder:text-slate-500"
-            />
-          </div>
-        )}
+          <Link
+            to="/"
+            className="shrink-0 text-2xl font-bold text-indigo-600 dark:bg-gradient-to-r dark:from-cyan-400 dark:to-violet-500 dark:bg-clip-text dark:text-transparent"
+          >
+            SKD
+          </Link>
+        </div>
 
+        {/* CENTRO (Desktop): Links de Navegación - hidden lg:flex */}
         <div className="hidden items-center gap-6 text-gray-600 dark:text-slate-300 lg:flex">
           {esDisenador ? (
             <Link to="/disenador" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
@@ -107,17 +129,23 @@ function Navbar() {
           )}
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
-          <button
-            type="button"
-            onClick={toggleMenuMovil}
-            aria-label="Abrir menú de navegación"
-            aria-expanded={menuMovil}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300 lg:hidden"
-          >
-            <FaBars className="text-lg" />
-          </button>
+        {/* BUSCADOR (Desktop) - hidden md:block */}
+        {!esDisenador && (
+          <div className="relative hidden flex-1 max-w-md md:block">
+            <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
+            <input
+              type="text"
+              placeholder="Buscar productos..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              onKeyDown={handleBuscar}
+              className="w-full rounded-lg border border-gray-200 bg-gray-100 py-2 pl-10 pr-3 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:placeholder:text-slate-500"
+            />
+          </div>
+        )}
 
+        {/* LADO DERECHO: Acciones fijas (Tema, Carrito, Usuario) - siempre visibles */}
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
           <button
             type="button"
             onClick={toggleTheme}
@@ -250,16 +278,38 @@ function Navbar() {
         </div>
       </div>
 
-      {/* Menú móvil (solo < lg) */}
-      {menuMovil && (
-        <div className="border-t border-gray-200 bg-white lg:hidden dark:border-slate-800 dark:bg-slate-950">
-          <div className="mx-auto max-w-7xl px-6 py-4">
-            <nav className="flex flex-col gap-1 text-gray-700 dark:text-slate-200">
+      {/* MENÚ MÓVIL DESPLEGABLE - merge: buscador + links + sección usuario (de HEAD) */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden absolute top-full left-0 w-full bg-white dark:bg-slate-950 border-b border-gray-200 dark:border-slate-800 shadow-lg transition-all duration-200 ease-in-out">
+          <div className="px-4 pt-3 pb-6 space-y-4 sm:px-6">
+            {/* Buscador móvil (oculto en md:block, visible aquí) */}
+            {!esDisenador && (
+              <div className="md:hidden pt-1">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Buscar productos..."
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      closeMobileMenu();
+                      handleBuscar(e);
+                    }}
+                    className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-cyan-400"
+                  />
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                </div>
+              </div>
+            )}
+
+            {/* Links de navegación móvil */}
+            <div className="flex flex-col space-y-2 pt-2">
               {esDisenador ? (
                 <Link
                   to="/disenador"
-                  onClick={cerrarMenuMovil}
-                  className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                  onClick={closeMobileMenu}
+                  className="px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                 >
                   Panel diseñador
                 </Link>
@@ -267,44 +317,44 @@ function Navbar() {
                 <>
                   <Link
                     to="/catalogo"
-                    onClick={cerrarMenuMovil}
-                    className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                    onClick={closeMobileMenu}
+                    className="px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                   >
                     Catálogo
                   </Link>
                   <Link
                     to="/galeria-disenos"
-                    onClick={cerrarMenuMovil}
-                    className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                    onClick={closeMobileMenu}
+                    className="px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                   >
                     Diseños de la comunidad
                   </Link>
                   <Link
                     to="/personalizador"
-                    onClick={cerrarMenuMovil}
-                    className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                    onClick={closeMobileMenu}
+                    className="px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                   >
                     Diseña con IA
                   </Link>
                   <Link
                     to="/solicitar-diseno"
-                    onClick={cerrarMenuMovil}
-                    className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                    onClick={closeMobileMenu}
+                    className="px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                   >
                     Diseño asistido
                   </Link>
                   {esAdmin && (
                     <Link
                       to="/disenador"
-                      onClick={cerrarMenuMovil}
-                      className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                      onClick={closeMobileMenu}
+                      className="px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                     >
                       Panel diseñador
                     </Link>
                   )}
                 </>
               )}
-            </nav>
+            </div>
 
             <div className="my-3 border-t border-gray-200 dark:border-slate-800" />
 
@@ -313,7 +363,7 @@ function Navbar() {
                 <>
                   <Link
                     to={esDisenador ? "/disenador" : "/dashboard"}
-                    onClick={cerrarMenuMovil}
+                    onClick={closeMobileMenu}
                     className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-gray-100 dark:hover:bg-slate-800"
                   >
                     <FaUserCircle className="text-indigo-500 dark:text-cyan-400" />
@@ -323,28 +373,28 @@ function Navbar() {
                     <>
                       <Link
                         to="/mis-cupones"
-                        onClick={cerrarMenuMovil}
+                        onClick={closeMobileMenu}
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-gray-100 dark:hover:bg-slate-800"
                       >
                         <FaTicketAlt className="text-indigo-500 dark:text-cyan-400" /> Cupones
                       </Link>
                       <Link
                         to="/mis-favoritos"
-                        onClick={cerrarMenuMovil}
+                        onClick={closeMobileMenu}
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-gray-100 dark:hover:bg-slate-800"
                       >
                         <FaHeart className="text-indigo-500 dark:text-cyan-400" /> Favoritos
                       </Link>
                       <Link
                         to="/mis-disenos"
-                        onClick={cerrarMenuMovil}
+                        onClick={closeMobileMenu}
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-gray-100 dark:hover:bg-slate-800"
                       >
                         <FaPalette className="text-indigo-500 dark:text-cyan-400" /> Mis diseños
                       </Link>
                       <Link
                         to="/bandeja"
-                        onClick={cerrarMenuMovil}
+                        onClick={closeMobileMenu}
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-gray-100 dark:hover:bg-slate-800"
                       >
                         <span className="relative">
@@ -362,7 +412,7 @@ function Navbar() {
                   <button
                     type="button"
                     onClick={() => {
-                      cerrarMenuMovil();
+                      closeMobileMenu();
                       handleLogout();
                     }}
                     className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
@@ -374,14 +424,14 @@ function Navbar() {
                 <>
                   <Link
                     to="/login"
-                    onClick={cerrarMenuMovil}
+                    onClick={closeMobileMenu}
                     className="rounded-lg border border-gray-200 px-3 py-2.5 text-center text-sm font-semibold text-gray-700 transition hover:border-indigo-400 dark:border-slate-700 dark:text-slate-200"
                   >
                     Iniciar sesión
                   </Link>
                   <Link
                     to="/registro"
-                    onClick={cerrarMenuMovil}
+                    onClick={closeMobileMenu}
                     className="rounded-lg bg-indigo-600 px-3 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
                   >
                     Registrarse

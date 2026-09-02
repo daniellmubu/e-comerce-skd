@@ -27,7 +27,7 @@ public class ChatBotServiceImpl implements ChatBotService {
 
     private final WebClient.Builder webClientBuilder;
 
-    @Value("${gemini.api.key}")
+    @Value("${gemini.api.key:}")
     private String geminiApiKey;
 
     private static final String GEMINI_URL =
@@ -50,6 +50,11 @@ public class ChatBotServiceImpl implements ChatBotService {
     @Override
     @SuppressWarnings("unchecked")
     public ChatResponse responder(ChatRequest request) {
+
+        if (geminiApiKey == null || geminiApiKey.isBlank()) {
+            log.error("GEMINI_API_KEY no configurada - ChatBot deshabilitado temporalmente");
+            throw new BadRequestException("El asistente virtual no está disponible en este momento. Configura GEMINI_API_KEY e inténtalo de nuevo.");
+        }
 
         // Construir contents: historial mapeado + mensaje actual
         List<Map<String, Object>> contents = new ArrayList<>();

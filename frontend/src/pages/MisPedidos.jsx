@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaShoppingBag, FaFilePdf } from "react-icons/fa";
 
+import { toast } from "sonner";
 import api from "../services/api";
 import { listarPedidosPorUsuario } from "../services/pedidoService";
 import { getErrorMessage } from "../services/api";
@@ -69,8 +70,9 @@ function MisPedidos() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      toast.success("Factura descargada correctamente");
     } catch (err) {
-      alert("No se pudo descargar la factura: " + getErrorMessage(err));
+      toast.error("No se pudo descargar la factura: " + getErrorMessage(err));
     }
   }
 
