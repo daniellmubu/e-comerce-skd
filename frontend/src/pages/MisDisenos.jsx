@@ -4,6 +4,7 @@ import { FaPalette, FaRobot, FaPenNib, FaDownload, FaTrash, FaSpinner, FaExclama
 
 import { listarDisenosPorUsuario, eliminarDiseno, eliminarTodosDisenos, publicarDiseno } from "../services/disenoService";
 import { getErrorMessage } from "../services/api";
+import { toast } from "sonner";
 
 async function descargarDiseno(diseno) {
   const url = diseno?.imagenUrl;
@@ -101,7 +102,7 @@ function MisDisenos() {
     try {
       await eliminarDiseno(id);
       setDisenos((prev) => prev.filter((d) => d.id !== id));
-      setMensaje({ tipo: "ok", texto: "Diseño borrado." });
+      toast.success("Diseño borrado");
       setMostrarConfirmEliminar(false);
       setDisenoAEliminar(null);
     } catch (err) {
@@ -135,6 +136,7 @@ function MisDisenos() {
       }
       setMostrarConfirmBorrarTodos(false);
       setTextoConfirm("");
+      toast.success("Diseños borrados");
     } catch (err) {
       setMensaje({ tipo: "error", texto: getErrorMessage(err) });
     } finally {
