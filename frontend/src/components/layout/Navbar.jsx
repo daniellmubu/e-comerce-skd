@@ -16,6 +16,7 @@ function Navbar() {
   const { limpiarCarrito } = useCart();
   const [busqueda, setBusqueda] = useState("");
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [menuMovil, setMenuMovil] = useState(false);
   const [noLeidas, setNoLeidas] = useState(0);
   const esDisenador = usuario?.rol === "disenador";
   const esAdmin = usuario?.rol === "admin";
@@ -42,6 +43,8 @@ function Navbar() {
 
   const toggleMenu = () => setMenuAbierto((v) => !v);
   const cerrarMenu = () => setMenuAbierto(false);
+  const toggleMenuMovil = () => setMenuMovil((v) => !v);
+  const cerrarMenuMovil = () => setMenuMovil(false);
 
   // El buscador superior es la puerta de entrada al catálogo: navega con
   // ?q= para que el catálogo lo recoja y filtre.
@@ -107,6 +110,16 @@ function Navbar() {
         <div className="ml-auto flex items-center gap-3">
           <button
             type="button"
+            onClick={toggleMenuMovil}
+            aria-label="Abrir menú de navegación"
+            aria-expanded={menuMovil}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300 lg:hidden"
+          >
+            <FaBars className="text-lg" />
+          </button>
+
+          <button
+            type="button"
             onClick={toggleTheme}
             aria-label={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
@@ -129,8 +142,8 @@ function Navbar() {
               </Link>
 
               {!esDisenador && (
-                /* Menú hamburguesa: cupones, favoritos y bandeja */
-                <div className="relative">
+                /* Menú de cuenta: visible solo en escritorio (en móvil va en el menú general) */
+                <div className="relative hidden lg:block">
                   <button
                     type="button"
                     onClick={toggleMenu}
@@ -236,6 +249,149 @@ function Navbar() {
           )}
         </div>
       </div>
+
+      {/* Menú móvil (solo < lg) */}
+      {menuMovil && (
+        <div className="border-t border-gray-200 bg-white lg:hidden dark:border-slate-800 dark:bg-slate-950">
+          <div className="mx-auto max-w-7xl px-6 py-4">
+            <nav className="flex flex-col gap-1 text-gray-700 dark:text-slate-200">
+              {esDisenador ? (
+                <Link
+                  to="/disenador"
+                  onClick={cerrarMenuMovil}
+                  className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                >
+                  Panel diseñador
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    to="/catalogo"
+                    onClick={cerrarMenuMovil}
+                    className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                  >
+                    Catálogo
+                  </Link>
+                  <Link
+                    to="/galeria-disenos"
+                    onClick={cerrarMenuMovil}
+                    className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                  >
+                    Diseños de la comunidad
+                  </Link>
+                  <Link
+                    to="/personalizador"
+                    onClick={cerrarMenuMovil}
+                    className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                  >
+                    Diseña con IA
+                  </Link>
+                  <Link
+                    to="/solicitar-diseno"
+                    onClick={cerrarMenuMovil}
+                    className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                  >
+                    Diseño asistido
+                  </Link>
+                  {esAdmin && (
+                    <Link
+                      to="/disenador"
+                      onClick={cerrarMenuMovil}
+                      className="rounded-lg px-3 py-2.5 text-sm font-semibold transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                    >
+                      Panel diseñador
+                    </Link>
+                  )}
+                </>
+              )}
+            </nav>
+
+            <div className="my-3 border-t border-gray-200 dark:border-slate-800" />
+
+            <nav className="flex flex-col gap-1 text-gray-700 dark:text-slate-200">
+              {usuario ? (
+                <>
+                  <Link
+                    to={esDisenador ? "/disenador" : "/dashboard"}
+                    onClick={cerrarMenuMovil}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                  >
+                    <FaUserCircle className="text-indigo-500 dark:text-cyan-400" />
+                    {usuario.nombre?.split(" ")[0] || usuario.username}
+                  </Link>
+                  {!esDisenador && (
+                    <>
+                      <Link
+                        to="/mis-cupones"
+                        onClick={cerrarMenuMovil}
+                        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                      >
+                        <FaTicketAlt className="text-indigo-500 dark:text-cyan-400" /> Cupones
+                      </Link>
+                      <Link
+                        to="/mis-favoritos"
+                        onClick={cerrarMenuMovil}
+                        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                      >
+                        <FaHeart className="text-indigo-500 dark:text-cyan-400" /> Favoritos
+                      </Link>
+                      <Link
+                        to="/mis-disenos"
+                        onClick={cerrarMenuMovil}
+                        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                      >
+                        <FaPalette className="text-indigo-500 dark:text-cyan-400" /> Mis diseños
+                      </Link>
+                      <Link
+                        to="/bandeja"
+                        onClick={cerrarMenuMovil}
+                        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-gray-100 dark:hover:bg-slate-800"
+                      >
+                        <span className="relative">
+                          <FaInbox className="text-gray-400 dark:text-slate-500" />
+                          {noLeidas > 0 && (
+                            <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                              {noLeidas}
+                            </span>
+                          )}
+                        </span>
+                        Bandeja de entrada
+                      </Link>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cerrarMenuMovil();
+                      handleLogout();
+                    }}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                  >
+                    <FaSignOutAlt /> Cerrar sesión
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    onClick={cerrarMenuMovil}
+                    className="rounded-lg border border-gray-200 px-3 py-2.5 text-center text-sm font-semibold text-gray-700 transition hover:border-indigo-400 dark:border-slate-700 dark:text-slate-200"
+                  >
+                    Iniciar sesión
+                  </Link>
+                  <Link
+                    to="/registro"
+                    onClick={cerrarMenuMovil}
+                    className="rounded-lg bg-indigo-600 px-3 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+                  >
+                    Registrarse
+                  </Link>
+                </>
+              )}
+            </nav>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }

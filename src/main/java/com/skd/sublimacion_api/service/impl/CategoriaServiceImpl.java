@@ -19,7 +19,9 @@ public class CategoriaServiceImpl implements CategoriaService {
 
     @Override
     public List<CategoriaResponse> listar() {
-        return categoriaRepository.findAll()
+        // Solo categorías con productos activos: el filtro del catálogo no
+        // muestra categorías vacías (ej. camisetas descontinuadas).
+        return categoriaRepository.findConProductosActivos()
                 .stream()
                 .map(this::toResponse)
                 .toList();

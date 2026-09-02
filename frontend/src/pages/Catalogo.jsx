@@ -22,7 +22,11 @@ const SORT_OPTIONS = [
 // nueva que no esté aquí cae en el valor por defecto.
 const CATEGORY_META = {
   Mugs: { image: mug, color: "from-violet-500 to-purple-700" },
+  "Mugs Mágicos": { image: mug, color: "from-fuchsia-500 to-pink-700" },
+  "Mágicos": { image: mug, color: "from-fuchsia-500 to-pink-700" },
   Jarras: { image: mug, color: "from-amber-500 to-orange-700" },
+  "Jarras cerveceras": { image: mug, color: "from-amber-500 to-orange-700" },
+  Termos: { image: mug, color: "from-cyan-500 to-blue-700" },
 };
 
 const DEFAULT_META = { image: mug, color: "from-slate-500 to-slate-700" };
