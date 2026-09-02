@@ -23,6 +23,7 @@ import { agregarDisenoAlCarrito } from "../services/disenoService";
 import { useCart } from "../context/CartContext";
 import { useTopicRealtime } from "../hooks/useTopicRealtime";
 import { getErrorMessage } from "../services/api";
+import { toast } from "sonner";
 import Loading from "../components/ui/Loading";
 
 const ESTADOS = {
@@ -122,7 +123,7 @@ function SolicitarDiseno() {
       });
       await recargarCarrito();
       abrirCarrito();
-      setMensaje({ tipo: "ok", texto: "Diseño agregado al carrito." });
+      toast.success("Diseño agregado al carrito");
     } catch (err) {
       setMensaje({ tipo: "error", texto: getErrorMessage(err) });
     } finally {

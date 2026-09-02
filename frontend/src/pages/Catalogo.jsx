@@ -8,6 +8,7 @@ import { listarCategorias } from "../services/categoriaService";
 import { agregarFavorito, eliminarFavorito } from "../services/favoritoService";
 import { estaAutenticado } from "../services/authService";
 import { getErrorMessage } from "../services/api";
+import { toast } from "sonner";
 import ProductCard from "../components/catalog/ProductCard";
 
 const TAMANIO_PAGINA = 12;
@@ -141,10 +142,12 @@ function Catalogo() {
     try {
       if (agregando) {
         await agregarFavorito(id);
+        toast.success("Agregado a favoritos");
       } else {
         await eliminarFavorito(id);
+        toast.success("Quitado de favoritos");
       }
-    } catch {
+    } catch (err) {
       // Revierte el cambio local si el backend rechazó la petición.
       setFavorites((prev) => {
         const next = new Set(prev);
@@ -155,6 +158,7 @@ function Catalogo() {
         }
         return next;
       });
+      toast.error(getErrorMessage(err));
     }
   };
 

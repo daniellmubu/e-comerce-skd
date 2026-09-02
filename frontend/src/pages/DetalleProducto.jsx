@@ -11,6 +11,7 @@ import {
 import { listarResenasPorProducto, crearResena, subirImagenResena } from "../services/resenaService";
 import { listarCaracteristicasPorProducto } from "../services/caracteristicaService";
 import { getErrorMessage } from "../services/api";
+import { toast } from "sonner";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 
@@ -437,12 +438,13 @@ function DetalleProducto() {
             <div className="flex flex-col gap-3">
               <button
                 type="button"
-                onClick={() =>
-                  agregarProducto(producto, {
+                onClick={async () => {
+                  const ok = await agregarProducto(producto, {
                     varianteId: varianteSel?.id ?? null,
                     precio: precioMostrar,
-                  })
-                }
+                  });
+                  if (ok) toast.success("Agregado al carrito");
+                }}
                 disabled={
                   (variantes.length > 0 && !varianteSel) || stockMostrar === 0
                 }
