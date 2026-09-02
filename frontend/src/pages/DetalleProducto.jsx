@@ -3,7 +3,11 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { FaStar, FaShoppingCart, FaArrowLeft, FaUpload, FaSpinner } from "react-icons/fa";
 
 import mug from "../assets/images/products/mug.png";
-import { obtenerProductoPorId, obtenerVariantesDeProducto } from "../services/productService";
+import {
+  obtenerProductoPorId,
+  obtenerVariantesDeProducto,
+  obtenerImagenesDeProducto,
+} from "../services/productService";
 import { listarResenasPorProducto, crearResena, subirImagenResena } from "../services/resenaService";
 import { listarCaracteristicasPorProducto } from "../services/caracteristicaService";
 import { getErrorMessage } from "../services/api";
@@ -46,6 +50,8 @@ function DetalleProducto() {
   const [resenas, setResenas] = useState([]);
   const [caracteristicas, setCaracteristicas] = useState([]);
   const [variantes, setVariantes] = useState([]);
+  const [imagenesProducto, setImagenesProducto] = useState([]);
+  const [imagenActiva, setImagenActiva] = useState(0);
   const [tallaSel, setTallaSel] = useState(null);
   const [colorSel, setColorSel] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -68,11 +74,20 @@ function DetalleProducto() {
       listarResenasPorProducto(id).catch(() => []),
       listarCaracteristicasPorProducto(id).catch(() => []),
       obtenerVariantesDeProducto(id).catch(() => []),
+      obtenerImagenesDeProducto(id).catch(() => []),
     ])
       .then(
-        ([productoData, resenasData, caracteristicasData, variantesData]) => {
+        ([
+          productoData,
+          resenasData,
+          caracteristicasData,
+          variantesData,
+          imagenesData,
+        ]) => {
           if (!activo) return;
           setProducto(productoData);
+          setImagenesProducto(Array.isArray(imagenesData) ? imagenesData : []);
+          setImagenActiva(0);
           setResenas(resenasData);
           setCaracteristicas(caracteristicasData);
           setVariantes(Array.isArray(variantesData) ? variantesData : []);
@@ -109,6 +124,19 @@ function DetalleProducto() {
     () => (producto ? CATEGORY_META[producto.categoria] ?? DEFAULT_META : DEFAULT_META),
     [producto]
   );
+
+  // Galería: imágenes reales del producto (GET /imagenes/producto/{id}). Si el
+  // backend no tiene ninguna, se usa la imagen principal del producto.
+  const galeria = useMemo(() => {
+    const urls = [...imagenesProducto]
+      .sort((a, b) => (b.esPrincipal ? 1 : 0) - (a.esPrincipal ? 1 : 0))
+      .map((img) => img.url)
+      .filter(Boolean);
+    if (urls.length > 0) return urls;
+    return producto?.imagenUrl ? [producto.imagenUrl] : [];
+  }, [imagenesProducto, producto]);
+
+  const imagenActivaUrl = galeria[imagenActiva] ?? galeria[0] ?? null;
 
   // Variantes: tallas y colores disponibles, y la variante seleccionada.
   const tallas = useMemo(
@@ -256,24 +284,36 @@ function DetalleProducto() {
               className={`flex h-96 items-center justify-center rounded-3xl bg-gradient-to-br ${meta.color}`}
             >
               <img
-                src={producto.imagenUrl || meta.image}
+                src={imagenActivaUrl || meta.image}
                 alt={producto.nombre}
                 className="h-72 object-contain"
               />
             </div>
 
-            {/* Miniaturas de vistas del producto */}
-            <div className="mt-4 grid grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className="flex h-20 items-center justify-center rounded-xl bg-gray-100 text-sm text-gray-400 transition hover:ring-2 hover:ring-indigo-300 dark:bg-slate-800 dark:text-slate-500 dark:hover:ring-cyan-500"
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
+            {/* Galería de imágenes del producto */}
+            {galeria.length > 1 && (
+              <div className="mt-4 flex flex-wrap gap-3">
+                {galeria.map((url, i) => (
+                  <button
+                    key={`${url}-${i}`}
+                    type="button"
+                    onClick={() => setImagenActiva(i)}
+                    aria-label={`Ver imagen ${i + 1} de ${galeria.length}`}
+                    className={`flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border-2 bg-gray-100 transition dark:bg-slate-800 ${
+                      i === imagenActiva
+                        ? "border-indigo-500 dark:border-cyan-400"
+                        : "border-transparent hover:ring-2 hover:ring-indigo-300 dark:hover:ring-cyan-500"
+                    }`}
+                  >
+                    <img
+                      src={url}
+                      alt={`${producto.nombre} - vista ${i + 1}`}
+                      className="h-full w-full object-contain"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Info */}

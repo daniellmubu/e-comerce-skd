@@ -33,4 +33,13 @@ public interface AdminProductoService {
     int ajustarPrecioPorPorcentaje(List<Long> ids, BigDecimal porcentaje);
 
     ProductoResponse subirImagen(Long productoId, byte[] imagenBytes, String contentType, String nombreOriginal);
+
+    /** Añade una imagen más a la galería del producto. La primera imagen subida queda como principal. */
+    ProductoResponse agregarImagen(Long productoId, byte[] imagenBytes, String contentType, String nombreOriginal);
+
+    /** Elimina una imagen de la galería. Si era la principal, promueve otra. */
+    void eliminarImagen(Long imagenId);
+
+    /** Marca una imagen como principal (desmarcando las demás del mismo producto). */
+    void marcarImagenPrincipal(Long imagenId);
 }

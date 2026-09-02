@@ -193,7 +193,7 @@ public class AdminDisenoServiceImpl implements AdminDisenoService {
                 .usuarioNombre(diseno.getUsuario() != null ? diseno.getUsuario().getNombre() : null)
                 .origen(diseno.getOrigen() != null ? diseno.getOrigen().name() : null)
                 .estadoPublicacion(diseno.getEstadoPublicacion() != null
-                        ? diseno.getEstadoPublicacion().name() : null)
+                        ? diseno.getEstadoPublicacion().name().toLowerCase() : null)
                 .motivoRechazo(diseno.getMotivoRechazo())
                 .meGusta(disenoMeGustaRepository.countByDisenoId(diseno.getId()))
                 .vecesUsado(diseno.getVecesUsado() == null ? 0 : diseno.getVecesUsado())

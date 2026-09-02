@@ -38,6 +38,12 @@ export async function obtenerVariantesDeProducto(id) {
   return data;
 }
 
+// GET /api/imagenes/producto/{productoId} -> [{ id, productoId, url, esPrincipal }]
+export async function obtenerImagenesDeProducto(productoId) {
+  const { data } = await api.get(`/imagenes/producto/${productoId}`);
+  return data;
+}
+
 export async function buscarProductosPorNombre(nombre) {
   const { data } = await api.get("/productos/buscar", { params: { nombre } });
   return data;

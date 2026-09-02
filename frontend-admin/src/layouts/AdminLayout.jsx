@@ -14,6 +14,7 @@ import {
   FaStarHalfAlt,
   FaIndustry,
   FaPalette,
+  FaShieldAlt,
 } from "react-icons/fa";
 
 import Navbar from "../components/Navbar";
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { label: "Usuarios", to: "/usuarios", icon: <FaUsers /> },
   { label: "Tarifas de envío", to: "/tarifas-envio", icon: <FaTruck /> },
   { label: "Reportes", to: "/reportes", icon: <FaFileAlt /> },
+  { label: "Seguridad", to: "/sesiones", icon: <FaShieldAlt /> },
 ];
 
 // Mapa para el título dinámico de la barra superior.
@@ -51,6 +53,7 @@ const TITULOS = {
   "/usuarios": "Usuarios",
   "/tarifas-envio": "Tarifas de envío",
   "/reportes": "Reportes",
+  "/sesiones": "Seguridad",
 };
 
 function AdminLayout() {

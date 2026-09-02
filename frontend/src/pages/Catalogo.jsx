@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link, useSearchParams } from "react-router-dom";
-import { FaSearch, FaHeart, FaChevronLeft, FaChevronRight } from "react-icons/fa";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { FaSearch, FaChevronLeft, FaChevronRight } from "react-icons/fa";
 
 import mug from "../assets/images/products/mug.png";
 import { buscarProductos } from "../services/productService";
@@ -8,6 +8,7 @@ import { listarCategorias } from "../services/categoriaService";
 import { agregarFavorito, eliminarFavorito } from "../services/favoritoService";
 import { estaAutenticado } from "../services/authService";
 import { getErrorMessage } from "../services/api";
+import ProductCard from "../components/catalog/ProductCard";
 
 const TAMANIO_PAGINA = 12;
 
@@ -30,14 +31,6 @@ const CATEGORY_META = {
 };
 
 const DEFAULT_META = { image: mug, color: "from-slate-500 to-slate-700" };
-
-function formatPrice(value) {
-  return Number(value).toLocaleString("es-CO", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  });
-}
 
 function Catalogo() {
   const navigate = useNavigate();
@@ -111,6 +104,7 @@ function Catalogo() {
   // categorías estén listas antes de filtrar por una (para tener su id).
   useEffect(() => {
     if (category !== "Todos" && categorias.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     cargarProductos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, category, sortBy, pagina, categorias]);
@@ -256,67 +250,15 @@ function Catalogo() {
             {products.map((product) => {
               const meta = CATEGORY_META[product.categoria] ?? DEFAULT_META;
               const isFavorite = favorites.has(product.id);
-
-  return (
-                <div
+              return (
+                <ProductCard
                   key={product.id}
-                  className="group overflow-hidden rounded-3xl border border-gray-200 bg-white transition-all duration-500 hover:-translate-y-2 hover:border-indigo-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:hover:border-cyan-500 dark:hover:shadow-[0_0_35px_rgba(34,211,238,0.15)]"
-                >
-                  <div
-                    className={`relative flex h-72 items-center justify-center bg-gradient-to-br ${meta.color}`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => toggleFavorite(product.id)}
-                      aria-label={
-                        isFavorite
-                          ? `Quitar ${product.nombre} de favoritos`
-                          : `Agregar ${product.nombre} a favoritos`
-                      }
-                      aria-pressed={isFavorite}
-                      className="absolute right-5 top-5 rounded-full bg-black/30 p-3 backdrop-blur transition hover:scale-110"
-                    >
-                      <FaHeart className={isFavorite ? "text-red-500" : "text-white"} />
-                    </button>
-
-                    <img
-                      src={product.imagenUrl || meta.image}
-                      alt={product.nombre}
-                      loading="lazy"
-                      className="h-64 object-contain transition duration-500 group-hover:scale-110"
-                    />
-                  </div>
-
-                  <div className="p-7">
-                    <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs text-indigo-600 dark:bg-slate-800 dark:text-cyan-300">
-                      {product.categoria}
-                    </span>
-
-                    <h3 className="mt-5 text-2xl font-bold">
-                      <Link to={`/productos/${product.id}`} className="transition hover:text-indigo-600 dark:hover:text-cyan-300">
-                        {product.nombre}
-                      </Link>
-                    </h3>
-
-                    {product.descripcion && (
-                      <p className="mt-2 line-clamp-2 text-sm text-gray-500 dark:text-slate-400">
-                        {product.descripcion}
-                      </p>
-                    )}
-
-                    <div className="mt-6 flex items-center justify-between">
-                      <h4 className="text-3xl font-bold">
-                        {formatPrice(product.precio)}
-                      </h4>
-
-                      {product.stock === 0 && (
-                        <span className="rounded-xl border border-gray-200 px-5 py-3 text-sm text-gray-400 dark:border-slate-700 dark:text-slate-500">
-                          Agotado
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                  producto={product}
+                  imagenFallback={meta.image}
+                  gradiente={meta.color}
+                  esFavorito={isFavorite}
+                  onToggleFavorito={() => toggleFavorite(product.id)}
+                />
               );
             })}
           </div>

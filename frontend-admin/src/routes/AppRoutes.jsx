@@ -16,6 +16,7 @@ import Empaques from "../pages/Empaques";
 import TarifasEnvio from "../pages/TarifasEnvio";
 import Reportes from "../pages/Reportes";
 import Disenos from "../pages/Disenos";
+import Sesiones from "../pages/Sesiones";
 
 function AppRoutes() {
   return (
@@ -48,6 +49,7 @@ function AppRoutes() {
         <Route path="usuarios" element={<Usuarios />} />
         <Route path="tarifas-envio" element={<TarifasEnvio />} />
         <Route path="reportes" element={<Reportes />} />
+        <Route path="sesiones" element={<Sesiones />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

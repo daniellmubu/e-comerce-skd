@@ -1,6 +1,7 @@
 import { createContext, useContext, useCallback, useState } from "react";
 
 import { login as loginApi } from "../api/authApi";
+import { cerrarSesionActual } from "../api/sesionesApi";
 
 const AuthContext = createContext(null);
 
@@ -50,7 +51,14 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Revoca la sesión actual en el servidor (best effort) antes de limpiar la
+    // sesión local, para que el dispositivo deje de contar como "activo".
+    try {
+      await cerrarSesionActual();
+    } catch {
+      // Sin token o red caída: igualmente se cierra la sesión local.
+    }
     limpiarSesion();
     setUsuario(null);
   }, []);

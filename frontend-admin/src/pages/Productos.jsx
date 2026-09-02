@@ -12,6 +12,9 @@ import {
   FaImage,
   FaUpload,
   FaTshirt,
+  FaStar,
+  FaCheck,
+  FaSpinner,
 } from "react-icons/fa";
 
 import Badge from "../components/Badge";
@@ -32,6 +35,10 @@ import {
   restaurarProducto,
   ajustarPrecios,
   subirImagenProducto,
+  listarImagenesProducto,
+  agregarImagenProducto,
+  marcarImagenPrincipal,
+  eliminarImagenProducto,
 } from "../api/productosApi";
 import { listarCategorias } from "../api/categoriasApi";
 import { formatPrice } from "../utils/formato";
@@ -109,10 +116,16 @@ function Productos() {
   const [mensajePrecio, setMensajePrecio] = useState(null);
   const checkSeleccionRef = useRef(null);
 
-  // Imagen del producto
+  // Imagen del producto (para productos nuevos)
   const [imagenFile, setImagenFile] = useState(null);
   const [imagenPreview, setImagenPreview] = useState("");
   const [subiendoImagen, setSubiendoImagen] = useState(false);
+
+  // Galería de imágenes (gestión de varias fotos al editar)
+  const [galeriaImagenes, setGaleriaImagenes] = useState([]);
+  const [galeriaCargando, setGaleriaCargando] = useState(false);
+  const [subiendoGaleria, setSubiendoGaleria] = useState(false);
+  const [galeriaMensaje, setGaleriaMensaje] = useState(null);
 
   const manejarImagenSeleccion = (e) => {
     const archivo = e.target.files?.[0];
@@ -124,6 +137,59 @@ function Productos() {
   const limpiarImagen = () => {
     setImagenFile(null);
     setImagenPreview("");
+  };
+
+  const cargarGaleria = useCallback(async (productoId) => {
+    if (!productoId) return;
+    setGaleriaCargando(true);
+    setGaleriaMensaje(null);
+    try {
+      const lista = await listarImagenesProducto(productoId);
+      setGaleriaImagenes(Array.isArray(lista) ? lista : []);
+    } catch {
+      setGaleriaImagenes([]);
+    } finally {
+      setGaleriaCargando(false);
+    }
+  }, []);
+
+  const manejarAgregarImagenGaleria = async (e) => {
+    const archivo = e.target.files?.[0];
+    e.target.value = "";
+    if (!archivo || !editando) return;
+    setSubiendoGaleria(true);
+    setGaleriaMensaje(null);
+    try {
+      await agregarImagenProducto(editando.id, archivo);
+      await cargarGaleria(editando.id);
+      cargar();
+    } catch (err) {
+      setGaleriaMensaje({ tipo: "error", texto: getErrorMessage(err) });
+    } finally {
+      setSubiendoGaleria(false);
+    }
+  };
+
+  const manejarMarcarPrincipal = async (imagenId) => {
+    setGaleriaMensaje(null);
+    try {
+      await marcarImagenPrincipal(imagenId);
+      if (editando) await cargarGaleria(editando.id);
+      cargar();
+    } catch (err) {
+      setGaleriaMensaje({ tipo: "error", texto: getErrorMessage(err) });
+    }
+  };
+
+  const manejarEliminarImagenGaleria = async (imagenId) => {
+    setGaleriaMensaje(null);
+    try {
+      await eliminarImagenProducto(imagenId);
+      if (editando) await cargarGaleria(editando.id);
+      cargar();
+    } catch (err) {
+      setGaleriaMensaje({ tipo: "error", texto: getErrorMessage(err) });
+    }
   };
 
   // Carga las categorías para el select del formulario y del filtro.
@@ -181,6 +247,8 @@ function Productos() {
     setFormError(null);
     setImagenFile(null);
     setImagenPreview("");
+    setGaleriaImagenes([]);
+    setGaleriaMensaje(null);
     setModalAbierto(true);
   };
 
@@ -200,9 +268,11 @@ function Productos() {
       categoriaId: categoria?.id ?? "",
     });
     setImagenFile(null);
-    setImagenPreview(producto.imagenUrl || "");
-    setFormError(null);
+    setImagenPreview("");
+    setGaleriaMensaje(null);
     setModalAbierto(true);
+    // Carga la galería real de imágenes del producto al abrir el editor.
+    cargarGaleria(producto.id);
   };
 
   const handleSubmit = async (e) => {
@@ -785,43 +855,139 @@ function Productos() {
             onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
           />
 
-          {/* Imagen del producto */}
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-600 dark:text-slate-300">
-              Imagen del producto
-            </label>
-            <div className="flex items-center gap-4">
-              {imagenPreview ? (
-                <img
-                  src={imagenPreview}
-                  alt="Vista previa"
-                  className="h-20 w-20 shrink-0 rounded-xl border border-gray-200 bg-white object-contain dark:border-slate-700 dark:bg-slate-800"
-                />
+          {/* Imagen del producto (solo al crear; al editar se gestiona la galería) */}
+          {!editando && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-600 dark:text-slate-300">
+                Imagen del producto
+              </label>
+              <div className="flex items-center gap-4">
+                {imagenPreview ? (
+                  <img
+                    src={imagenPreview}
+                    alt="Vista previa"
+                    className="h-20 w-20 shrink-0 rounded-xl border border-gray-200 bg-white object-contain dark:border-slate-700 dark:bg-slate-800"
+                  />
+                ) : (
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-dashed border-gray-300 text-gray-300 dark:border-slate-700 dark:text-slate-600">
+                    <FaImage className="h-6 w-6" />
+                  </div>
+                )}
+                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-400">
+                  <FaUpload />
+                  {imagenFile ? imagenFile.name : "Subir imagen"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={manejarImagenSeleccion}
+                  />
+                </label>
+                {imagenFile && (
+                  <Button variant="outline" size="sm" onClick={limpiarImagen}>
+                    Quitar
+                  </Button>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+                La imagen se sube automáticamente al guardar el producto.
+              </p>
+            </div>
+          )}
+
+          {/* Galería de imágenes (solo al editar) */}
+          {editando && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-600 dark:text-slate-300">
+                Galería de imágenes
+              </label>
+
+              {galeriaMensaje && (
+                <p
+                  className={`mb-3 rounded-xl border px-3 py-2 text-sm ${
+                    galeriaMensaje.tipo === "error"
+                      ? "border-red-300 bg-red-50 text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400"
+                      : "border-green-300 bg-green-50 text-green-600 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-400"
+                  }`}
+                >
+                  {galeriaMensaje.texto}
+                </p>
+              )}
+
+              {galeriaCargando ? (
+                <div className="flex items-center gap-2 py-6 text-sm text-gray-400 dark:text-slate-500">
+                  <FaSpinner className="animate-spin" /> Cargando imágenes...
+                </div>
+              ) : galeriaImagenes.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-400 dark:border-slate-700 dark:text-slate-500">
+                  Aún no hay imágenes. Sube la primera con el botón “Añadir imagen”.
+                </div>
               ) : (
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-dashed border-gray-300 text-gray-300 dark:border-slate-700 dark:text-slate-600">
-                  <FaImage className="h-6 w-6" />
+                <div className="flex flex-wrap gap-3">
+                  {galeriaImagenes.map((img) => (
+                    <div
+                      key={img.id}
+                      className="group relative h-24 w-24 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+                    >
+                      <img
+                        src={img.url}
+                        alt="Imagen del producto"
+                        className="h-full w-full object-contain"
+                      />
+                      {img.esPrincipal && (
+                        <span className="absolute left-1 top-1 inline-flex items-center gap-1 rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-950">
+                          <FaCheck className="h-2.5 w-2.5" /> Principal
+                        </span>
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 bg-black/50 py-1 opacity-0 transition group-hover:opacity-100">
+                        {!img.esPrincipal && (
+                          <button
+                            type="button"
+                            title="Marcar como principal"
+                            onClick={() => manejarMarcarPrincipal(img.id)}
+                            className="rounded-md bg-white/90 p-1 text-amber-500 hover:bg-white"
+                          >
+                            <FaStar className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          title="Eliminar imagen"
+                          onClick={() => manejarEliminarImagenGaleria(img.id)}
+                          className="rounded-md bg-white/90 p-1 text-red-500 hover:bg-white"
+                        >
+                          <FaTrash className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
-              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-400">
-                <FaUpload />
-                {imagenFile ? imagenFile.name : "Subir imagen"}
+
+              <label
+                className={`mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-600 transition hover:border-indigo-400 hover:bg-indigo-50 dark:border-cyan-500/40 dark:text-cyan-300 dark:hover:border-cyan-400 dark:hover:bg-cyan-950/30 ${
+                  subiendoGaleria ? "pointer-events-none opacity-50" : ""
+                }`}
+              >
+                {subiendoGaleria ? (
+                  <FaSpinner className="animate-spin" />
+                ) : (
+                  <FaUpload />
+                )}
+                {subiendoGaleria ? "Subiendo..." : "Añadir imagen"}
                 <input
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={manejarImagenSeleccion}
+                  onChange={manejarAgregarImagenGaleria}
+                  disabled={subiendoGaleria}
                 />
               </label>
-              {imagenFile && (
-                <Button variant="outline" size="sm" onClick={limpiarImagen}>
-                  Quitar
-                </Button>
-              )}
+              <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+                La primera imagen que subas queda como principal. Puedes añadir varias fotos y elegir cuál es la principal.
+              </p>
             </div>
-            <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
-              La imagen se sube automáticamente al guardar el producto.
-            </p>
-          </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Input

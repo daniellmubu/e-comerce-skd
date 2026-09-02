@@ -7,7 +7,10 @@ import com.skd.sublimacion_api.dto.OlvidePasswordRequest;
 import com.skd.sublimacion_api.dto.RegistroRequest;
 import com.skd.sublimacion_api.dto.RestablecerPasswordRequest;
 import com.skd.sublimacion_api.entity.Usuario;
+import com.skd.sublimacion_api.security.JwtService;
 import com.skd.sublimacion_api.service.AuthenticationService;
+import com.skd.sublimacion_api.service.SesionActivaService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,15 +25,63 @@ import java.util.Map;
 public class AuthenticationController {
 
     private final AuthenticationService authenticationService;
+    private final SesionActivaService sesionActivaService;
+    private final JwtService jwtService;
 
     @PostMapping("/registro")
-    public ResponseEntity<AuthResponse> registrar(@Valid @RequestBody RegistroRequest request) {
-        return ResponseEntity.ok(authenticationService.registrar(request));
+    public ResponseEntity<AuthResponse> registrar(
+            @Valid @RequestBody RegistroRequest request,
+            HttpServletRequest httpRequest) {
+
+        AuthResponse respuesta = authenticationService.registrar(request);
+        registrarSesionActiva(respuesta, httpRequest);
+        return ResponseEntity.ok(respuesta);
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.ok(authenticationService.login(request));
+    public ResponseEntity<AuthResponse> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest) {
+
+        AuthResponse respuesta = authenticationService.login(request);
+
+        // Registra la sesión activa del dispositivo que inicia sesión (para el
+        // control de dispositivos conectados y el cierre remoto de sesiones).
+        registrarSesionActiva(respuesta, httpRequest);
+
+        return ResponseEntity.ok(respuesta);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            sesionActivaService.revocarPorJti(jwtService.extractTokenId(token));
+        }
+        return ResponseEntity.ok(Map.of("message", "Sesión cerrada"));
+    }
+
+    /** Registra la sesión activa del token de acceso recién emitido. */
+    private void registrarSesionActiva(AuthResponse respuesta, HttpServletRequest httpRequest) {
+        if (respuesta == null || respuesta.getToken() == null || respuesta.getToken().isBlank()) {
+            return;
+        }
+        sesionActivaService.registrarSesion(
+                respuesta.getId(),
+                respuesta.getToken(),
+                httpRequest.getHeader("User-Agent"),
+                obtenerIpCliente(httpRequest));
+    }
+
+    /** Devuelve la IP real del cliente (respeta proxies con X-Forwarded-For). */
+    private String obtenerIpCliente(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     @PostMapping("/verificar-password")

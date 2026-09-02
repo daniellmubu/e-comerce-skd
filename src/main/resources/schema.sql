@@ -33,3 +33,21 @@ CREATE TABLE IF NOT EXISTS diseno_me_gusta (
     CONSTRAINT uk_diseno_usuario UNIQUE (diseno_id, usuario_id)
 );
 CREATE INDEX IF NOT EXISTS idx_diseno_me_gusta_diseno ON diseno_me_gusta(diseno_id);
+
+-- Sesiones activas: control de dispositivos con la sesión abierta y cierre
+-- remoto de sesiones (jwt jti emitidos). Una sesión queda revocada al cerrar
+-- sesión o desde el panel admin (Seguridad -> Sesiones activas).
+CREATE TABLE IF NOT EXISTS sesion_activa (
+    id BIGSERIAL PRIMARY KEY,
+    usuario_id BIGINT NOT NULL REFERENCES usuario(id) ON DELETE CASCADE,
+    token_jti VARCHAR(64) NOT NULL UNIQUE,
+    user_agent TEXT,
+    ip VARCHAR(64),
+    dispositivo VARCHAR(120),
+    navegador VARCHAR(160),
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expira_en TIMESTAMP NOT NULL,
+    revocada BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE INDEX IF NOT EXISTS idx_sesion_activa_usuario ON sesion_activa(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_sesion_activa_jti ON sesion_activa(token_jti);

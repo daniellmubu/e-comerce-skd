@@ -189,6 +189,70 @@ public class AdminProductoServiceImpl implements AdminProductoService {
                 return productoMapper.toResponse(producto);
         }
 
+        @Override
+        @Transactional
+        public ProductoResponse agregarImagen(Long productoId, byte[] imagenBytes, String contentType, String nombreOriginal) {
+
+                Producto producto = buscarProducto(productoId);
+
+                String extension = extensionDe(nombreOriginal, contentType);
+                String url = supabaseStorageService.subirImagen(imagenBytes, extension, contentType);
+
+                List<ImagenProducto> existentes = imagenRepository.findByProductoId(productoId);
+
+                ImagenProducto imagen = ImagenProducto.builder()
+                        .producto(producto)
+                        .url(url)
+                        .esPrincipal(existentes.isEmpty()) // la primera imagen subida es la principal
+                        .build();
+
+                imagenRepository.save(imagen);
+
+                return productoMapper.toResponse(producto);
+        }
+
+        @Override
+        @Transactional
+        public void eliminarImagen(Long imagenId) {
+
+                ImagenProducto imagen = imagenRepository.findById(imagenId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Imagen no encontrada"));
+
+                boolean eraPrincipal = Boolean.TRUE.equals(imagen.getEsPrincipal());
+                Long productoId = imagen.getProducto().getId();
+
+                imagenRepository.delete(imagen);
+
+                // Si se eliminó la imagen principal y quedan otras, se promueve la primera.
+                if (eraPrincipal) {
+                        List<ImagenProducto> restantes = imagenRepository.findByProductoId(productoId);
+                        if (!restantes.isEmpty()) {
+                                ImagenProducto nuevaPrincipal = restantes.get(0);
+                                nuevaPrincipal.setEsPrincipal(true);
+                                imagenRepository.save(nuevaPrincipal);
+                        }
+                }
+        }
+
+        @Override
+        @Transactional
+        public void marcarImagenPrincipal(Long imagenId) {
+
+                ImagenProducto imagen = imagenRepository.findById(imagenId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Imagen no encontrada"));
+
+                Long productoId = imagen.getProducto().getId();
+                List<ImagenProducto> todas = imagenRepository.findByProductoId(productoId);
+
+                for (ImagenProducto i : todas) {
+                        boolean esEsta = i.getId().equals(imagenId);
+                        if (Boolean.TRUE.equals(i.getEsPrincipal()) != esEsta) {
+                                i.setEsPrincipal(esEsta);
+                                imagenRepository.save(i);
+                        }
+                }
+        }
+
         private String extensionDe(String nombreOriginal, String contentType) {
 
                 if (nombreOriginal != null) {

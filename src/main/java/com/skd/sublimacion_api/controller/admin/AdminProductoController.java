@@ -226,4 +226,68 @@ public class AdminProductoController {
                 file.getOriginalFilename());
     }
 
+
+    @Operation(
+        summary = "Añadir imagen a la galería del producto",
+        description = "Sube una imagen adicional al producto sin reemplazar las existentes. " +
+                "La primera imagen que se suba al producto queda marcada como principal."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Imagen añadida correctamente"),
+            @ApiResponse(responseCode = "400", description = "No se envió una imagen válida"),
+            @ApiResponse(responseCode = "404", description = "Producto no encontrado")
+    })
+    @PostMapping(value = "/{id}/imagenes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ProductoResponse agregarImagen(
+            @PathVariable Long id,
+            @RequestParam(value = "file", required = false) MultipartFile file) {
+
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Debes subir una imagen.");
+        }
+
+        byte[] contenido;
+        try {
+            contenido = file.getBytes();
+        } catch (IOException ex) {
+            throw new BadRequestException("No se pudo leer la imagen subida.");
+        }
+
+        return adminProductoService.agregarImagen(
+                id,
+                contenido,
+                file.getContentType(),
+                file.getOriginalFilename());
+    }
+
+
+    @Operation(
+        summary = "Marcar imagen como principal",
+        description = "Marca una imagen de la galería como principal, desmarcando las demás del producto."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Imagen marcada correctamente"),
+            @ApiResponse(responseCode = "404", description = "Imagen no encontrada")
+    })
+    @PatchMapping("/imagenes/{imagenId}/principal")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void marcarPrincipal(@PathVariable Long imagenId) {
+        adminProductoService.marcarImagenPrincipal(imagenId);
+    }
+
+
+    @Operation(
+        summary = "Eliminar imagen de la galería",
+        description = "Elimina una imagen del producto. Si era la principal, se promueve otra automáticamente."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Imagen eliminada correctamente"),
+            @ApiResponse(responseCode = "404", description = "Imagen no encontrada")
+    })
+    @DeleteMapping("/imagenes/{imagenId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void eliminarImagen(@PathVariable Long imagenId) {
+        adminProductoService.eliminarImagen(imagenId);
+    }
+
 }

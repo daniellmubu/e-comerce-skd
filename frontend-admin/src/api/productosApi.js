@@ -68,3 +68,34 @@ export async function subirImagenProducto(id, file) {
   });
   return data;
 }
+
+// GET /api/imagenes/producto/{productoId} -> [{ id, productoId, url, esPrincipal }]
+// Endpoint público; devuelve todas las imágenes de la galería del producto.
+export async function listarImagenesProducto(productoId) {
+  const { data } = await api.get(`/imagenes/producto/${productoId}`);
+  return data;
+}
+
+// POST /api/admin/productos/{id}/imagenes -> añade una imagen más a la galería
+// (no reemplaza las existentes; la primera subida queda como principal).
+export async function agregarImagenProducto(id, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post(`/admin/productos/${id}/imagenes`, formData, {
+    headers: { "Content-Type": undefined },
+  });
+  return data;
+}
+
+// PATCH /api/admin/productos/imagenes/{imagenId}/principal -> marca la imagen como principal.
+export async function marcarImagenPrincipal(imagenId) {
+  const { data } = await api.patch(
+    `/admin/productos/imagenes/${imagenId}/principal`
+  );
+  return data;
+}
+
+// DELETE /api/admin/productos/imagenes/{imagenId} -> elimina la imagen de la galería.
+export async function eliminarImagenProducto(imagenId) {
+  await api.delete(`/admin/productos/imagenes/${imagenId}`);
+}
