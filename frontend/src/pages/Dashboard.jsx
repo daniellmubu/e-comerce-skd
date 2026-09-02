@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import {
   FaShoppingBag,
   FaPalette,
@@ -21,6 +22,8 @@ import {
   FaTicketAlt,
   FaInbox,
   FaHeart,
+  FaQrcode,
+  FaTimes,
 } from "react-icons/fa";
 
 import { obtenerUsuarioActual, reenviarVerificacion, verificarEmail, cambiarPassword, verificarPasswordActual } from "../services/authService";
@@ -69,6 +72,7 @@ function Dashboard() {
 
   const [referido, setReferido] = useState(null);
   const [copiado, setCopiado] = useState(false);
+  const [mostrarQR, setMostrarQR] = useState(false);
   const [reenviando, setReenviando] = useState(false);
   const [verificando, setVerificando] = useState(false);
   const [codigo, setCodigo] = useState("");
@@ -391,6 +395,13 @@ function Dashboard() {
                     className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
                   >
                     <FaShareAlt /> Compartir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMostrarQR(true)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-amber-500 bg-white px-4 py-2 text-sm font-semibold text-amber-700 shadow hover:bg-amber-100 dark:bg-slate-800 dark:text-amber-300"
+                  >
+                    <FaQrcode /> QR
                   </button>
                 </div>
               </div>
@@ -737,6 +748,44 @@ function Dashboard() {
           )}
         </section>
       </div>
+
+      {mostrarQR && referido && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border border-gray-200 bg-white p-6 text-center shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Tu código QR</h3>
+              <button
+                type="button"
+                onClick={() => setMostrarQR(false)}
+                aria-label="Cerrar"
+                className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-slate-800 dark:hover:text-white"
+              >
+                <FaTimes />
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+              Escanéalo para que tus amigos se registren con tu código.
+            </p>
+            <div className="mx-auto mt-5 w-fit rounded-2xl border border-gray-200 bg-white p-4 dark:border-slate-700">
+              <QRCodeSVG value={referido.link} size={200} level="M" fgColor="#78350f" />
+            </div>
+            <p className="mt-4 font-mono text-xl font-black tracking-widest text-amber-700 dark:text-amber-300">
+              {referido.codigo}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(referido.link);
+                setCopiado(true);
+                setTimeout(() => setCopiado(false), 2000);
+              }}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-600"
+            >
+              <FaCopy /> {copiado ? "¡Link copiado!" : "Copiar link"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
