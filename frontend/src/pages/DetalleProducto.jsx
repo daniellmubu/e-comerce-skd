@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { FaStar, FaShoppingCart, FaArrowLeft, FaUpload, FaSpinner } from "react-icons/fa";
+import { FaStar, FaShoppingCart, FaArrowLeft, FaUpload, FaSpinner, FaShareAlt } from "react-icons/fa";
 
 import mug from "../assets/images/products/mug.png";
 import {
@@ -268,6 +268,29 @@ function DetalleProducto() {
     );
   }
 
+  const handleCompartir = async () => {
+    const url = window.location.href;
+    const datos = {
+      title: `${producto.nombre} | SKD`,
+      text: `Mira ${producto.nombre} en SKD`,
+      url,
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(datos);
+      } catch {
+        // El usuario canceló; no mostramos error.
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Link del producto copiado");
+      } catch {
+        toast.error("No se pudo copiar el link");
+      }
+    }
+  };
+
   return (
     <section className="min-h-screen bg-gray-50 px-6 py-16 text-gray-900 dark:bg-slate-950 dark:text-white">
       <div className="mx-auto max-w-6xl">
@@ -282,12 +305,21 @@ function DetalleProducto() {
           {/* Imagen */}
           <div>
             <div
-              className={`flex h-96 items-center justify-center rounded-3xl bg-gradient-to-br ${meta.color}`}
+              className={`relative flex aspect-square items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br ${meta.color}`}
             >
+              <button
+                type="button"
+                onClick={handleCompartir}
+                aria-label="Compartir producto"
+                title="Compartir"
+                className="absolute right-5 top-5 z-10 rounded-full bg-black/30 p-3 text-white backdrop-blur transition hover:scale-110 hover:bg-black/50"
+              >
+                <FaShareAlt />
+              </button>
               <img
                 src={imagenActivaUrl || meta.image}
                 alt={producto.nombre}
-                className="h-72 object-contain"
+                className="h-full w-full object-contain"
               />
             </div>
 
