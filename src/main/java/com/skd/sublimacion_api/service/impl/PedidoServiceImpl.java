@@ -209,8 +209,11 @@ public class PedidoServiceImpl implements PedidoService {
                 .descuento(pedido.getDescuento())
                 .total(pedido.getTotal())
                 .items(respuestas)
+                .empaque(pedido.getEmpaque() != null ? pedido.getEmpaque().getTipo() : null)
                 .facturaId(factura != null ? factura.getId() : null)
                 .numeroFactura(factura != null ? factura.getNumeroFactura() : null)
+                .destinatarioRegalo(pedido.getDestinatarioRegalo())
+                .ocasionRegalo(pedido.getOcasionRegalo())
                 .build();
     }
 

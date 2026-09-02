@@ -305,6 +305,8 @@ public class CheckoutServiceImpl implements CheckoutService {
             .diasEstimadosEntrega(diasEstimadosEntrega)
             .total(total)
             .fechaEntregaDeseada(request.getFechaEntregaDeseada())
+            .destinatarioRegalo(request.getDestinatarioRegalo())
+            .ocasionRegalo(request.getOcasionRegalo())
             .build();
 
     return pedidoRepository.save(pedido);

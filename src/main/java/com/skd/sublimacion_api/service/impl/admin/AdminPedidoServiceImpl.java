@@ -229,8 +229,11 @@ public class AdminPedidoServiceImpl implements AdminPedidoService {
                 .descuento(pedido.getDescuento())
                 .total(pedido.getTotal())
                 .items(items)
+                .empaque(pedido.getEmpaque() != null ? pedido.getEmpaque().getTipo() : null)
                 .metodoPago(pago != null ? pago.getMetodo() : null)
                 .estadoPago(pago != null ? pago.getEstado() : null)
+                .destinatarioRegalo(pedido.getDestinatarioRegalo())
+                .ocasionRegalo(pedido.getOcasionRegalo())
                 .build();
     }
 

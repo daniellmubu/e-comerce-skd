@@ -332,6 +332,41 @@ function Pedidos() {
               </div>
             </div>
 
+            {/* Empaque y regalo */}
+            {(detalle.empaque || detalle.destinatarioRegalo) && (
+              <div>
+                <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">
+                  Empaque y entrega
+                </h3>
+                <div className="rounded-xl border border-gray-200 p-4 text-sm dark:border-slate-700">
+                  {detalle.empaque && (
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-gray-500 dark:text-slate-400">Empaque</span>
+                      <span className="font-semibold capitalize text-gray-900 dark:text-white">
+                        {detalle.empaque}
+                      </span>
+                    </div>
+                  )}
+                  {detalle.destinatarioRegalo && (
+                    <>
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-gray-500 dark:text-slate-400">Regalo para</span>
+                        <span className="font-semibold text-gray-900 dark:text-white">
+                          {detalle.destinatarioRegalo}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-gray-500 dark:text-slate-400">Ocasión</span>
+                        <span className="font-semibold text-gray-900 dark:text-white">
+                          {detalle.ocasionRegalo}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Items */}
             <div>
               <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">

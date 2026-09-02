@@ -58,6 +58,12 @@ public class Pedido {
     @Column(name = "fecha_entrega_deseada")
     private LocalDate fechaEntregaDeseada;
 
+    @Column(name = "destinatario_regalo")
+    private String destinatarioRegalo;
+
+    @Column(name = "ocasion_regalo")
+    private String ocasionRegalo;
+
     @Column(name = "guia_envio")
     private String guiaEnvio;
 
