@@ -45,7 +45,9 @@ function Catalogo() {
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [categorias, setCategorias] = useState([]);
-  const [category, setCategory] = useState("Todos");
+  const [category, setCategory] = useState(
+    () => searchParams.get("categoria") ?? "Todos"
+  );
   const [sortBy, setSortBy] = useState("relevancia");
   const [favorites, setFavorites] = useState(new Set());
 
