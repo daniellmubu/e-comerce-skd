@@ -24,9 +24,14 @@ import {
   FaHeart,
   FaQrcode,
   FaTimes,
+  FaTrash,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 
 import { obtenerUsuarioActual, reenviarVerificacion, verificarEmail, cambiarPassword, verificarPasswordActual } from "../services/authService";
+import { solicitarCancelacionCuenta, verificarCodigoCancelacion, eliminarCuenta } from "../services/cuentaService";
+import { toast } from "sonner";
+import { useAuth } from "../context/AuthContext";
 import { obtenerMiCodigo } from "../services/referidoService";
 import { listarPedidosPorUsuario } from "../services/pedidoService";
 import { listarMisFavoritos } from "../services/favoritoService";
@@ -68,6 +73,7 @@ const ESTADO_BADGE = {
 
 function Dashboard() {
   const navigate = useNavigate();
+  const { cerrarSesion } = useAuth();
   const [usuario, setUsuario] = useState(() => obtenerUsuarioActual());
 
   const [referido, setReferido] = useState(null);
@@ -91,6 +97,15 @@ function Dashboard() {
   const [mostrarCambiar, setMostrarCambiar] = useState(false);
   const [pasoCambiar, setPasoCambiar] = useState(1);
   const [verificandoActual, setVerificandoActual] = useState(false);
+
+  // Cancelar cuenta - doble verificación
+  const [solicitandoCancelacion, setSolicitandoCancelacion] = useState(false);
+  const [mostrarModalCodigo, setMostrarModalCodigo] = useState(false);
+  const [codigoCancelacion, setCodigoCancelacion] = useState("");
+  const [verificandoCodigo, setVerificandoCodigo] = useState(false);
+  const [errorCodigo, setErrorCodigo] = useState(null);
+  const [mostrarConfirmacionFinal, setMostrarConfirmacionFinal] = useState(false);
+  const [eliminandoCuenta, setEliminandoCuenta] = useState(false);
 
   useEffect(() => {
     if (!usuario) return undefined;
@@ -219,6 +234,67 @@ function Dashboard() {
   };
 
   const rolLabel = ROL_LABELS[usuario.rol] || usuario.rol;
+
+  // --- Cancelar cuenta: flujo doble verificación ---
+  const handleSolicitarCancelacion = async () => {
+    setSolicitandoCancelacion(true);
+    try {
+      await solicitarCancelacionCuenta();
+      setCodigoCancelacion("");
+      setErrorCodigo(null);
+      setMostrarModalCodigo(true);
+      toast.success("Código enviado a tu correo. Revisa tu bandeja (válido por 15 minutos).");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSolicitandoCancelacion(false);
+    }
+  };
+
+  const handleReenviarCodigoCancelacion = async () => {
+    try {
+      await solicitarCancelacionCuenta();
+      setErrorCodigo(null);
+      toast.success("Nuevo código enviado a tu correo.");
+    } catch (err) {
+      setErrorCodigo(getErrorMessage(err));
+    }
+  };
+
+  const handleVerificarCodigoCancelacion = async (e) => {
+    e.preventDefault();
+    if (codigoCancelacion.length !== 6) {
+      setErrorCodigo("El código debe tener 6 dígitos");
+      return;
+    }
+    setVerificandoCodigo(true);
+    setErrorCodigo(null);
+    try {
+      await verificarCodigoCancelacion(codigoCancelacion);
+      setMostrarModalCodigo(false);
+      setMostrarConfirmacionFinal(true);
+      setCodigoCancelacion("");
+    } catch (err) {
+      setErrorCodigo(getErrorMessage(err));
+    } finally {
+      setVerificandoCodigo(false);
+    }
+  };
+
+  const handleEliminarCuentaDefinitivo = async () => {
+    setEliminandoCuenta(true);
+    try {
+      await eliminarCuenta();
+      toast.success("Tu cuenta ha sido eliminada permanentemente");
+      cerrarSesion();
+      navigate("/", { replace: true });
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+      setMostrarConfirmacionFinal(false);
+    } finally {
+      setEliminandoCuenta(false);
+    }
+  };
 
 
   return (
@@ -747,6 +823,25 @@ function Dashboard() {
             </div>
           )}
         </section>
+
+        {/* Cancelar cuenta */}
+        <section className="mt-10 rounded-3xl border border-red-200 bg-white p-8 dark:border-red-900/40 dark:bg-slate-900/60 dark:backdrop-blur">
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900/30 dark:bg-red-950/30">
+            <p className="text-sm font-medium text-red-700 dark:text-red-300">
+              ¿Seguro que deseas cancelar tu cuenta?
+            </p>
+            <p className="mt-1 text-xs text-red-600/80 dark:text-red-400/80">
+              Te enviaremos un código de 6 dígitos a <span className="font-semibold">{usuario.correo}</span> para verificar que eres tú. El código expira en 15 minutos y es de un solo uso.
+            </p>
+            <Button
+              onClick={handleSolicitarCancelacion}
+              loading={solicitandoCancelacion}
+              className="mt-4 bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500"
+            >
+              <FaTrash className="mr-2" /> Cancelar cuenta
+            </Button>
+          </div>
+        </section>
       </div>
 
       {mostrarQR && referido && (
@@ -783,6 +878,92 @@ function Dashboard() {
             >
               <FaCopy /> {copiado ? "¡Link copiado!" : "Copiar link"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 1: Código de verificación */}
+      {mostrarModalCodigo && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMostrarModalCodigo(false)} aria-hidden="true" />
+          <div className="relative w-full max-w-md rounded-3xl border border-gray-200 bg-white p-8 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Verifica tu identidad</h3>
+            <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
+              Ingresa el código de 6 dígitos que enviamos a <span className="font-semibold text-gray-700 dark:text-slate-200">{usuario.correo}</span>. Válido por 15 minutos.
+            </p>
+            <form onSubmit={handleVerificarCodigoCancelacion} className="mt-6 space-y-4" noValidate>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={codigoCancelacion}
+                onChange={(e) => setCodigoCancelacion(e.target.value.replace(/\D/g, ""))}
+                placeholder="000000"
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] text-gray-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:border-cyan-400 dark:focus:ring-cyan-400/20"
+                autoFocus
+              />
+              {errorCodigo && (
+                <div className="flex items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+                  <FaExclamationCircle className="shrink-0" /> {errorCodigo}
+                </div>
+              )}
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button type="submit" loading={verificandoCodigo} disabled={codigoCancelacion.length !== 6} className="flex-1">
+                  Verificar código
+                </Button>
+                <button
+                  type="button"
+                  onClick={handleReenviarCodigoCancelacion}
+                  className="rounded-xl border border-gray-300 px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Reenviar código
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMostrarModalCodigo(false)}
+                className="w-full text-center text-sm text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                Cancelar
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Confirmación final irreversible */}
+      {mostrarConfirmacionFinal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !eliminandoCuenta && setMostrarConfirmacionFinal(false)} aria-hidden="true" />
+          <div className="relative w-full max-w-lg rounded-3xl border border-red-200 bg-white p-8 shadow-xl dark:border-red-900/40 dark:bg-slate-900">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+              <FaExclamationTriangle className="text-2xl" />
+            </div>
+            <h3 className="mt-4 text-center text-xl font-bold text-gray-900 dark:text-white">¿Estás completamente seguro?</h3>
+            <p className="mt-3 text-center text-sm leading-relaxed text-gray-600 dark:text-slate-300">
+              Esta acción es <span className="font-bold text-red-600 dark:text-red-400">irreversible</span>. Se eliminarán permanentemente tu cuenta, tus diseños, pedidos, direcciones y todo tu historial.
+              <br />
+              <br />
+              No podrás recuperar tu información. ¿Deseas continuar?
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setMostrarConfirmacionFinal(false)}
+                disabled={eliminandoCuenta}
+                className="flex-1 rounded-xl border border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleEliminarCuentaDefinitivo}
+                disabled={eliminandoCuenta}
+                className="flex-1 rounded-xl bg-red-600 px-6 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 dark:bg-red-600 dark:hover:bg-red-500"
+              >
+                {eliminandoCuenta ? "Eliminando..." : "Sí, eliminar mi cuenta"}
+              </button>
+            </div>
           </div>
         </div>
       )}

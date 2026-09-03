@@ -12,6 +12,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.skd.sublimacion_api.repository.UsuarioRepository;
+
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Import(TestMockConfiguration.class)
@@ -20,6 +22,9 @@ class LoginBloqueoIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private UsuarioRepository usuarioRepository;
 
     @Test
     void bloqueaCuentaTrasCincoIntentosFallidos() throws Exception {
@@ -30,6 +35,12 @@ class LoginBloqueoIntegrationTest {
                             {"nombre":"Bloqueable","username":"bloqueable_x","correo":"bloqueablex@skd.com","password":"123456"}
                             """))
                 .andExpect(status().isOk());
+
+        // Verificar email para que el login no falle por "no verificado" y podamos probar el bloqueo
+        usuarioRepository.findByUsername("bloqueable_x").ifPresent(u -> {
+            u.setVerificado(true);
+            usuarioRepository.save(u);
+        });
 
         // 2. Cinco intentos con contraseña incorrecta → 401.
         for (int i = 0; i < 5; i++) {

@@ -32,4 +32,8 @@ public interface EmailService {
 
     void enviarPasswordCambiada(String correo, String nombre);
 
+    void enviarCodigoCancelacionCuenta(String correo, String nombre, String codigo);
+
+    void enviarCuentaEliminada(String correo, String nombre);
+
 }

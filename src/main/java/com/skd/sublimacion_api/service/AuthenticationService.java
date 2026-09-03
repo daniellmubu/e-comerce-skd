@@ -172,6 +172,13 @@ public class AuthenticationService {
         Usuario usuario = usuarioRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
+        // Cuenta registrada pero email aún no verificado → no permitir ingreso
+        if (!Boolean.TRUE.equals(usuario.getVerificado())) {
+            throw new ForbiddenException(
+                    "Debes verificar tu email antes de iniciar sesión. Revisa tu correo y usa el código de verificación."
+            );
+        }
+
         // Login exitoso: reiniciamos el contador si quedó con intentos previos.
         if (usuario.getIntentosFallidos() != null && usuario.getIntentosFallidos() > 0) {
             usuario.setIntentosFallidos(0);

@@ -63,3 +63,15 @@ CREATE TABLE IF NOT EXISTS newsletter_suscripcion (
     creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     activo BOOLEAN NOT NULL DEFAULT TRUE
 );
+
+-- Cancelación de cuenta: código de 6 dígitos con expiración 15 min y un solo uso
+CREATE TABLE IF NOT EXISTS cuenta_cancelacion_token (
+    id BIGSERIAL PRIMARY KEY,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    usuario_id BIGINT NOT NULL REFERENCES usuario(id),
+    fecha_expiracion TIMESTAMP NOT NULL,
+    usado BOOLEAN NOT NULL DEFAULT FALSE,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_uso TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_cuenta_cancelacion_token_usuario ON cuenta_cancelacion_token(usuario_id);

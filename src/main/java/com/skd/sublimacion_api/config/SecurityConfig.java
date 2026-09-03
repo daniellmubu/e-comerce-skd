@@ -9,6 +9,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -16,7 +18,12 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Configuration
 @EnableWebSecurity
@@ -90,6 +97,30 @@ public class SecurityConfig {
                                 "/api/resenas/**"
                         ).hasAnyRole("admin", "cliente")
                         .anyRequest().authenticated()
+                )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            // Sin token / token inválido o expirado → 401 (no 403)
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            Map<String, Object> body = new HashMap<>();
+                            body.put("timestamp", LocalDateTime.now().toString());
+                            body.put("status", HttpStatus.UNAUTHORIZED.value());
+                            body.put("error", "Unauthorized");
+                            body.put("message", "No autenticado. Inicia sesión o verifica tu token.");
+                            new ObjectMapper().writeValue(response.getOutputStream(), body);
+                        })
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            // Autenticado pero sin rol suficiente → 403
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            Map<String, Object> body = new HashMap<>();
+                            body.put("timestamp", LocalDateTime.now().toString());
+                            body.put("status", HttpStatus.FORBIDDEN.value());
+                            body.put("error", "Forbidden");
+                            body.put("message", "No tienes permisos para acceder a este recurso.");
+                            new ObjectMapper().writeValue(response.getOutputStream(), body);
+                        })
                 )
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)

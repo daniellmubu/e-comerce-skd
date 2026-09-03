@@ -276,6 +276,58 @@ public class EmailServiceImpl implements EmailService {
 
     @Async
     @Override
+    public void enviarCodigoCancelacionCuenta(String correo, String nombre, String codigo) {
+
+        try {
+            MimeMessage mime = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mime, false, "UTF-8");
+
+            helper.setTo(correo);
+            helper.setSubject("SKD - Código para cancelar tu cuenta");
+            helper.setText("Hola " + nombre + ",\n\n"
+                    + "Recibimos una solicitud para CANCELAR tu cuenta de SKD.\n\n"
+                    + "Tu código de verificación es:\n\n"
+                    + "CÓDIGO: " + codigo + "\n\n"
+                    + "Ingrésalo en la web para confirmar que deseas continuar (válido por 15 minutos).\n\n"
+                    + "Si NO solicitaste cancelar tu cuenta, ignora este correo y tu cuenta permanecerá intacta.\n\n"
+                    + "Este código es distinto al de verificación de email o reseteo de contraseña.");
+
+            mailSender.send(mime);
+            log.info("Correo de código de cancelación enviado a {}", correo);
+
+        } catch (MessagingException | RuntimeException e) {
+            log.error("No se pudo enviar el correo de cancelación a {}: {}",
+                    correo, e.getMessage(), e);
+        }
+    }
+
+    @Async
+    @Override
+    public void enviarCuentaEliminada(String correo, String nombre) {
+
+        try {
+            MimeMessage mime = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mime, false, "UTF-8");
+
+            helper.setTo(correo);
+            helper.setSubject("SKD - Tu cuenta ha sido eliminada");
+            helper.setText("Hola " + nombre + ",\n\n"
+                    + "Te confirmamos que tu cuenta de SKD ha sido eliminada permanentemente, "
+                    + "junto con tus diseños, pedidos, direcciones y todo tu historial.\n\n"
+                    + "Lamentamos verte partir. Si fue un error, puedes crear una nueva cuenta en cualquier momento.\n\n"
+                    + "Gracias por haber sido parte de SKD.");
+
+            mailSender.send(mime);
+            log.info("Correo de cuenta eliminada enviado a {}", correo);
+
+        } catch (MessagingException | RuntimeException e) {
+            log.error("No se pudo enviar el correo de cuenta eliminada a {}: {}",
+                    correo, e.getMessage(), e);
+        }
+    }
+
+    @Async
+    @Override
     public void enviarVerificacionEmail(String correo, String nombre, String token) {
 
         try {

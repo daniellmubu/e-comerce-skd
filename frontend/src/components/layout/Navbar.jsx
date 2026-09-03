@@ -92,11 +92,15 @@ function Navbar() {
             {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
 
-          <Link
-            to="/"
-            className="shrink-0 text-2xl font-bold text-indigo-600 dark:bg-gradient-to-r dark:from-cyan-400 dark:to-violet-500 dark:bg-clip-text dark:text-transparent"
-          >
-            SKD
+          <Link to="/" className="flex shrink-0 items-center gap-2.5">
+            <img
+              src="/favicon.png"
+              alt="SKD Logo"
+              className="h-10 w-10 shrink-0 object-contain drop-shadow-sm sm:h-11 sm:w-11"
+            />
+            <span className="text-2xl font-bold text-indigo-600 dark:bg-gradient-to-r dark:from-cyan-400 dark:to-violet-500 dark:bg-clip-text dark:text-transparent">
+              SKD
+            </span>
           </Link>
         </div>
 

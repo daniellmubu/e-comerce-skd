@@ -14,8 +14,14 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import com.skd.sublimacion_api.service.SesionActivaService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -42,28 +48,73 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         jwt = authHeader.substring(7);
-        userEmail = jwtService.extractUsername(jwt);
+        try {
+            userEmail = jwtService.extractUsername(jwt);
+        } catch (ExpiredJwtException ex) {
+            // Token con más de 24h (jwt.expiration=86400000) → 401 pide reautenticación
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            Map<String, Object> body = new HashMap<>();
+            body.put("timestamp", LocalDateTime.now().toString());
+            body.put("status", 401);
+            body.put("error", "Unauthorized");
+            body.put("message", "Token expirado. Por favor inicia sesión nuevamente.");
+            new ObjectMapper().writeValue(response.getOutputStream(), body);
+            return;
+        } catch (JwtException | IllegalArgumentException ex) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            Map<String, Object> body = new HashMap<>();
+            body.put("timestamp", LocalDateTime.now().toString());
+            body.put("status", 401);
+            body.put("error", "Unauthorized");
+            body.put("message", "Token inválido.");
+            new ObjectMapper().writeValue(response.getOutputStream(), body);
+            return;
+        }
 
         if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
+            try {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
 
-            if (jwtService.isTokenValid(jwt, userDetails)) {
-                // Control de sesiones: los tokens emitidos por el login actual llevan
-                // jti y deben tener una sesión activa (no revocada ni vencida) en la BD.
-                // Los tokens antiguos sin jti se siguen aceptando (compatibilidad) hasta
-                // que expiren; al volver a iniciar sesión ya quedan bajo control.
-                String jti = jwtService.extractTokenId(jwt);
-                boolean sesionActiva = jti == null || sesionActivaService.esTokenActivo(jti);
+                if (jwtService.isTokenValid(jwt, userDetails)) {
+                    // Control de sesiones: los tokens emitidos por el login actual llevan
+                    // jti y deben tener una sesión activa (no revocada ni vencida) en la BD.
+                    // Los tokens antiguos sin jti se siguen aceptando (compatibilidad) hasta
+                    // que expiren; al volver a iniciar sesión ya quedan bajo control.
+                    String jti = jwtService.extractTokenId(jwt);
+                    boolean sesionActiva = jti == null || sesionActivaService.esTokenActivo(jti);
 
-                if (sesionActiva) {
-                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            userDetails.getAuthorities()
-                    );
-                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    if (sesionActiva) {
+                        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
+                        authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authToken);
+                    }
                 }
+            } catch (ExpiredJwtException ex) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json");
+                Map<String, Object> body = new HashMap<>();
+                body.put("timestamp", LocalDateTime.now().toString());
+                body.put("status", 401);
+                body.put("error", "Unauthorized");
+                body.put("message", "Token expirado. Por favor inicia sesión nuevamente.");
+                new ObjectMapper().writeValue(response.getOutputStream(), body);
+                return;
+            } catch (JwtException | IllegalArgumentException ex) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json");
+                Map<String, Object> body = new HashMap<>();
+                body.put("timestamp", LocalDateTime.now().toString());
+                body.put("status", 401);
+                body.put("error", "Unauthorized");
+                body.put("message", "Token inválido.");
+                new ObjectMapper().writeValue(response.getOutputStream(), body);
+                return;
             }
         }
 
