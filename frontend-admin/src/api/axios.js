@@ -28,6 +28,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      const url = error.config?.url || "";
+      const esRutaPublica = url.includes("/auth/login");
+      if (esRutaPublica) {
+        return Promise.reject(error);
+      }
       localStorage.removeItem("skd_admin_token");
       localStorage.removeItem("skd_admin_refresh_token");
       localStorage.removeItem("skd_admin_user");

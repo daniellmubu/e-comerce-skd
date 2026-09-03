@@ -22,10 +22,23 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      const url = error.config?.url || "";
+      const esRutaPublica =
+        url.includes("/auth/login") ||
+        url.includes("/auth/registro") ||
+        url.includes("/auth/olvide-password") ||
+        url.includes("/auth/restablecer-password") ||
+        url.includes("/auth/verificar-email") ||
+        url.includes("/auth/reenviar-verificacion");
+      if (esRutaPublica) {
+        return Promise.reject(error);
+      }
       localStorage.removeItem("skd_token");
       localStorage.removeItem("skd_refresh_token");
       localStorage.removeItem("skd_user");
-      window.location.href = "/login";
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(error);
   }
