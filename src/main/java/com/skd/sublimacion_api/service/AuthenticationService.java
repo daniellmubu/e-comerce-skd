@@ -152,6 +152,15 @@ public class AuthenticationService {
 
     public AuthResponse login(LoginRequest request) {
 
+        // Verificación anticipada de bloqueo para dar mensaje 403 claro antes de autenticar
+        usuarioRepository.findByUsername(request.getUsername()).ifPresent(u -> {
+            if (Boolean.TRUE.equals(u.getBloqueado())) {
+                throw new ForbiddenException(
+                        "Cuenta bloqueada por múltiples intentos fallidos. Contacta al administrador."
+                );
+            }
+        });
+
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
@@ -160,14 +169,14 @@ public class AuthenticationService {
                     )
             );
         } catch (LockedException ex) {
-            // isAccountNonLocked() -> false cuando el usuario está bloqueado.
             throw new ForbiddenException(
                     "Cuenta bloqueada por múltiples intentos fallidos. Contacta al administrador."
             );
         } catch (BadCredentialsException ex) {
-            // Registramos el intento fallido del usuario (si existe), y lo
-            // bloqueamos al superar el máximo permitido. Se relanza el 401.
             usuarioRepository.findByUsername(request.getUsername()).ifPresent(u -> {
+                if (Boolean.TRUE.equals(u.getBloqueado())) {
+                    return;
+                }
                 int intentos = (u.getIntentosFallidos() == null ? 0 : u.getIntentosFallidos()) + 1;
                 u.setIntentosFallidos(intentos);
                 if (intentos >= MAX_INTENTOS_FALLIDOS) {
@@ -175,13 +184,19 @@ public class AuthenticationService {
                 }
                 usuarioRepository.save(u);
             });
-            throw ex;
+            throw new BadCredentialsException("Credenciales inválidas. Verifica tu usuario y contraseña.");
         }
 
         Usuario usuario = usuarioRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
-        // Cuenta registrada pero email aún no verificado → no permitir ingreso
+        // Bloqueo verificado después de autenticar por si se bloqueó entre tiempo
+        if (Boolean.TRUE.equals(usuario.getBloqueado())) {
+            throw new ForbiddenException(
+                    "Cuenta bloqueada por múltiples intentos fallidos. Contacta al administrador."
+            );
+        }
+
         if (!Boolean.TRUE.equals(usuario.getVerificado())) {
             throw new ForbiddenException(
                     "Debes verificar tu email antes de iniciar sesión. Revisa tu correo y usa el código de verificación."

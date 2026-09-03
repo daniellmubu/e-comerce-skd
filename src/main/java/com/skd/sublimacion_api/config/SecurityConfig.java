@@ -69,6 +69,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/contacto/**").permitAll()
                         // Suscripción al newsletter (footer) pública.
                         .requestMatchers("/api/newsletter/**").permitAll()
+                        .requestMatchers("/api/webhooks/**").permitAll()
                         // El enum Rol define admin, disenador y cliente (en minúsculas).
                         // getAuthorities() genera "ROLE_admin" / "ROLE_disenador" /
                         // "ROLE_cliente", por eso se usa hasRole(...) (en minúsculas)

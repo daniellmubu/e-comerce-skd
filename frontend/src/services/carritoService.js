@@ -43,18 +43,22 @@
     await api.delete(`/detalle-carrito/${itemId}`);
   }
 
-  /**
-   * El backend no expone un endpoint para actualizar la cantidad de un item
-   * existente (solo GET/POST/DELETE en /api/detalle-carrito). Mientras no
-   * exista un PUT/PATCH real, simulamos la actualización borrando la fila
-   * vieja y creando una nueva con la cantidad correcta.
-   */
   export async function actualizarCantidadItem(item, nuevaCantidad) {
-    await eliminarItem(item.id);
-    return agregarItem({
-      carritoId: item.carritoId,
-      productoId: item.productoId,
-      cantidad: nuevaCantidad,
-      varianteId: item.varianteId ?? null,
-    });
+    // Usa endpoint atómico PUT /detalle-carrito/{id} con validación de stock en backend
+    try {
+      const { data } = await api.put(`/detalle-carrito/${item.id}`, { cantidad: nuevaCantidad });
+      return data;
+    } catch (err) {
+      // Fallback legacy: si backend antiguo no tiene PUT, simula borrado+creación
+      if (err.response?.status === 404 || err.response?.status === 405) {
+        await eliminarItem(item.id);
+        return agregarItem({
+          carritoId: item.carritoId,
+          productoId: item.productoId,
+          cantidad: nuevaCantidad,
+          varianteId: item.varianteId ?? null,
+        });
+      }
+      throw err;
+    }
   }

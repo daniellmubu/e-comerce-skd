@@ -35,6 +35,14 @@ public class CuponController {
         return cuponService.listarMios(usuario.getId());
     }
 
+    @GetMapping("/validar")
+    public CuponResponse validar(
+            @RequestParam String codigo,
+            @RequestParam(required = false) java.math.BigDecimal subtotal,
+            @AuthenticationPrincipal Usuario usuario) {
+        return cuponService.validarPorCodigo(codigo, usuario.getId(), subtotal);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CuponResponse guardar(@RequestBody CuponRequest request) {

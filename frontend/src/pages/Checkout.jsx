@@ -7,6 +7,8 @@ import { obtenerUsuarioActual, obtenerUsuarioId } from "../services/authService"
 import {
   listarDireccionesPorUsuario,
   crearDireccion,
+  actualizarDireccion,
+  eliminarDireccion,
 } from "../services/direccionService";
 import { listarEmpaques } from "../services/empaqueService";
 import { listarCupones, listarMisCupones } from "../services/cuponService";
@@ -101,6 +103,7 @@ function Checkout() {
     codigoPostal: "",
   });
   const [mostrarFormDireccion, setMostrarFormDireccion] = useState(false);
+  const [editandoId, setEditandoId] = useState(null);
 
   const [procesando, setProcesando] = useState(false);
   const [errorCheckout, setErrorCheckout] = useState(null);
@@ -206,24 +209,29 @@ function Checkout() {
   const handleGuardarDireccion = async () => {
     const { calle, ciudad, departamento, codigoPostal } = nuevaDireccion;
     if (!calle || !ciudad || !departamento) return;
-
     try {
       const usuarioId = obtenerUsuarioId();
-      const creada = await crearDireccion({
-        usuarioId,
-        calle,
-        ciudad,
-        departamento,
-        codigoPostal,
-        predeterminada: direcciones.length === 0,
-      });
-      setDirecciones((prev) => [...prev, creada]);
-      setDireccionId(String(creada.id));
+      if (editandoId) {
+        const actualizada = await actualizarDireccion(editandoId, { usuarioId, calle, ciudad, departamento, codigoPostal });
+        setDirecciones((prev) => prev.map((d) => d.id === editandoId ? actualizada : d));
+        setEditandoId(null);
+      } else {
+        const creada = await crearDireccion({ usuarioId, calle, ciudad, departamento, codigoPostal, predeterminada: direcciones.length === 0 });
+        setDirecciones((prev) => [...prev, creada]);
+        setDireccionId(String(creada.id));
+      }
       setMostrarFormDireccion(false);
       setNuevaDireccion({ calle: "", ciudad: "", departamento: "", codigoPostal: "" });
-    } catch (err) {
-      setErrorCarga(getErrorMessage(err));
-    }
+    } catch (err) { setErrorCarga(getErrorMessage(err)); }
+  };
+
+  const handleEditarDireccion = (dir) => {
+    setNuevaDireccion({ calle: dir.calle, ciudad: dir.ciudad, departamento: dir.departamento, codigoPostal: dir.codigoPostal || "" });
+    setEditandoId(dir.id);
+    setMostrarFormDireccion(true);
+  };
+  const handleEliminarDireccion = async (id) => {
+    try { await eliminarDireccion(id); setDirecciones((prev) => prev.filter((d) => d.id !== id)); if (String(id) === direccionId) setDireccionId(""); } catch (err) { setErrorCarga(getErrorMessage(err)); }
   };
 
   const empaqueSeleccionado = empaques.find((e) => String(e.id) === empaqueId);
@@ -457,26 +465,14 @@ function Checkout() {
                 {direcciones.length > 0 && (
                   <div className="space-y-3">
                     {direcciones.map((dir) => (
-                      <label
-                        key={dir.id}
-                        className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${
-                          String(dir.id) === direccionId
-                            ? "border-indigo-400 bg-indigo-50 dark:border-cyan-400 dark:bg-cyan-400/5"
-                            : "border-gray-200 dark:border-slate-700"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="direccion"
-                          className="mt-1"
-                          checked={String(dir.id) === direccionId}
-                          onChange={() => setDireccionId(String(dir.id))}
-                        />
-                        <span className="text-sm text-gray-600 dark:text-slate-300">
-                          {dir.calle}, {dir.ciudad}, {dir.departamento}
-                          {dir.codigoPostal ? ` (${dir.codigoPostal})` : ""}
-                        </span>
-                      </label>
+                      <div key={dir.id} className={`flex items-start gap-2 rounded-xl border p-3 ${String(dir.id) === direccionId ? "border-indigo-400 bg-indigo-50 dark:border-cyan-400 dark:bg-cyan-400/5" : "border-gray-200 dark:border-slate-700"}`}>
+                        <label className="flex flex-1 cursor-pointer items-start gap-3">
+                          <input type="radio" name="direccion" className="mt-1" checked={String(dir.id) === direccionId} onChange={() => setDireccionId(String(dir.id))} />
+                          <span className="text-sm text-gray-600 dark:text-slate-300">{dir.calle}, {dir.ciudad}, {dir.departamento}{dir.codigoPostal ? ` (${dir.codigoPostal})` : ""}</span>
+                        </label>
+                        <button onClick={()=>handleEditarDireccion(dir)} className="text-xs text-indigo-600 dark:text-cyan-400">Editar</button>
+                        <button onClick={()=>handleEliminarDireccion(dir.id)} className="text-xs text-red-500">Eliminar</button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -523,9 +519,10 @@ function Checkout() {
                         setNuevaDireccion((p) => ({ ...p, codigoPostal: e.target.value }))
                       }
                     />
-                    <Button size="sm" onClick={handleGuardarDireccion}>
-                      Guardar dirección
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={handleGuardarDireccion}>{editandoId ? "Actualizar" : "Guardar"} dirección</Button>
+                      <button onClick={()=>{ setMostrarFormDireccion(false); setEditandoId(null); setNuevaDireccion({ calle: "", ciudad: "", departamento: "", codigoPostal: "" }); }} className="text-sm text-gray-500">Cancelar</button>
+                    </div>
                   </div>
                 )}
               </div>

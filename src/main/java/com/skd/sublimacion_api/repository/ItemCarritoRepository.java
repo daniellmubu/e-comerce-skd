@@ -11,4 +11,6 @@ public interface ItemCarritoRepository extends JpaRepository<ItemCarrito, Long> 
 
     boolean existsByDisenoId(Long disenoId);
 
+    java.util.Optional<ItemCarrito> findByCarritoIdAndProductoIdAndVarianteId(Long carritoId, Long productoId, Long varianteId);
+
 }

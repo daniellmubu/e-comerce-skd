@@ -50,28 +50,23 @@ public class EnvioServiceImpl implements EnvioService {
 
     @Override
     public CostoEnvio calcularParaCheckout(Direccion direccion) {
-
-        String departamento = direccion == null
-                ? null
-                : direccion.getDepartamento();
-
+        String departamento = direccion == null ? null : direccion.getDepartamento();
         if (departamento == null || departamento.isBlank()) {
-            return new CostoEnvio(
-                    COSTO_POR_DEFECTO, DIAS_POR_DEFECTO, false);
+            return new CostoEnvio(COSTO_POR_DEFECTO, DIAS_POR_DEFECTO, false);
         }
-
-        TarifaEnvio tarifa = tarifaEnvioRepository
-                .findByDepartamentoIgnoreCase(departamento.trim())
-                .orElse(null);
-
+        TarifaEnvio tarifa = tarifaEnvioRepository.findByDepartamentoIgnoreCase(departamento.trim()).orElse(null);
         if (tarifa == null) {
-            return new CostoEnvio(
-                    COSTO_POR_DEFECTO, DIAS_POR_DEFECTO, false);
+            return new CostoEnvio(COSTO_POR_DEFECTO, DIAS_POR_DEFECTO, false);
         }
+        return new CostoEnvio(tarifa.getCostoBase(), tarifa.getDiasEstimados(), true);
+    }
 
-        return new CostoEnvio(
-                tarifa.getCostoBase(),
-                tarifa.getDiasEstimados(),
-                true);
+    // Sobrecarga que considera peso: +$2000 por cada kg adicional >1kg
+    public CostoEnvio calcularParaCheckout(Direccion direccion, double pesoKg) {
+        CostoEnvio base = calcularParaCheckout(direccion);
+        if (pesoKg <= 1.0) return base;
+        long extraKg = (long) Math.ceil(pesoKg - 1.0);
+        java.math.BigDecimal recargo = java.math.BigDecimal.valueOf(extraKg * 2000L);
+        return new CostoEnvio(base.costo().add(recargo), base.diasEstimados() + (int) extraKg, base.tarifaConfigurada());
     }
 }

@@ -34,4 +34,6 @@ public class CuponRequest {
     private Boolean activo;
 
     private Boolean esUnicoPorUsuario;
+
+    private BigDecimal montoMinimo;
 }

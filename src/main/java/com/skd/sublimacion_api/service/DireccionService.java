@@ -13,6 +13,10 @@ public interface DireccionService {
 
     DireccionResponse guardar(DireccionRequest request);
 
+    DireccionResponse actualizar(Long id, DireccionRequest request, Long usuarioId);
+
+    void eliminar(Long id, Long usuarioId);
+
     void eliminar(Long id);
 
 }

@@ -28,4 +28,6 @@ public class CuponResponse {
 
     private Boolean esUnicoPorUsuario;
 
+    private BigDecimal montoMinimo;
+
 }

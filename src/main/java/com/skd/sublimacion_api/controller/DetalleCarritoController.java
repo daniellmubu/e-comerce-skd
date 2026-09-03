@@ -36,6 +36,15 @@ public class DetalleCarritoController {
         return detalleService.guardar(request, usuario.getId());
     }
 
+    @PutMapping("/{id}")
+    public ItemCarritoResponse actualizarCantidad(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, Integer> body,
+            @AuthenticationPrincipal Usuario usuario) {
+        Integer cantidad = body.get("cantidad");
+        return detalleService.actualizarCantidad(id, cantidad, usuario.getId());
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void eliminar(@PathVariable Long id) {

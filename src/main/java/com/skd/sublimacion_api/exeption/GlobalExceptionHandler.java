@@ -130,13 +130,25 @@ public class GlobalExceptionHandler {
                 "El cuerpo de la petición contiene datos inválidos.");
     }
     
+    @ExceptionHandler(org.springframework.security.authentication.LockedException.class)
+    public ResponseEntity<?> handleLockedException(org.springframework.security.authentication.LockedException ex) {
+        return buildError(
+                HttpStatus.FORBIDDEN,
+                "Forbidden",
+                "Cuenta bloqueada por múltiples intentos fallidos. Contacta al administrador.");
+    }
+
     // Errores de autenticacion: credenciales invalidas deben responder 401, no 500.
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<?> handleAuthenticationException(AuthenticationException ex) {
+        String msg = ex.getMessage();
+        if (msg != null && (msg.toLowerCase().contains("bloqueada") || msg.toLowerCase().contains("locked"))) {
+            return buildError(HttpStatus.FORBIDDEN, "Forbidden", msg);
+        }
         return buildError(
                 HttpStatus.UNAUTHORIZED,
                 "Unauthorized",
-                "Credenciales inválidas");
+                msg != null && !msg.isBlank() ? msg : "Credenciales inválidas");
     }
     
     // Cualquier otro error — nunca exponer detalles técnicos al cliente

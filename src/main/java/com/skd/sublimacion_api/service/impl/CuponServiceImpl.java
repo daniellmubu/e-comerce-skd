@@ -53,6 +53,7 @@ public class CuponServiceImpl implements CuponService {
                         request.getEsUnicoPorUsuario() != null
                                 ? request.getEsUnicoPorUsuario()
                                 : false)
+                .montoMinimo(request.getMontoMinimo())
                 .build();
 
         return convertir(cuponRepository.save(cupon));
@@ -79,6 +80,7 @@ public class CuponServiceImpl implements CuponService {
                 .usosActuales(cupon.getUsosActuales())
                 .activo(cupon.getActivo())
                 .esUnicoPorUsuario(cupon.getEsUnicoPorUsuario())
+                .montoMinimo(cupon.getMontoMinimo())
                 .build();
     }
 
@@ -104,6 +106,30 @@ public class CuponServiceImpl implements CuponService {
                 .usado(cuponUsuario.getUsado())
                 .fechaUso(cuponUsuario.getFechaUso())
                 .build();
+    }
+
+    @Override
+    public CuponResponse validarPorCodigo(String codigo, Long usuarioId, java.math.BigDecimal subtotalCarrito) {
+        Cupon cupon = cuponRepository.findByCodigo(codigo.toUpperCase())
+                .orElseThrow(() -> new IllegalArgumentException("Cupón no válido: código inexistente"));
+
+        if (!Boolean.TRUE.equals(cupon.getActivo())) {
+            throw new IllegalArgumentException("Cupón no válido: no está activo");
+        }
+        java.time.LocalDate hoy = java.time.LocalDate.now();
+        if (hoy.isBefore(cupon.getFechaInicio()) || hoy.isAfter(cupon.getFechaFin())) {
+            throw new IllegalArgumentException("Cupón expirado: no está vigente");
+        }
+        if (cupon.getUsosMaximos() != null && cupon.getUsosActuales() != null && cupon.getUsosActuales() >= cupon.getUsosMaximos()) {
+            throw new IllegalArgumentException("Cupón alcanzó límite de usos");
+        }
+        if (Boolean.TRUE.equals(cupon.getEsUnicoPorUsuario()) && cuponUsuarioRepository.existsByCupon_IdAndUsuario_IdAndUsadoTrue(cupon.getId(), usuarioId)) {
+            throw new IllegalArgumentException("Cupón ya usado por tu cuenta");
+        }
+        if (cupon.getMontoMinimo() != null && subtotalCarrito != null && subtotalCarrito.compareTo(cupon.getMontoMinimo()) < 0) {
+            throw new IllegalArgumentException("Monto mínimo requerido: $" + cupon.getMontoMinimo().toPlainString());
+        }
+        return convertir(cupon);
     }
 
 }

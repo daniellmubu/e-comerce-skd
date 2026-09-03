@@ -18,4 +18,6 @@ public interface CuponService {
 
     List<CuponUsuarioResponse> listarMios(Long usuarioId);
 
+    CuponResponse validarPorCodigo(String codigo, Long usuarioId, java.math.BigDecimal subtotalCarrito);
+
 }

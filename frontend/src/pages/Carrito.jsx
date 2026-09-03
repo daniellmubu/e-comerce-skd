@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaShoppingBag } from "react-icons/fa";
 
+import { toast } from "sonner";
+import { getErrorMessage } from "../services/api";
 import { useCart } from "../context/CartContext";
+import { validarCupon } from "../services/cuponService";
 import CartItem from "../components/cart/CartItem";
 import CartSummary from "../components/cart/CartSummary";
 import Loading from "../components/ui/Loading";
@@ -17,7 +21,34 @@ function Carrito() {
     aumentarCantidad,
     disminuirCantidad,
     eliminarProducto,
+    vaciarCarrito,
   } = useCart();
+
+  const handleAumentar = async (id) => {
+    try { await aumentarCantidad(id); } catch (e) { toast.error(getErrorMessage(e)); }
+  };
+  const handleDisminuir = async (id) => {
+    try { await disminuirCantidad(id); } catch (e) { toast.error(getErrorMessage(e)); }
+  };
+
+  const [codigoCupon, setCodigoCupon] = useState("");
+  const [cuponInfo, setCuponInfo] = useState(null);
+  const [errorCupon, setErrorCupon] = useState(null);
+
+  const handleValidarCupon = async () => {
+    if (!codigoCupon.trim()) { setErrorCupon("Escribe un código"); return; }
+    try {
+      const cupon = await validarCupon(codigoCupon.trim().toUpperCase(), total);
+      setCuponInfo(cupon);
+      setErrorCupon(null);
+      toast.success(`Cupón ${cupon.codigo} válido: -${cupon.descuentoPorcentaje}%`);
+    } catch (e) {
+      setCuponInfo(null);
+      const msg = getErrorMessage(e);
+      setErrorCupon(msg);
+      toast.error(msg);
+    }
+  };
 
   return (
     <section className="min-h-screen bg-gray-50 px-6 py-16 text-gray-900 dark:bg-slate-950 dark:text-white">
@@ -56,6 +87,17 @@ function Carrito() {
         )}
 
         {items.length > 0 && (
+          <>
+            <div className="mb-4 flex justify-end">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={async () => { try { await vaciarCarrito(); toast.success("Carrito vaciado"); } catch(e){ toast.error(getErrorMessage(e)); } }}
+                className="rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-40 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+              >
+                Vaciar carrito
+              </button>
+            </div>
           <div className="grid gap-8 lg:grid-cols-3">
             <div className="space-y-3 lg:col-span-2">
               {items.map((item) => (
@@ -63,14 +105,24 @@ function Carrito() {
                   key={item.id}
                   item={item}
                   disabled={loading}
-                  onAumentar={aumentarCantidad}
-                  onDisminuir={disminuirCantidad}
+                  onAumentar={handleAumentar}
+                  onDisminuir={handleDisminuir}
                   onEliminar={eliminarProducto}
                 />
               ))}
             </div>
 
-            <div>
+            <div className="space-y-4">
+              {/* Cupón en carrito TC-CART-13 a 16 */}
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/60">
+                <p className="mb-2 text-sm font-semibold">¿Tienes un cupón?</p>
+                <div className="flex gap-2">
+                  <input value={codigoCupon} onChange={(e)=>setCodigoCupon(e.target.value.toUpperCase())} placeholder="Ej: SKD20" className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" />
+                  <button onClick={handleValidarCupon} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white dark:bg-cyan-600">Validar</button>
+                </div>
+                {errorCupon && <p className="mt-2 text-xs text-red-500">{errorCupon}</p>}
+                {cuponInfo && <p className="mt-2 text-xs text-emerald-600">Cupón {cuponInfo.codigo} válido: -{Number(cuponInfo.descuentoPorcentaje)}% {cuponInfo.montoMinimo ? `(mín $${cuponInfo.montoMinimo})` : ""}</p>}
+              </div>
               <CartSummary
                 total={total}
                 cantidadProductos={cantidadProductos}
@@ -79,6 +131,7 @@ function Carrito() {
               />
             </div>
           </div>
+          </>
         )}
       </div>
     </section>

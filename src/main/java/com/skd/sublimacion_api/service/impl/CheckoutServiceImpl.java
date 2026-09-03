@@ -70,6 +70,7 @@ public class CheckoutServiceImpl implements CheckoutService {
         Usuario usuario = obtenerUsuario(usuarioId);
 
         Direccion direccion = obtenerDireccion(request.getDireccionId());
+        validarDireccionPertenece(direccion, usuarioId);
 
         Empaque empaque = obtenerEmpaque(request.getEmpaqueId());
 
@@ -87,6 +88,10 @@ public class CheckoutServiceImpl implements CheckoutService {
         validarStock(items);
 
         BigDecimal subtotal = calcularSubtotal(items);
+
+        if (cupon != null) {
+            validarMontoMinimo(cupon, subtotal);
+        }
 
         BigDecimal descuento = calcularDescuento(subtotal, cupon);
 
@@ -152,10 +157,14 @@ public class CheckoutServiceImpl implements CheckoutService {
     }
 
     private Direccion obtenerDireccion(Long direccionId) {
-
         return direccionRepository.findById(direccionId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException("Dirección no encontrada"));
+                .orElseThrow(() -> new ResourceNotFoundException("Dirección no encontrada"));
+    }
+
+    private void validarDireccionPertenece(Direccion direccion, Long usuarioId) {
+        if (!direccion.getUsuario().getId().equals(usuarioId)) {
+            throw new com.skd.sublimacion_api.exeption.ForbiddenException("La dirección no te pertenece");
+        }
     }
 
     private Empaque obtenerEmpaque(Long empaqueId) {
@@ -183,7 +192,7 @@ public class CheckoutServiceImpl implements CheckoutService {
         if (hoy.isBefore(cupon.getFechaInicio()) ||
                 hoy.isAfter(cupon.getFechaFin())) {
             throw new IllegalArgumentException(
-                    "El cupón no está vigente en esta fecha");
+                    "El cupón expiró / no está vigente en esta fecha");
         }
 
         if (cupon.getUsosMaximos() != null &&
@@ -199,6 +208,13 @@ public class CheckoutServiceImpl implements CheckoutService {
                                 cupon.getId(), usuarioId)) {
             throw new IllegalArgumentException(
                     "Este cupón ya fue utilizado por tu cuenta");
+        }
+    }
+
+    private void validarMontoMinimo(Cupon cupon, BigDecimal subtotal) {
+        if (cupon.getMontoMinimo() != null && subtotal.compareTo(cupon.getMontoMinimo()) < 0) {
+            throw new IllegalArgumentException(
+                    "Monto mínimo para este cupón: $" + cupon.getMontoMinimo().toPlainString() + ". Tu carrito: $" + subtotal.toPlainString());
         }
     }
 

@@ -43,7 +43,15 @@ function Login() {
       actualizarSesion();
       navigate("/dashboard");
     } catch (err) {
-      setErrors({ general: getErrorMessage(err) });
+      const msg = getErrorMessage(err);
+      // Mensajes específicos para TC-010 y TC-011
+      if (msg.toLowerCase().includes("bloqueada")) {
+        setErrors({ general: "Cuenta bloqueada por múltiples intentos fallidos. Contacta al administrador." });
+      } else if (msg.toLowerCase().includes("verificar") || msg.toLowerCase().includes("verificado")) {
+        setErrors({ general: "Debes verificar tu email antes de iniciar sesión. Revisa tu correo." });
+      } else {
+        setErrors({ general: msg });
+      }
     } finally {
       setLoading(false);
     }
@@ -94,9 +102,14 @@ function Login() {
           />
 
           {errors.general && (
-            <p className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-              {errors.general}
-            </p>
+            <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+              <p>{errors.general}</p>
+              {errors.general.toLowerCase().includes("verificar") && (
+                <Link to="/verificar-email" className="mt-2 inline-block text-xs font-semibold underline">
+                  Ir a verificar email
+                </Link>
+              )}
+            </div>
           )}
 
           <Button type="submit" fullWidth loading={loading}>

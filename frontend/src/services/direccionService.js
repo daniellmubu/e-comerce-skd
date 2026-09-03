@@ -23,3 +23,8 @@ export async function crearDireccion(direccion) {
 export async function eliminarDireccion(id) {
   await api.delete(`/direcciones/${id}`);
 }
+
+export async function actualizarDireccion(id, direccion) {
+  const { data } = await api.put(`/direcciones/${id}`, direccion);
+  return data;
+}

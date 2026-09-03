@@ -72,6 +72,9 @@ public class DataInitializer implements CommandLineRunner {
                     .correo("admin@skd.com")
                     .contrasenaHash(passwordEncoder.encode("Admin123*"))
                     .rol(Rol.admin)
+                    .verificado(true)
+                    .bloqueado(false)
+                    .intentosFallidos(0)
                     .build();
 
             usuarioRepository.save(admin);
@@ -85,6 +88,9 @@ public class DataInitializer implements CommandLineRunner {
                     .correo("daniel@correo.com")
                     .contrasenaHash(passwordEncoder.encode("123456"))
                     .rol(Rol.cliente)
+                    .verificado(true)
+                    .bloqueado(false)
+                    .intentosFallidos(0)
                     .build();
 
             usuarioRepository.save(cliente);

@@ -81,6 +81,10 @@ export function CartProvider({ children }) {
   }, [cargarCarrito, usuario]);
 
   const agregarProducto = async (producto, opciones = {}) => {
+    if (!estaAutenticado()) {
+      setError("Debes iniciar sesión para añadir al carrito.");
+      throw new Error("NO_AUTH");
+    }
     try {
       setLoading(true);
 
@@ -130,7 +134,18 @@ export function CartProvider({ children }) {
       return itemActualizado;
     } catch (err) {
       console.error(err);
-      setError("No fue posible agregar el producto al carrito.");
+      if (err.message === "NO_AUTH") throw err;
+      const msg = err.response?.data?.message || err.message;
+      if (err.response?.status === 401) {
+        setError("Debes iniciar sesión para añadir al carrito.");
+        throw err;
+      }
+      if (msg?.toLowerCase().includes("stock")) {
+        setError(msg);
+        throw err;
+      }
+      setError(msg || "No fue posible agregar el producto al carrito.");
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -176,7 +191,13 @@ export function CartProvider({ children }) {
       setError(null);
     } catch (err) {
       console.error(err);
-      setError("No fue posible actualizar la cantidad.");
+      const msg = err.response?.data?.message || err.message;
+      if (msg?.toLowerCase().includes("stock")) {
+        setError(msg);
+      } else {
+        setError(msg || "No fue posible actualizar la cantidad.");
+      }
+      throw err;
     } finally {
       setLoading(false);
     }

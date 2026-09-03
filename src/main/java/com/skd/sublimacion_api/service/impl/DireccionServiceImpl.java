@@ -59,11 +59,34 @@ public class DireccionServiceImpl implements DireccionService {
     }
 
     @Override
-    public void eliminar(Long id) {
-
+    public DireccionResponse actualizar(Long id, DireccionRequest request, Long usuarioId) {
         Direccion direccion = direccionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Dirección no encontrada"));
+        if (!direccion.getUsuario().getId().equals(usuarioId)) {
+            throw new com.skd.sublimacion_api.exeption.ForbiddenException("No puedes editar esta dirección");
+        }
+        direccion.setCalle(request.getCalle());
+        direccion.setCiudad(request.getCiudad());
+        direccion.setDepartamento(request.getDepartamento());
+        direccion.setCodigoPostal(request.getCodigoPostal());
+        if (request.getPredeterminada() != null) direccion.setPredeterminada(request.getPredeterminada());
+        return convertir(direccionRepository.save(direccion));
+    }
 
+    @Override
+    public void eliminar(Long id, Long usuarioId) {
+        Direccion direccion = direccionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Dirección no encontrada"));
+        if (!direccion.getUsuario().getId().equals(usuarioId)) {
+            throw new com.skd.sublimacion_api.exeption.ForbiddenException("No puedes eliminar esta dirección");
+        }
+        direccionRepository.delete(direccion);
+    }
+
+    // Legacy sin validación (mantener interfaz antigua)
+    public void eliminar(Long id) {
+        Direccion direccion = direccionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Dirección no encontrada"));
         direccionRepository.delete(direccion);
     }
 

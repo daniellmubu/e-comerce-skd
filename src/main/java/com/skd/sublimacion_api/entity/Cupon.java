@@ -54,4 +54,7 @@ public class Cupon {
     @Column(name = "es_unico_por_usuario", nullable = false)
     private Boolean esUnicoPorUsuario = false;
 
+    @Column(name = "monto_minimo", precision = 12, scale = 2)
+    private BigDecimal montoMinimo;
+
 }

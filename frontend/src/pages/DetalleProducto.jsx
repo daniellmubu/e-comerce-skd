@@ -320,6 +320,7 @@ function DetalleProducto() {
                 src={imagenActivaUrl || meta.image}
                 alt={producto.nombre}
                 className="h-full w-full object-contain"
+                onError={(e) => { e.currentTarget.src = meta.image; e.currentTarget.onerror = null; }}
               />
             </div>
 
@@ -342,6 +343,7 @@ function DetalleProducto() {
                       src={url}
                       alt={`${producto.nombre} - vista ${i + 1}`}
                       className="h-full w-full object-contain"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                   </button>
                 ))}
@@ -465,17 +467,58 @@ function DetalleProducto() {
               </div>
             )}
 
+            {stockMostrar === 0 && (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+                Sin stock — No disponible para compra
+              </div>
+            )}
+
+            {varianteSel && (
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-slate-400">
+                {varianteSel.sku && (
+                  <span className="rounded-full border border-gray-200 px-3 py-1 dark:border-slate-700">
+                    SKU: {varianteSel.sku}
+                  </span>
+                )}
+                <span className={`rounded-full px-3 py-1 ${stockMostrar > 0 ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400" : "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"}`}>
+                  Stock: {stockMostrar}
+                </span>
+              </div>
+            )}
+
+            {!varianteSel && variantes.length === 0 && stockMostrar != null && stockMostrar > 0 && (
+              <p className="mt-3 text-xs text-gray-500 dark:text-slate-400">Stock disponible: {stockMostrar}</p>
+            )}
+
             <div className="my-8 border-t border-gray-200 dark:border-slate-800" />
 
             <div className="flex flex-col gap-3">
               <button
                 type="button"
                 onClick={async () => {
-                  const ok = await agregarProducto(producto, {
-                    varianteId: varianteSel?.id ?? null,
-                    precio: precioMostrar,
-                  });
-                  if (ok) toast.success("Agregado al carrito");
+                  if (!usuario) {
+                    toast.error("Debes iniciar sesión para añadir al carrito");
+                    navigate("/login");
+                    return;
+                  }
+                  if (variantes.length > 0 && !varianteSel) {
+                    toast.error("Selecciona talla y color");
+                    return;
+                  }
+                  if (stockMostrar === 0) {
+                    toast.error("Producto sin stock");
+                    return;
+                  }
+                  try {
+                    const ok = await agregarProducto(producto, {
+                      varianteId: varianteSel?.id ?? null,
+                      precio: precioMostrar,
+                    });
+                    if (ok) toast.success("Agregado al carrito");
+                    else toast.error("No se pudo agregar al carrito");
+                  } catch (err) {
+                    toast.error(getErrorMessage(err) || "No se pudo agregar al carrito");
+                  }
                 }}
                 disabled={
                   (variantes.length > 0 && !varianteSel) || stockMostrar === 0
@@ -483,10 +526,15 @@ function DetalleProducto() {
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-4 font-semibold text-white transition hover:scale-[1.02] hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
               >
                 <FaShoppingCart />
-                {(variantes.length > 0 && !varianteSel) || stockMostrar === 0
-                  ? "Agotado"
-                  : "Agregar al carrito"}
+                {stockMostrar === 0
+                  ? "Sin stock"
+                  : variantes.length > 0 && !varianteSel
+                    ? "Selecciona variante"
+                    : "Agregar al carrito"}
               </button>
+              {varianteSel && stockMostrar === 0 && (
+                <p className="text-center text-xs text-red-500 dark:text-red-400">Variante agotada — selecciona otra combinación</p>
+              )}
             </div>
           </div>
         </div>

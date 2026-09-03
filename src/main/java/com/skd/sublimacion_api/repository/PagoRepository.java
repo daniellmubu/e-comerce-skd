@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface PagoRepository extends JpaRepository<Pago,Long> {
 
     Optional<Pago> findByPedidoId(Long pedidoId);
+
+    Optional<Pago> findByReferenciaExterna(String referenciaExterna);
 }
