@@ -24,10 +24,10 @@ function Gallery() {
   }, []);
 
   return (
-    <section className="bg-slate-900 px-6 py-24 text-white">
+    <section className="bg-white px-6 py-16 text-gray-900 dark:bg-slate-900 dark:text-white">
       <div className="mx-auto max-w-7xl">
         <div className="mb-16 text-center">
-          <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-4 py-2 text-purple-300">
+          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-indigo-600 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-300">
             Inspiración
           </span>
 
@@ -35,7 +35,7 @@ function Gallery() {
             Diseños creados con IA
           </h2>
 
-          <p className="mx-auto mt-5 max-w-2xl text-slate-400">
+          <p className="mx-auto mt-5 max-w-2xl text-gray-500 dark:text-slate-400">
             Explora algunas creaciones y descubre lo que puedes crear con tu
             imaginación.
           </p>
@@ -48,11 +48,12 @@ function Gallery() {
               style={{ transitionDelay: mounted ? `${index * 100}ms` : "0ms" }}
               className={`
                 group overflow-hidden rounded-3xl
-                border border-slate-800
-                bg-slate-950
+                border border-gray-200
+                bg-gray-100
                 transition-all duration-700
                 hover:-translate-y-3
-                hover:border-purple-500
+                hover:border-purple-400
+                dark:border-slate-800 dark:bg-slate-950 dark:hover:border-purple-500
                 ${mounted ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"}
               `}
             >
@@ -81,7 +82,7 @@ function Gallery() {
               </div>
 
               <div className="p-6">
-                <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-purple-300">
+                <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs text-indigo-600 dark:bg-slate-800 dark:text-purple-300">
                   {design.category}
                 </span>
 

@@ -112,13 +112,13 @@ function Navbar() {
                 Catálogo
               </Link>
               <Link to="/galeria-disenos" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
-                Diseños de la comunidad
+                Inspiración
               </Link>
               <Link to="/personalizador" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
-                Diseña con IA
+                Crea con IA
               </Link>
               <Link to="/solicitar-diseno" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
-                Diseño asistido
+                Diseño a medida
               </Link>
               {esAdmin && (
                 <Link to="/disenador" className="transition hover:text-indigo-600 dark:hover:text-cyan-400">
@@ -327,21 +327,21 @@ function Navbar() {
                     onClick={closeMobileMenu}
                     className="px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                   >
-                    Diseños de la comunidad
+                    Inspiración
                   </Link>
                   <Link
                     to="/personalizador"
                     onClick={closeMobileMenu}
                     className="px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                   >
-                    Diseña con IA
+                    Crea con IA
                   </Link>
                   <Link
                     to="/solicitar-diseno"
                     onClick={closeMobileMenu}
                     className="px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                   >
-                    Diseño asistido
+                    Diseño a medida
                   </Link>
                   {esAdmin && (
                     <Link

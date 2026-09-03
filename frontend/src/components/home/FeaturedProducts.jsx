@@ -1,75 +1,113 @@
-import { FaStar } from "react-icons/fa";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
-import mug from "../../assets/images/products/mug.png";
+import ProductCard from "../catalog/ProductCard";
+import { buscarProductos } from "../../services/productService";
+import { agregarFavorito, eliminarFavorito } from "../../services/favoritoService";
+import { estaAutenticado } from "../../services/authService";
+import { getErrorMessage } from "../../services/api";
 
-const products = [
-  {
-    id: 1,
-    name: "Mug Personalizado",
-    price: "$49.900",
-    rating: 5,
-    category: "Mugs",
-    image: mug,
-  },
-  {
-    id: 2,
-    name: "Mug Premium",
-    price: "$29.900",
-    rating: 5,
-    category: "Mugs",
-    image: mug,
-  },
-];
+const GRADIENTE_CAT = {
+  Mugs: "from-violet-500 to-purple-700",
+  Jarras: "from-amber-500 to-orange-700",
+};
 
 function FeaturedProducts() {
+  const [productos, setProductos] = useState([]);
+  const [favoritos, setFavoritos] = useState(new Set());
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let activo = true;
+    buscarProductos({ tamanio: 8 })
+      .then((data) => {
+        if (!activo) return;
+        setProductos(data?.contenido ?? []);
+        setFavoritos(
+          new Set((data?.contenido ?? []).filter((p) => p.esFavorito).map((p) => p.id))
+        );
+      })
+      .catch(() => {})
+      .finally(() => activo && setCargando(false));
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  const toggleFavorito = async (id) => {
+    if (!estaAutenticado()) {
+      window.location.href = "/login";
+      return;
+    }
+    const agregando = !favoritos.has(id);
+    setFavoritos((prev) => {
+      const next = new Set(prev);
+      if (agregando) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    try {
+      if (agregando) {
+        await agregarFavorito(id);
+        toast.success("Agregado a favoritos");
+      } else {
+        await eliminarFavorito(id);
+        toast.success("Quitado de favoritos");
+      }
+    } catch (err) {
+      setFavoritos((prev) => {
+        const next = new Set(prev);
+        if (agregando) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      toast.error(getErrorMessage(err));
+    }
+  };
+
   return (
     <section className="bg-gray-50 px-6 py-12 dark:bg-slate-950">
       <div className="mx-auto max-w-7xl">
-        <h2 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">
-          Más vendidos
-        </h2>
-
-        <div className="grid gap-6 sm:grid-cols-2">
-          {products.map((product) => (
-            <div
-              key={product.id}
-              className="overflow-hidden rounded-2xl border border-gray-200 bg-white transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-cyan-500"
-            >
-              <div className="flex h-48 items-center justify-center bg-gray-100 dark:bg-slate-800">
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  loading="lazy"
-                  className="h-36 object-contain"
-                />
-              </div>
-
-              <div className="p-5">
-                <h3 className="font-semibold text-gray-900 dark:text-white">
-                  {product.name}
-                </h3>
-
-                <div className="mt-2 flex" aria-label={`${product.rating} de 5 estrellas`}>
-                  {[...Array(product.rating)].map((_, i) => (
-                    <FaStar key={i} className="mr-1 text-amber-400" />
-                  ))}
-                </div>
-
-                <p className="mt-2 text-lg font-bold text-indigo-600 dark:text-cyan-400">
-                  {product.price}
-                </p>
-
-                <Link
-                  to="/catalogo"
-                  className="mt-4 block rounded-lg border border-gray-200 py-2 text-center text-sm font-medium text-gray-700 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-200 dark:hover:border-cyan-400 dark:hover:text-cyan-400"
-                >
-                  Vista rápida
-                </Link>
-              </div>
-            </div>
-          ))}
+        <div className="mb-6 flex items-end justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Productos destacados
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-slate-400">
+              Los favoritos de nuestros clientes.
+            </p>
+          </div>
+          <Link
+            to="/catalogo"
+            className="text-sm font-semibold text-indigo-600 hover:underline dark:text-cyan-400"
+          >
+            Ver catálogo
+          </Link>
         </div>
+
+        {cargando ? (
+          <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="h-80 animate-pulse rounded-3xl border border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+            {productos.map((p) => (
+              <ProductCard
+                key={p.id}
+                producto={p}
+                gradiente={GRADIENTE_CAT[p.categoria] || "from-slate-500 to-slate-700"}
+                esFavorito={favoritos.has(p.id)}
+                onToggleFavorito={() => toggleFavorito(p.id)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

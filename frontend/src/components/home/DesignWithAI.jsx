@@ -32,16 +32,16 @@ function DesignWithAI() {
   return (
     <section
       id="diseno-ia"
-      className="relative overflow-hidden bg-slate-950 px-6 py-24 text-white"
+      className="relative overflow-hidden bg-gray-50 px-6 py-16 text-gray-900 dark:bg-slate-950 dark:text-white"
     >
       {/* Fondo */}
       <div className="absolute inset-0">
-        <div className="absolute left-1/2 top-0 h-96 w-96 -translate-x-1/2 rounded-full bg-violet-600/10 blur-3xl"></div>
+        <div className="absolute left-1/2 top-0 h-96 w-96 -translate-x-1/2 rounded-full bg-violet-600/20 blur-3xl"></div>
       </div>
 
       <div className="relative mx-auto max-w-5xl">
         <div className="text-center">
-          <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-cyan-300">
+          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-indigo-600 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300">
             ✨ Diseña con IA
           </span>
 
@@ -53,24 +53,25 @@ function DesignWithAI() {
             </span>
           </h2>
 
-          <p className="mx-auto mt-5 max-w-xl text-slate-400">
+          <p className="mx-auto mt-5 max-w-xl text-gray-500 dark:text-slate-400">
             Describe el diseño que imaginas y nuestra IA lo convertirá en un
             producto único en segundos.
           </p>
         </div>
 
         {/* Caja de prompt */}
-        <div className="mt-14 rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl backdrop-blur sm:p-8">
+        <div className="mt-10 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8 dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-2xl dark:backdrop-blur">
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Quiero un mug negro con un dragón japonés en tonos azules y un estilo cyberpunk."
             rows={4}
             className="
-              w-full resize-none rounded-2xl border border-slate-700
-              bg-slate-950 p-5 text-slate-100 placeholder:text-slate-500
-              transition focus:border-cyan-500 focus:outline-none
-              focus:ring-2 focus:ring-cyan-500/30
+              w-full resize-none rounded-2xl border border-gray-200 bg-gray-50
+              p-5 text-gray-800 placeholder:text-gray-400
+              transition focus:border-indigo-400 focus:outline-none
+              focus:ring-2 focus:ring-indigo-500/20
+              dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500 dark:focus:ring-cyan-500/30
             "
           />
 
@@ -99,8 +100,8 @@ function DesignWithAI() {
               disabled={!prompt.trim() || isGenerating}
               className="
                 flex items-center gap-3 rounded-xl
-                bg-gradient-to-r from-cyan-500 to-violet-600
-                px-8 py-4 font-semibold
+                bg-gradient-to-r from-indigo-600 to-violet-600
+                px-8 py-4 font-semibold text-white
                 transition duration-300
                 hover:scale-105 hover:shadow-[0_0_40px_rgba(34,211,238,0.4)]
                 disabled:cursor-not-allowed disabled:opacity-40
@@ -128,8 +129,9 @@ function DesignWithAI() {
             <div
               className={`
                 relative flex h-64 w-64 items-center justify-center
-                overflow-hidden rounded-3xl border border-slate-800
+                overflow-hidden rounded-3xl border border-gray-200
                 bg-gradient-to-br from-cyan-500 via-slate-800 to-violet-600
+                dark:border-slate-800
                 transition-all duration-700
                 ${hasResult ? "scale-100 opacity-100" : "scale-95 opacity-60"}
               `}
@@ -141,7 +143,7 @@ function DesignWithAI() {
 
             {hasResult && (
               <div className="text-center">
-                <p className="text-slate-400">
+                <p className="text-gray-500 dark:text-slate-400">
                   ¡Tu diseño está listo! Regístrate para guardarlo y llevarlo
                   a un producto real.
                 </p>
