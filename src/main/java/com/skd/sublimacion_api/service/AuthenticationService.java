@@ -8,6 +8,7 @@ import com.skd.sublimacion_api.entity.Cupon;
 import com.skd.sublimacion_api.entity.CuponUsuario;
 import com.skd.sublimacion_api.entity.EmailVerificationToken;
 import com.skd.sublimacion_api.entity.PasswordResetToken;
+import com.skd.sublimacion_api.entity.RegistroCodigo;
 import com.skd.sublimacion_api.entity.Rol;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.exeption.ForbiddenException;
@@ -15,6 +16,7 @@ import com.skd.sublimacion_api.repository.CuponRepository;
 import com.skd.sublimacion_api.repository.CuponUsuarioRepository;
 import com.skd.sublimacion_api.repository.EmailVerificationTokenRepository;
 import com.skd.sublimacion_api.repository.PasswordResetTokenRepository;
+import com.skd.sublimacion_api.repository.RegistroCodigoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.security.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -44,9 +47,11 @@ public class AuthenticationService {
     private final EmailService emailService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+    private final RegistroCodigoRepository registroCodigoRepository;
     private final CuponRepository cuponRepository;
     private final CuponUsuarioRepository cuponUsuarioRepository;
 
+    @Transactional
     public AuthResponse registrar(RegistroRequest request) {
 
         if (usuarioRepository.existsByUsername(request.getUsername())) {
@@ -55,6 +60,8 @@ public class AuthenticationService {
         if (usuarioRepository.existsByCorreo(request.getCorreo())) {
             throw new IllegalArgumentException("Ya existe un usuario con ese correo");
         }
+
+        validarCodigoRegistro(request.getCorreo(), request.getCodigo());
 
         Usuario referidoPor = null;
         if (request.getCodigoReferido() != null && !request.getCodigoReferido().isBlank()) {
@@ -70,11 +77,13 @@ public class AuthenticationService {
                 // del request (escalamiento de privilegios): admin/disenador solo
                 // pueden crearse por un admin autenticado en /api/admin/usuarios.
                 .rol(Rol.cliente)
+                .verificado(true)
                 .referidoPor(referidoPor)
                 .codigoReferido(generarCodigoReferido(request.getUsername()))
                 .build();
 
         usuarioRepository.save(usuario);
+        registroCodigoRepository.deleteByCorreo(request.getCorreo());
 
         Cupon cuponBienvenida = crearCuponBienvenida(usuario);
 
@@ -300,6 +309,46 @@ public class AuthenticationService {
                 crearTokenVerificacionYEnviar(usuario);
             }
         });
+    }
+
+    @Transactional
+    public void enviarCodigoRegistro(String correo) {
+
+        if (usuarioRepository.existsByCorreo(correo)) {
+            throw new IllegalArgumentException("Ya existe una cuenta con ese correo.");
+        }
+
+        registroCodigoRepository.deleteByCorreo(correo);
+
+        String codigo = generarCodigoVerificacion();
+
+        registroCodigoRepository.save(RegistroCodigo.builder()
+                .correo(correo)
+                .codigo(codigo)
+                .expiraEn(LocalDateTime.now().plusMinutes(5))
+                .build());
+
+        emailService.enviarCodigoRegistro(correo, codigo);
+    }
+
+    private void validarCodigoRegistro(String correo, String codigo) {
+
+        if (codigo == null || codigo.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Ingresa el código de verificación enviado a tu correo.");
+        }
+
+        RegistroCodigo rc = registroCodigoRepository
+                .findTopByCorreoOrderByCreadoEnDesc(correo)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Primero solicita el código de verificación."));
+
+        if (!rc.getCodigo().equals(codigo.trim())) {
+            throw new IllegalArgumentException("El código de verificación es incorrecto.");
+        }
+        if (rc.getExpiraEn().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("El código expiró. Solicita uno nuevo.");
+        }
     }
 
     private void crearTokenVerificacionYEnviar(Usuario usuario) {

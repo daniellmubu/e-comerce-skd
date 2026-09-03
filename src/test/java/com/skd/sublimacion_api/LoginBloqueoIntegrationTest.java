@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.skd.sublimacion_api.repository.RegistroCodigoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -26,21 +27,29 @@ class LoginBloqueoIntegrationTest {
     @Autowired
     private UsuarioRepository usuarioRepository;
 
+    @Autowired
+    private RegistroCodigoRepository registroCodigoRepository;
+
     @Test
     void bloqueaCuentaTrasCincoIntentosFallidos() throws Exception {
-        // 1. Registrar un usuario válido.
+        // 0. Solicitar código de verificación
+        String correo = "bloqueablex@skd.com";
+        mockMvc.perform(post("/api/auth/enviar-codigo-registro")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"correo\":\"" + correo + "\"}"))
+                .andExpect(status().isOk());
+
+        String codigo = registroCodigoRepository
+                .findTopByCorreoOrderByCreadoEnDesc(correo)
+                .orElseThrow().getCodigo();
+
+        // 1. Registrar un usuario válido (ya nace verificado).
         mockMvc.perform(post("/api/auth/registro")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                            {"nombre":"Bloqueable","username":"bloqueable_x","correo":"bloqueablex@skd.com","password":"123456"}
-                            """))
+                            {"nombre":"Bloqueable","username":"bloqueable_x","correo":"bloqueablex@skd.com","password":"123456","codigo":"CODIGO"}
+                            """.replace("CODIGO", codigo)))
                 .andExpect(status().isOk());
-
-        // Verificar email para que el login no falle por "no verificado" y podamos probar el bloqueo
-        usuarioRepository.findByUsername("bloqueable_x").ifPresent(u -> {
-            u.setVerificado(true);
-            usuarioRepository.save(u);
-        });
 
         // 2. Cinco intentos con contraseña incorrecta → 401.
         for (int i = 0; i < 5; i++) {

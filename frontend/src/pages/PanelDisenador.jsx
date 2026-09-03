@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaPenNib,
   FaSpinner,
@@ -11,6 +12,9 @@ import {
   FaBox,
   FaRedoAlt,
   FaLock,
+  FaSearch,
+  FaMagic,
+  FaImages,
 } from "react-icons/fa";
 
 import { useAuth } from "../context/AuthContext";
@@ -54,12 +58,21 @@ const FILTROS = [
   { value: "LISTA_PARA_PRODUCCION", label: "Listas" },
 ];
 
+const STAT_TARJETAS = [
+  { key: "RECIBIDA", label: "Recibidas", icon: FaInbox, chip: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300" },
+  { key: "EN_DISENO", label: "En diseño", icon: FaPenNib, chip: "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300" },
+  { key: "PROPUESTA_ENVIADA", label: "Propuestas enviadas", icon: FaPaperPlane, chip: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300" },
+  { key: "LISTA_PARA_PRODUCCION", label: "Listas", icon: FaCheckCircle, chip: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300" },
+];
+
 function PanelDisenador() {
   const { usuario } = useAuth();
   const esDisenador = usuario?.rol === "admin" || usuario?.rol === "disenador";
 
+  const navigate = useNavigate();
   const [estadoFiltro, setEstadoFiltro] = useState("");
-  const [solicitudes, setSolicitudes] = useState([]);
+  const [busqueda, setBusqueda] = useState("");
+  const [todas, setTodas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
   const [mensaje, setMensaje] = useState(null);
@@ -71,44 +84,61 @@ function PanelDisenador() {
   const [mensajeAdmin, setMensajeAdmin] = useState("");
   const fileInputRef = useRef(null);
 
+  const cargarTodas = () =>
+    listarSolicitudes(null)
+      .then((data) => {
+        const lista = Array.isArray(data) ? data : data?.content ?? [];
+        setTodas(lista);
+        setError(null);
+        return lista;
+      })
+      .catch((err) => {
+        setError(getErrorMessage(err));
+        throw err;
+      });
+
   useEffect(() => {
     if (!esDisenador) return undefined;
 
     let activo = true;
-
-    listarSolicitudes(estadoFiltro || null)
-      .then((data) => {
-        if (!activo) return;
-        const lista = Array.isArray(data) ? data : data?.content ?? [];
-        setSolicitudes(lista);
-        setCargando(false);
-        setError(null);
-      })
-      .catch((err) => {
-        if (!activo) return;
-        setError(getErrorMessage(err));
-        setCargando(false);
-      });
+    setCargando(true);
+    cargarTodas()
+      .then(() => activo && setCargando(false))
+      .catch(() => activo && setCargando(false));
 
     return () => {
       activo = false;
     };
-  }, [estadoFiltro, esDisenador]);
+  }, [esDisenador]);
 
-  const recargar = () => {
-    listarSolicitudes(estadoFiltro || null)
-      .then((data) => {
-        const lista = Array.isArray(data) ? data : data?.content ?? [];
-        setSolicitudes(lista);
-        setError(null);
-      })
-      .catch((err) => setError(getErrorMessage(err)));
-  };
+  const recargar = () => cargarTodas().catch(() => {});
 
   const handleFiltro = (valor) => {
     setEstadoFiltro(valor);
-    setCargando(true);
   };
+
+  // Lista visible: filtrada por estado y por búsqueda (cliente o nº de solicitud).
+  const solicitudes = useMemo(() => {
+    let lista = todas;
+    if (estadoFiltro) lista = lista.filter((s) => s.estado === estadoFiltro);
+    const q = busqueda.trim().toLowerCase();
+    if (q) {
+      lista = lista.filter(
+        (s) =>
+          (s.usuario || "").toLowerCase().includes(q) ||
+          String(s.id).includes(q)
+      );
+    }
+    return lista;
+  }, [todas, estadoFiltro, busqueda]);
+
+  const conteos = useMemo(() => {
+    const c = {};
+    for (const t of STAT_TARJETAS) {
+      c[t.key] = todas.filter((s) => s.estado === t.key).length;
+    }
+    return c;
+  }, [todas]);
 
   const handleTomar = async (id) => {
     setAccionandoId(id);
@@ -188,35 +218,94 @@ function PanelDisenador() {
   return (
     <section className="min-h-screen bg-gray-50 px-6 py-16 text-gray-900 dark:bg-slate-950 dark:text-white">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-10 text-center">
-          <span className="rounded-full border border-indigo-300 bg-indigo-50 px-4 py-2 text-indigo-600 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300">
-            Panel del diseñador
-          </span>
-          <h1 className="mt-6 text-4xl font-bold sm:text-5xl">
-            Solicitudes de diseño
-          </h1>
-          <p className="mx-auto mt-3 max-w-xl text-gray-500 dark:text-slate-400">
-            Toma las solicitudes de los clientes, prepara una propuesta y
-            envíala para que la aprueben.
-          </p>
+        <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <span className="rounded-full border border-indigo-300 bg-indigo-50 px-4 py-2 text-indigo-600 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300">
+              Panel del diseñador
+            </span>
+            <h1 className="mt-4 text-3xl font-bold sm:text-4xl">
+              Hola, {usuario?.nombre?.split(" ")[0] || "Diseñador"} 👋
+            </h1>
+            <p className="mt-1 text-gray-500 dark:text-slate-400">
+              Atiende las solicitudes y prepara tus propuestas.
+            </p>
+          </div>
+
+          {/* Acceso rápido a herramientas */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/personalizador")}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+            >
+              <FaMagic /> Diseña con IA
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/galeria-disenos")}
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+            >
+              <FaImages /> Galería
+            </button>
+          </div>
         </div>
 
-        {/* Filtros por estado */}
-        <div className="mb-8 flex flex-wrap justify-center gap-2">
-          {FILTROS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => handleFiltro(f.value)}
-              className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                estadoFiltro === f.value
-                  ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
-                  : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+        {/* Stats por estado */}
+        <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {STAT_TARJETAS.map((t) => {
+            const Icon = t.icon;
+            const activo = estadoFiltro === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => handleFiltro(activo ? "" : t.key)}
+                className={`rounded-2xl border bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-900/70 ${
+                  activo
+                    ? "border-indigo-400 ring-2 ring-indigo-400/20 dark:border-cyan-400"
+                    : "border-gray-200 dark:border-slate-800"
+                }`}
+              >
+                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${t.chip}`}>
+                  <Icon />
+                </div>
+                <p className="mt-3 text-2xl font-bold text-gray-900 dark:text-white">
+                  {conteos[t.key] ?? 0}
+                </p>
+                <p className="text-sm text-gray-500 dark:text-slate-400">{t.label}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Buscar + filtros */}
+        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full md:max-w-xs">
+            <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por cliente o nº..."
+              className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm text-gray-800 outline-none transition focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-cyan-400"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {FILTROS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => handleFiltro(f.value)}
+                className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                  estadoFiltro === f.value
+                    ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-cyan-400 dark:bg-cyan-950 dark:text-cyan-300"
+                    : "border-gray-200 text-gray-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {mensaje && (

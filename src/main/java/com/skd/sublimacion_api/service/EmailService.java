@@ -30,6 +30,8 @@ public interface EmailService {
 
     void enviarVerificacionEmail(String correo, String nombre, String token);
 
+    void enviarCodigoRegistro(String correo, String codigo);
+
     void enviarPasswordCambiada(String correo, String nombre);
 
     void enviarCodigoCancelacionCuenta(String correo, String nombre, String codigo);

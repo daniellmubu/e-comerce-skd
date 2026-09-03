@@ -28,6 +28,15 @@ public class AuthenticationController {
     private final SesionActivaService sesionActivaService;
     private final JwtService jwtService;
 
+    @PostMapping("/enviar-codigo-registro")
+    public ResponseEntity<Map<String, String>> enviarCodigoRegistro(
+            @Valid @RequestBody OlvidePasswordRequest request) {
+
+        authenticationService.enviarCodigoRegistro(request.getCorreo());
+
+        return ResponseEntity.ok(Map.of("message", "Revisa tu correo para el código de verificación"));
+    }
+
     @PostMapping("/registro")
     public ResponseEntity<AuthResponse> registrar(
             @Valid @RequestBody RegistroRequest request,

@@ -75,3 +75,13 @@ CREATE TABLE IF NOT EXISTS cuenta_cancelacion_token (
     fecha_uso TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_cuenta_cancelacion_token_usuario ON cuenta_cancelacion_token(usuario_id);
+
+-- Código de verificación de email durante el registro (expira).
+CREATE TABLE IF NOT EXISTS registro_codigo (
+    id BIGSERIAL PRIMARY KEY,
+    correo VARCHAR(255) NOT NULL,
+    codigo VARCHAR(6) NOT NULL,
+    expira_en TIMESTAMP NOT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_registro_codigo_correo ON registro_codigo(correo);
