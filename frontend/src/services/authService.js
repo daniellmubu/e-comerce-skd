@@ -43,15 +43,21 @@ export async function login(username, password) {
   return data;
 }
 
-export async function registrarse({ nombre, username, correo, password, codigoReferido }) {
+export async function registrarse({ nombre, username, correo, password, codigoReferido, codigo }) {
   const { data } = await api.post("/auth/registro", {
     nombre,
     username,
     correo,
     password,
     codigoReferido,
+    codigo,
   });
   guardarSesion(data);
+  return data;
+}
+
+export async function enviarCodigoRegistro(correo) {
+  const { data } = await api.post("/auth/enviar-codigo-registro", { correo });
   return data;
 }
 

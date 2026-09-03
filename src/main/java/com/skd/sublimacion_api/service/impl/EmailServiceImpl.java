@@ -328,6 +328,31 @@ public class EmailServiceImpl implements EmailService {
 
     @Async
     @Override
+    public void enviarCodigoRegistro(String correo, String codigo) {
+
+        try {
+            MimeMessage mime = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mime, false, "UTF-8");
+
+            helper.setTo(correo);
+            helper.setSubject("SKD - Tu código de verificación");
+            helper.setText("Gracias por registrarte en SKD.\n\n"
+                    + "Tu código de verificación es:\n\n"
+                    + "CÓDIGO: " + codigo + "\n\n"
+                    + "Ingrésalo en el formulario de registro para confirmar tu correo "
+                    + "(válido por 5 minutos).\n\n"
+                    + "Si no solicitaste crear una cuenta en SKD, ignora este correo.");
+
+            mailSender.send(mime);
+            log.info("Código de registro enviado a {}", correo);
+
+        } catch (MessagingException | RuntimeException e) {
+            log.error("No se pudo enviar el código de registro a {}: {}", correo, e.getMessage(), e);
+        }
+    }
+
+    @Async
+    @Override
     public void enviarVerificacionEmail(String correo, String nombre, String token) {
 
         try {

@@ -4,7 +4,7 @@ import { FaGift } from "react-icons/fa";
 
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
-import { registrarse } from "../services/authService";
+import { registrarse, enviarCodigoRegistro } from "../services/authService";
 import { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -33,6 +33,10 @@ function Registro() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [bienvenida, setBienvenida] = useState(null);
+  const [paso, setPaso] = useState(1);
+  const [codigo, setCodigo] = useState("");
+  const [enviandoCodigo, setEnviandoCodigo] = useState(false);
+  const [reenviado, setReenviado] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -69,14 +73,51 @@ function Registro() {
     return nextErrors;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
+  const handleEnviarCodigo = async () => {
     const validationErrors = validate();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
     }
+    setEnviandoCodigo(true);
+    setReenviado(false);
+    try {
+      await enviarCodigoRegistro(form.correo.trim());
+      setPaso(2);
+      setErrors({});
+    } catch (err) {
+      const message = getErrorMessage(err);
+      if (message.toLowerCase().includes("username")) setErrors({ username: message });
+      else if (message.toLowerCase().includes("correo")) setErrors({ correo: message });
+      else setErrors({ general: message });
+    } finally {
+      setEnviandoCodigo(false);
+    }
+  };
+
+  const handleReenviar = async () => {
+    try {
+      await enviarCodigoRegistro(form.correo.trim());
+      setReenviado(true);
+      setErrors((prev) => ({ ...prev, general: undefined, codigo: undefined }));
+    } catch (err) {
+      setErrors({ general: getErrorMessage(err) });
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (paso === 1) {
+      await handleEnviarCodigo();
+      return;
+    }
+
+    if (!/^\d{6}$/.test(codigo)) {
+      setErrors({ codigo: "Ingresa el código de 6 dígitos." });
+      return;
+    }
+    setErrors((prev) => ({ ...prev, codigo: undefined }));
 
     setLoading(true);
     try {
@@ -86,6 +127,7 @@ function Registro() {
         correo: form.correo.trim(),
         password: form.password,
         codigoReferido: refCode || undefined,
+        codigo: codigo.trim(),
       });
       actualizarSesion();
       if (respuesta.cuponBienvenida) {
@@ -98,7 +140,6 @@ function Registro() {
       }
     } catch (err) {
       const message = getErrorMessage(err);
-
       if (message.toLowerCase().includes("username")) {
         setErrors({ username: message });
       } else if (message.toLowerCase().includes("correo")) {
@@ -136,7 +177,17 @@ function Registro() {
           </p>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-5" noValidate>
+        <div className="mt-4 flex items-center justify-center gap-2 text-xs font-semibold">
+          <span className={paso === 1 ? "text-indigo-600 dark:text-cyan-300" : "text-emerald-600 dark:text-emerald-400"}>
+            1 · Tus datos
+          </span>
+          <span className="text-gray-300 dark:text-slate-600">—</span>
+          <span className={paso === 2 ? "text-indigo-600 dark:text-cyan-300" : "text-gray-400 dark:text-slate-500"}>
+            2 · Verifica tu correo
+          </span>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
           <Input
             id="nombre"
             name="nombre"
@@ -195,14 +246,59 @@ function Registro() {
             error={errors.confirmarPassword}
           />
 
+          {paso === 2 && (
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-cyan-500/30 dark:bg-cyan-500/10">
+              <p className="text-sm font-medium text-gray-800 dark:text-slate-100">
+                Te enviamos un código de 6 dígitos a{" "}
+                <strong>{form.correo}</strong>. Es válido por 5 minutos.
+              </p>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))}
+                placeholder="Código de 6 dígitos"
+                className="mt-3 w-full rounded-xl border border-indigo-300 bg-white px-4 py-3 text-center text-lg font-bold tracking-widest text-gray-900 outline-none transition focus:border-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500"
+              />
+              {errors.codigo && (
+                <p className="mt-2 text-xs font-medium text-red-500 dark:text-red-400">
+                  {errors.codigo}
+                </p>
+              )}
+              <div className="mt-3 flex items-center justify-between text-xs">
+                <button
+                  type="button"
+                  onClick={handleReenviar}
+                  className="font-semibold text-indigo-600 hover:underline dark:text-cyan-400"
+                >
+                  {reenviado ? "Código reenviado ✓" : "¿No te llegó? Reenviar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaso(1)}
+                  className="text-gray-500 hover:underline dark:text-slate-400"
+                >
+                  ← Editar datos
+                </button>
+              </div>
+            </div>
+          )}
+
           {errors.general && (
             <p className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
               {errors.general}
             </p>
           )}
 
-          <Button type="submit" fullWidth loading={loading}>
-            {loading ? "Creando cuenta..." : "Crear cuenta"}
+          <Button type="submit" fullWidth loading={paso === 1 ? enviandoCodigo : loading}>
+            {paso === 1
+              ? enviandoCodigo
+                ? "Enviando código..."
+                : "Enviar código de verificación"
+              : loading
+                ? "Creando cuenta..."
+                : "Crear cuenta"}
           </Button>
         </form>
 

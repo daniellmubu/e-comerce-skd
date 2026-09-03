@@ -29,4 +29,6 @@ public class RegistroRequest {
     private String password;
 
     private String codigoReferido;
+
+    private String codigo;
 }
