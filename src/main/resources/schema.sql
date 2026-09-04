@@ -85,3 +85,18 @@ CREATE TABLE IF NOT EXISTS registro_codigo (
     creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_registro_codigo_correo ON registro_codigo(correo);
+
+-- Cupón: monto mínimo para aplicar el descuento (TC cupón monto mínimo)
+ALTER TABLE cupon ADD COLUMN IF NOT EXISTS monto_minimo NUMERIC(12,2);
+
+-- TC-CHK-17: evitar stock negativo en compras concurrentes (último ítem disputado)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_producto_stock_nonnegative') THEN
+    ALTER TABLE producto ADD CONSTRAINT chk_producto_stock_nonnegative CHECK (stock >= 0);
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_variante_stock_nonnegative') THEN
+    ALTER TABLE variante_producto ADD CONSTRAINT chk_variante_stock_nonnegative CHECK (stock >= 0);
+  END IF;
+END $$;

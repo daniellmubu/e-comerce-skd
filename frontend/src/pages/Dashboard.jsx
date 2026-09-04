@@ -97,6 +97,7 @@ function Dashboard() {
   const [mostrarCambiar, setMostrarCambiar] = useState(false);
   const [pasoCambiar, setPasoCambiar] = useState(1);
   const [verificandoActual, setVerificandoActual] = useState(false);
+  const [mostrarCancelar, setMostrarCancelar] = useState(false);
 
   // Cancelar cuenta - doble verificación
   const [solicitandoCancelacion, setSolicitandoCancelacion] = useState(false);
@@ -822,25 +823,35 @@ function Dashboard() {
               )}
             </div>
           )}
-        </section>
 
-        {/* Cancelar cuenta */}
-        <section className="mt-10 rounded-3xl border border-red-200 bg-white p-8 dark:border-red-900/40 dark:bg-slate-900/60 dark:backdrop-blur">
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900/30 dark:bg-red-950/30">
-            <p className="text-sm font-medium text-red-700 dark:text-red-300">
-              ¿Seguro que deseas cancelar tu cuenta?
-            </p>
-            <p className="mt-1 text-xs text-red-600/80 dark:text-red-400/80">
-              Te enviaremos un código de 6 dígitos a <span className="font-semibold">{usuario.correo}</span> para verificar que eres tú. El código expira en 15 minutos y es de un solo uso.
-            </p>
-            <Button
-              onClick={handleSolicitarCancelacion}
-              loading={solicitandoCancelacion}
-              className="mt-4 bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500"
-            >
-              <FaTrash className="mr-2" /> Cancelar cuenta
-            </Button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setMostrarCancelar((v) => !v)}
+            className="mt-4 flex w-full max-w-md items-center justify-between rounded-xl border border-red-200 bg-white px-5 py-3.5 text-sm font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-50 dark:border-red-900/40 dark:bg-slate-800/60 dark:text-red-400 dark:hover:border-red-500/50 dark:hover:bg-red-950/30"
+          >
+            <span className="flex items-center gap-2">
+              <FaTrash /> Cancelar cuenta
+            </span>
+            {mostrarCancelar ? <FaChevronUp /> : <FaChevronDown />}
+          </button>
+
+          {mostrarCancelar && (
+            <div className="mt-4 max-w-md rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900/30 dark:bg-red-950/30">
+              <p className="text-sm font-medium text-red-700 dark:text-red-300">
+                ¿Seguro que deseas cancelar tu cuenta?
+              </p>
+              <p className="mt-1 text-xs text-red-600/80 dark:text-red-400/80">
+                Te enviaremos un código de 6 dígitos a <span className="font-semibold">{usuario.correo}</span> para verificar que eres tú. El código expira en 15 minutos y es de un solo uso.
+              </p>
+              <Button
+                onClick={handleSolicitarCancelacion}
+                loading={solicitandoCancelacion}
+                className="mt-4 bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500"
+              >
+                <FaTrash className="mr-2" /> Eliminar cuenta
+              </Button>
+            </div>
+          )}
         </section>
       </div>
 

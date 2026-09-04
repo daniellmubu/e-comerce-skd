@@ -39,6 +39,7 @@ import com.skd.sublimacion_api.repository.PagoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
+import com.skd.sublimacion_api.repository.VarianteProductoRepository;
 import com.skd.sublimacion_api.service.CheckoutService;
 import com.skd.sublimacion_api.service.EnvioService;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +60,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final CuponRepository cuponRepository;
     private final CuponUsuarioRepository cuponUsuarioRepository;
     private final ProductoRepository productoRepository;
+    private final VarianteProductoRepository varianteProductoRepository;
     private final DisenoRepository disenoRepository;
     private final EnvioService envioService;
     private final ApplicationEventPublisher applicationEventPublisher;
@@ -85,7 +87,8 @@ public class CheckoutServiceImpl implements CheckoutService {
         Carrito carrito = obtenerCarrito(usuario);
 
         List<ItemCarrito> items = obtenerItems(carrito);
-        validarStock(items);
+        // TC-CHK-17: bloqueo pesimista + decremento atómico para evitar venta de más en compra simultánea del último ítem
+        validarYDescontarStockBloqueando(items);
 
         BigDecimal subtotal = calcularSubtotal(items);
 
@@ -123,7 +126,6 @@ public class CheckoutServiceImpl implements CheckoutService {
         );
         Factura factura = crearFactura(pedido);
         crearItemsPedido(pedido, items);
-        actualizarStock(items);
 
         vaciarCarrito(items);
 
@@ -267,13 +269,48 @@ public class CheckoutServiceImpl implements CheckoutService {
 
     return subtotal;
     }
-    private void validarStock(List<ItemCarrito> items) {
-        for (ItemCarrito item : items) {
-            if (item.getCantidad() > item.getProducto().getStock()) {
-                throw new IllegalArgumentException(
-                    "No hay suficiente stock para "
-                            + item.getProducto().getNombre()
-                );
+    // TC-CHK-17: validación + descuento con bloqueo pesimista para evitar venta de más en compras simultáneas del último ítem
+    // Maneja tanto producto base como variante (talla/color). Ordena IDs para evitar deadlocks.
+    private void validarYDescontarStockBloqueando(List<ItemCarrito> items) {
+        java.util.List<ItemCarrito> ordenados = items.stream()
+                .sorted(java.util.Comparator
+                        .comparing((ItemCarrito i) -> i.getVariante() != null ? i.getVariante().getId() : Long.MAX_VALUE)
+                        .thenComparing(i -> i.getProducto().getId()))
+                .toList();
+
+        for (ItemCarrito item : ordenados) {
+            int cantidad = item.getCantidad();
+            if (item.getVariante() != null && item.getVariante().getId() != null) {
+                Long varianteId = item.getVariante().getId();
+                com.skd.sublimacion_api.entity.VarianteProducto variante = varianteProductoRepository
+                        .findByIdForUpdate(varianteId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Variante no encontrada"));
+                int stockActual = variante.getStock() != null ? variante.getStock() : 0;
+                if (stockActual < cantidad) {
+                    throw new IllegalArgumentException(
+                            "No hay suficiente stock para la variante " + variante.getTalla() + "/"
+                                    + variante.getColor() + " de " + item.getProducto().getNombre()
+                                    + ". Stock disponible: " + stockActual + ", solicitas: " + cantidad + " (sin stock)");
+                }
+                int stockNuevo = stockActual - cantidad;
+                if (stockNuevo < 0) {
+                    throw new IllegalArgumentException("No hay suficiente stock para " + item.getProducto().getNombre() + " (sin stock)");
+                }
+                variante.setStock(stockNuevo);
+                varianteProductoRepository.save(variante);
+            } else {
+                Long productoId = item.getProducto().getId();
+                com.skd.sublimacion_api.entity.Producto producto = productoRepository
+                        .findByIdForUpdate(productoId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado"));
+                int stockActual = producto.getStock() != null ? producto.getStock() : 0;
+                if (stockActual < cantidad) {
+                    throw new IllegalArgumentException(
+                            "No hay suficiente stock para " + producto.getNombre()
+                                    + ". Stock disponible: " + stockActual + ", solicitas: " + cantidad + " (sin stock)");
+                }
+                producto.setStock(stockActual - cantidad);
+                productoRepository.save(producto);
             }
         }
     }
@@ -388,19 +425,6 @@ public class CheckoutServiceImpl implements CheckoutService {
                                     + 1);
                     disenoRepository.save(diseno);
                 });
-    }
-    private void actualizarStock(List<ItemCarrito> items) {
-
-        for (ItemCarrito item : items) {
-
-            item.getProducto().setStock(
-                item.getProducto().getStock() - item.getCantidad()
-            );
-
-            productoRepository.save(item.getProducto());
-
-        }
-
     }
     private void vaciarCarrito(List<ItemCarrito> items) {
 
