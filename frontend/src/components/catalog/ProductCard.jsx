@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaHeart, FaShoppingCart, FaSpinner } from "react-icons/fa";
+import { FaHeart, FaShoppingCart, FaSpinner, FaMugHot } from "react-icons/fa";
 
 import { obtenerVariantesDeProducto } from "../../services/productService";
 import { estaAutenticado } from "../../services/authService";
@@ -132,12 +132,19 @@ function ProductCard({
           <FaHeart className={esFavorito ? "text-red-500" : "text-white"} />
         </button>
 
-        <img
-          src={producto.imagenUrl || imagenFallback}
-          alt={producto.nombre}
-          loading="lazy"
-          className="h-full w-full object-contain transition duration-500 group-hover:scale-110"
-        />
+        {producto.imagenUrl ? (
+          <img
+            src={producto.imagenUrl}
+            alt={producto.nombre}
+            loading="lazy"
+            className="h-full w-full object-contain transition duration-500 group-hover:scale-110"
+          />
+        ) : (
+          /* Placeholder: aún no hay foto del producto de la empresa */
+          <div className="flex h-full w-full items-center justify-center">
+            <FaMugHot className="text-7xl text-white/70 transition duration-500 group-hover:scale-110 dark:text-white/60" />
+          </div>
+        )}
       </div>
 
       <div className="p-7">

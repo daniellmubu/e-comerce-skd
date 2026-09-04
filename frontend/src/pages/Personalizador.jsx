@@ -412,6 +412,7 @@ function Personalizador() {
   const [guardandoDiseno, setGuardandoDiseno] = useState(false);
   const [descargandoPrint, setDescargandoPrint] = useState(false);
   const [descargandoMockup, setDescargandoMockup] = useState(false);
+  const [descargandoVista3D, setDescargandoVista3D] = useState(false);
   const [mostrarGuiasImpresion, setMostrarGuiasImpresion] = useState(true);
   const [mensaje, setMensaje] = useState(null);
   const [procesandoImagen, setProcesandoImagen] = useState(false);
@@ -424,6 +425,7 @@ function Personalizador() {
   const [arrastrandoImagen, setArrastrandoImagen] = useState(false);
   const [dragPreview, setDragPreview] = useState(null);
   const arrastrandoRef = useRef(false);
+  const canvas3DRef = useRef(null);
   useEffect(() => { arrastrandoRef.current = arrastrandoImagen; }, [arrastrandoImagen]);
 
   // Galería de plantillas prediseñadas: se carga la primera vez que se abre
@@ -1445,6 +1447,80 @@ function Personalizador() {
     return dataUrl;
   };
 
+  const handleDescargarVista3D = async () => {
+    if (!hayDiseno) {
+      setMensaje({ tipo: "error", texto: "No hay diseño para exportar." });
+      return;
+    }
+    setDescargandoVista3D(true);
+    try {
+      // "Vista completa": muestra TODOS los lados del cilindro de una vez
+      // (el desplegado 360° del diseño sobre fondo claro + guías de zonas).
+      const disenoUrl = await componerImagenPrintReady("frente");
+      if (!disenoUrl) {
+        setMensaje({ tipo: "error", texto: "Aún no hay diseño para mostrar." });
+        return;
+      }
+      const esJarra = selectedProduct === "jarra_cervecera";
+      const W = esJarra ? JARRA_PRINT_WIDTH_PX : MUG_PRINT_WIDTH_PX;
+      const H = esJarra ? JARRA_PRINT_HEIGHT_PX : MUG_PRINT_HEIGHT_PX;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      // Fondo claro de "ficha"
+      const grad = ctx.createLinearGradient(0, 0, W, 0);
+      grad.addColorStop(0, "#f1f5f9");
+      grad.addColorStop(0.5, "#ffffff");
+      grad.addColorStop(1, "#f1f5f9");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      const img = new Image();
+      await new Promise((res) => { img.onload = res; img.onerror = res; img.src = disenoUrl; });
+      ctx.drawImage(img, 0, 0, W, H);
+
+      // Guías de zonas (solo en la vista, no en el archivo print).
+      ctx.save();
+      ctx.setLineDash([12, 10]);
+      ctx.lineWidth = 3;
+      const frenteX = W / 2;
+      ctx.strokeStyle = "rgba(79,70,229,0.65)";
+      ctx.beginPath(); ctx.moveTo(frenteX, 24); ctx.lineTo(frenteX, H - 24); ctx.stroke();
+      ctx.strokeStyle = "rgba(34,211,238,0.5)";
+      const lado = W * 0.16;
+      ctx.beginPath(); ctx.moveTo(lado, 24); ctx.lineTo(lado, H - 24); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(W - lado, 24); ctx.lineTo(W - lado, H - 24); ctx.stroke();
+      ctx.restore();
+
+      // Etiquetas
+      const rotulo = (txt, x, fill) => {
+        ctx.font = `bold ${Math.round(H * 0.05)}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillStyle = fill;
+        const w = ctx.measureText(txt).width;
+        const pad = 10;
+        const top = 10;
+        ctx.fillStyle = fill;
+        ctx.fillRect(x - w / 2 - pad, top, w + pad * 2, H * 0.06 + pad);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(txt, x, top + H * 0.045);
+      };
+      rotulo("LADO", W * 0.08, "rgba(8,145,178,0.85)");
+      rotulo("FRENTE", W / 2, "rgba(79,70,229,0.9)");
+      rotulo("LADO", W * 0.92, "rgba(8,145,178,0.85)");
+
+      descargarDataUrl(canvas.toDataURL("image/png"), `skd-vista-completa-${selectedProduct}-${W}x${H}.png`);
+      setMensaje({ tipo: "ok", texto: "Vista completa descargada: muestra todos los lados del cilindro en una sola imagen (desplegado 360°)." });
+    } catch (e) {
+      console.error("Error generando vista completa:", e);
+      setMensaje({ tipo: "error", texto: "No se pudo generar la vista completa." });
+    } finally {
+      setDescargandoVista3D(false);
+    }
+  };
+
   const handleDescargarMockup = async () => {
     if (!hayDiseno) {
       setMensaje({ tipo: "error", texto: "No hay diseño para exportar." });
@@ -1475,6 +1551,21 @@ function Personalizador() {
       setMensaje({ tipo: "error", texto: "No hay diseño para exportar." });
       return;
     }
+
+    // Guardia de calidad: no dejar descargar un print con imágenes que
+    // quedarían pixeladas (< DPI_MINIMO). El usuario debe usar una imagen
+    // de mayor resolución o reducir su tamaño.
+    const bajas = imagenes.filter(
+      (img) => img.naturalWidth > 0 && dpiDeImagen(img, selectedProduct) < DPI_MINIMO
+    );
+    if (bajas.length > 0) {
+      setMensaje({
+        tipo: "error",
+        texto: `No se descargó: hay ${bajas.length} imagen(es) que quedarían a menos de ${DPI_MINIMO} DPI. Usa una imagen de mayor resolución o reduce su tamaño (se marcan en amarillo).`,
+      });
+      return;
+    }
+
     setDescargandoPrint(true);
     try {
       const dataUrl = await componerImagenPrintReady(caraActiva);
@@ -1787,29 +1878,31 @@ function Personalizador() {
 
             {herramienta === "imagen" ? (
               <>
-                {/* Vistas de la prenda: al elegir una, la cámara del visor 3D
-                    gira hacia esa cara automáticamente. */}
-                <>
-                  <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
-                    Vista de la prenda
-                  </p>
-                  <div className="mb-5 grid grid-cols-3 gap-1 rounded-xl border border-gray-200 p-1 dark:border-slate-700">
-                    {carasProducto.map((cara) => (
-                      <button
-                        key={cara.id}
-                        type="button"
-                        onClick={() => setCaraActiva(cara.id)}
-                        className={`rounded-lg py-2 text-xs font-semibold transition ${
-                          caraActiva === cara.id
-                            ? "bg-indigo-600 text-white dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
-                            : "text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                        }`}
-                      >
-                        {cara.label}
-                      </button>
-                    ))}
-                  </div>
-                </>
+                {/* Vistas de la prenda: en cilindros (mug/jarra) hay una sola
+                    superficie continua, por eso el selector de caras se oculta. */}
+                {!esProductoCilindrico && (
+                  <>
+                    <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
+                      Vista de la prenda
+                    </p>
+                    <div className="mb-5 grid grid-cols-3 gap-1 rounded-xl border border-gray-200 p-1 dark:border-slate-700">
+                      {carasProducto.map((cara) => (
+                        <button
+                          key={cara.id}
+                          type="button"
+                          onClick={() => setCaraActiva(cara.id)}
+                          className={`rounded-lg py-2 text-xs font-semibold transition ${
+                            caraActiva === cara.id
+                              ? "bg-indigo-600 text-white dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+                              : "text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          {cara.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
 
                 {/* Subir imagen (varias a la vez) */}
                 <p className="mb-2 text-sm font-medium text-gray-700 dark:text-slate-300">
@@ -2498,6 +2591,7 @@ function Personalizador() {
               <div className="flex-1 overflow-hidden rounded-xl border bg-gradient-to-b from-gray-50 to-white dark:from-slate-950 dark:to-slate-900">
                 <Prenda3D
                   tipo={selectedProduct}
+                  onCanvasReady={(el) => (canvas3DRef.current = el)}
                   color={colorProducto2D}
                   imagenes={imagenes}
                   emojis={emojis}
@@ -2549,23 +2643,30 @@ function Personalizador() {
             </div>
 
             <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
-              {/* Selector de cara activa: donde caerá la próxima imagen */}
-              <div className="flex items-center gap-2 rounded-xl border border-gray-200 p-2 dark:border-slate-700">
-                <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Cara activa para añadir:</span>
-                <div className="flex gap-1">
-                  {carasProducto.map((cara) => (
-                    <button
-                      key={cara.id}
-                      type="button"
-                      onClick={() => setCaraActiva(cara.id)}
-                      className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${caraActiva === cara.id ? "bg-indigo-600 text-white dark:bg-cyan-500" : "bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400"}`}
-                    >
-                      {cara.label}
-                    </button>
-                  ))}
+              {/* Selector de cara activa: en cilíndricos todo va sobre la superficie
+                  continua del cilindro (no hay caras separadas). */}
+              {!esProductoCilindrico ? (
+                <div className="flex items-center gap-2 rounded-xl border border-gray-200 p-2 dark:border-slate-700">
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Cara activa para añadir:</span>
+                  <div className="flex gap-1">
+                    {carasProducto.map((cara) => (
+                      <button
+                        key={cara.id}
+                        type="button"
+                        onClick={() => setCaraActiva(cara.id)}
+                        className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${caraActiva === cara.id ? "bg-indigo-600 text-white dark:bg-cyan-500" : "bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400"}`}
+                      >
+                        {cara.label}
+                      </button>
+                    ))}
+                  </div>
+                  {imagenPendiente && <span className="ml-auto text-[11px] font-semibold text-indigo-600 dark:text-cyan-300">↳ Coloca en {etiquetaCaraActiva}</span>}
                 </div>
-                {imagenPendiente && <span className="ml-auto text-[11px] font-semibold text-indigo-600 dark:text-cyan-300">↳ Coloca en {etiquetaCaraActiva}</span>}
-              </div>
+              ) : (
+                <p className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-medium text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300">
+                  Estás diseñando sobre la superficie continua del {selectedProduct === "jarra_cervecera" ? "vaso" : "mug"} (desplegado 360°).
+                </p>
+              )}
 
               {/* Panel 2D unificado: para cilindro muestra TODOS los diseños en lienzo desplegado 360° */}
               {(() => {
@@ -2579,6 +2680,7 @@ function Personalizador() {
                         titulo="Desplegado 360° (cilindro)"
                         selectedProduct={selectedProduct}
                         baseImagen={null}
+                        mostrarGuiaZonas={true}
                         imagenes={imagenes}
                         emojis={emojis}
                         capasTexto={capasTexto}
@@ -2664,7 +2766,31 @@ function Personalizador() {
               {guardandoDiseno ? "Guardando..." : "Guardar diseño"}
             </button>
 
+            <button
+              type="button"
+              onClick={handleDescargarVista3D}
+              disabled={descargandoVista3D}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 py-2.5 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
+              title="Captura exacta de lo que ves en el visor 3D (tu ángulo actual)"
+            >
+              {descargandoVista3D ? (
+                <FaSpinner className="animate-spin" />
+              ) : (
+                <FaExpand />
+              )}
+              {descargandoVista3D ? "Generando..." : "Descargar vista completa"}
+            </button>
+
             {/* TEMP: Print-ready oculto — descomentar para restaurar exportación transparente 2362×1063 para producción
+            <button
+              type="button"
+              onClick={handleDescargarVista3D}
+              disabled={descargandoVista3D}
+              className="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300"
+              title="Captura exacta de lo que ves en el visor 3D (tu ángulo actual)"
+            >
+              {descargandoVista3D ? "Capturando..." : "Descargar vista 3D"}
+            </button>
             <button
               type="button"
               onClick={handleDescargarPrintReady}
@@ -2680,24 +2806,6 @@ function Personalizador() {
               {descargandoPrint ? "Generando print..." : "Descargar print-ready"}
             </button>
             */}
-
-            <button
-              type="button"
-              onClick={handleDescargarMockup}
-              disabled={descargandoMockup || !hayDiseno}
-              title="Misma resolución que print-ready pero compuesta sobre la silueta/foto del vaso de la cara activa (Frente/Izquierda/Derecha) — solo para previsualización, no para imprenta"
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-300 bg-white py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-500/30 dark:bg-slate-800 dark:text-cyan-300 dark:hover:bg-slate-700"
-            >
-              {descargandoMockup ? (
-                <FaSpinner className="animate-spin" />
-              ) : (
-                <FaImages />
-              )}
-              {descargandoMockup ? "Generando vista..." : "Descargar vista previa (con mockup)"}
-            </button>
-            <p className="mt-1 text-center text-[10px] leading-tight text-gray-400 dark:text-slate-500">
-              Vista previa {(() => { const esJ = selectedProduct === "jarra_cervecera"; return `${esJ ? JARRA_PRINT_WIDTH_PX : MUG_PRINT_WIDTH_PX}×${esJ ? JARRA_PRINT_HEIGHT_PX : MUG_PRINT_HEIGHT_PX}px`; })()} · {caraActiva} · con silueta del vaso
-            </p>
 
             <button
               type="button"

@@ -56,6 +56,7 @@ export function Panel2D({
   onDeseleccionarTodo,
   activa, // si esta cara es la activa (borde resaltado)
   colorProducto, // hex para tinte de fondo
+  mostrarGuiaZonas = false, // guías visuales Lado/Frente/Lado (solo ayuda, no se exportan)
 }) {
   const ref = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -373,6 +374,31 @@ export function Panel2D({
             </div>
           );
         })}
+
+        {/* Guías visuales de zonas: solo ayuda (no exportables ni arrastrables).
+            En cilindros el centro = Frente, los laterales envuelven hacia el asa. */}
+        {mostrarGuiaZonas && (
+          <div className="pointer-events-none absolute inset-0 z-[2]">
+            {/* divisor central (Frente) */}
+            <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 border-l border-dashed border-indigo-400/50" />
+            {/* límites laterales: envuelven alrededor hacia el asa */}
+            <div className="absolute left-[16%] top-0 h-full w-px border-l border-dashed border-cyan-400/40" />
+            <div className="absolute left-[84%] top-0 h-full w-px border-l border-dashed border-cyan-400/40" />
+            {/* etiquetas */}
+            <span className="absolute left-[50%] top-2 -translate-x-1/2 rounded bg-indigo-600/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              Frente
+            </span>
+            <span className="absolute left-[8%] top-2 rounded bg-cyan-600/70 px-1.5 py-0.5 text-[9px] font-semibold text-white/90">
+              Lado
+            </span>
+            <span className="absolute right-[8%] top-2 rounded bg-cyan-600/70 px-1.5 py-0.5 text-[9px] font-semibold text-white/90">
+              Lado
+            </span>
+            <span className="absolute inset-x-0 bottom-1.5 text-center text-[9px] font-medium text-amber-600/90 dark:text-amber-300/90">
+              Área imprimible del cilindro (envuelve hacia el asa)
+            </span>
+          </div>
+        )}
 
         {/* hint colocar */}
         {imagenPendiente && (

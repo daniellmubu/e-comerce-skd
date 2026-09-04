@@ -1,3 +1,18 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  /* Evita el desbordamiento horizontal y asegura que el fondo siempre cubra
+     toda la pantalla (en claro y en modo oscuro) — así no aparece la franja
+     blanca al hacer scroll lateral. */
+  html {
+    @apply overflow-x-hidden;
+  }
+  body {
+    @apply overflow-x-hidden bg-gray-50 text-gray-900 antialiased;
+  }
+  .dark body {
+    @apply bg-slate-950 text-white;
+  }
+}

@@ -1080,7 +1080,7 @@ function IndicadorCarga() {
 /* ------------------------------------------------------------------ */
 /* Visor 3D compartido (canvas, luces y órbita)                        */
 
-function Visor3D({ children, arrastrandoImagen = false }) {
+function Visor3D({ children, arrastrandoImagen = false, onCanvasReady }) {
   return (
     <div
       style={{
@@ -1093,12 +1093,15 @@ function Visor3D({ children, arrastrandoImagen = false }) {
       <Canvas
         flat
         dpr={[1, 2]}
-        gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+        gl={{ antialias: true, alpha: true, powerPreference: "high-performance", preserveDrawingBuffer: true }}
         onCreated={({ gl }) => {
           gl.domElement.addEventListener("webglcontextlost", (e) => {
             e.preventDefault();
             console.warn("WebGL context perdido, recuperando...");
           }, false);
+          // Expone el <canvas> WebGL para que el padre pueda descargar la vista
+          // de la cámara ACTUAL (lo que el usuario ve, con su rotación).
+          onCanvasReady?.(gl.domElement);
         }}
         camera={{ position: [0, 0.15, 4.15], fov: 45, near: 0.1, far: 100 }}
         style={{ touchAction: "none" }}
@@ -1133,7 +1136,7 @@ function VistaMugGltf(props) {
   // no se fragmenta por cara y permanece visible al orbitar.
   const esCilindrico = props.tipo === "mug" || props.tipo === "mug_magico" || props.tipo === "jarra_cervecera";
   return (
-    <Visor3D arrastrandoImagen={props.arrastrandoImagen}>
+    <Visor3D arrastrandoImagen={props.arrastrandoImagen} onCanvasReady={props.onCanvasReady}>
       <Suspense fallback={null}>
         <ModeloGltf url={url} preparar={preparar} unaSuperficie={esCilindrico} {...props} />
       </Suspense>
