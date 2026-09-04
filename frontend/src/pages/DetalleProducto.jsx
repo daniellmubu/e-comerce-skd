@@ -316,12 +316,16 @@ function DetalleProducto() {
               >
                 <FaShareAlt />
               </button>
-              <img
-                src={imagenActivaUrl || meta.image}
-                alt={producto.nombre}
-                className="h-full w-full object-contain"
-                onError={(e) => { e.currentTarget.src = meta.image; e.currentTarget.onerror = null; }}
-              />
+              {imagenActivaUrl ? (
+                <img
+                  src={imagenActivaUrl}
+                  alt={producto.nombre}
+                  className="h-full w-full object-contain"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+              ) : (
+                <FaMugHot className="text-8xl text-white/70 dark:text-white/60" />
+              )}
             </div>
 
             {/* Galería de imágenes del producto */}
