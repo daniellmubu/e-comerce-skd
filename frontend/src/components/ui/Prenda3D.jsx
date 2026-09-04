@@ -1,6 +1,6 @@
 import { Component, Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, useGLTF, useProgress } from "@react-three/drei";
 import {
   componerTexturaSolida,
@@ -38,6 +38,14 @@ const DIMENSIONES_MUG = { radioSuperior: 1.1, radioInferior: 1.1, altura: 2.0 };
 // Altura (en unidades de mundo) a la que se normaliza todo modelo glTF; es la
 // misma caja para todos los productos para conservar el encuadre de cámara.
 const ALTURA_MODELO = 2.6;
+
+// DESFASE_UV_FRENTE: desfase de fase (en vueltas) para que el CENTRO del
+// desplegado 360° (u=0.5) coincida con el FRENTE que mira la cámara.
+// El modelo se rota -90° en Y, por eso el centro queda corrido ~1/4 vuelta.
+// Ajuste: si al probar el frente queda corrido hacia el OTRO lado, cambia
+// el signo; afina con ±0.05 hasta que el centro coincida con el frente.
+const DESFASE_UV_FRENTE = 0.25; // vueltas (0.25 = 90°)
+
 
 // Qué fracción de la circunferencia ocupa el diseño en el mug procedural.
 const ANCHO_DISENO_MUG = 0.3;
@@ -439,7 +447,10 @@ function prepararModeloMug(escenaOriginal) {
     const uvs = new Float32Array(pos.count * 2);
     for (let i = 0; i < pos.count; i++) {
       const ang = Math.atan2(pos.getX(i), pos.getZ(i)); // 0=frente, ±π=atrás
-      uvs[i * 2] = 0.5 + ang / (Math.PI * 2);
+      let uu = 0.5 + ang / (Math.PI * 2) + DESFASE_UV_FRENTE;
+      if (uu < 0) uu += 1;
+      else if (uu > 1) uu -= 1;
+      uvs[i * 2] = uu;
       uvs[i * 2 + 1] = (pos.getY(i) - minY) / alto;
     }
     // Triángulos que cruzan la costura u=0/1 (atrás): se les suma 1 a los
@@ -1080,7 +1091,22 @@ function IndicadorCarga() {
 /* ------------------------------------------------------------------ */
 /* Visor 3D compartido (canvas, luces y órbita)                        */
 
-function Visor3D({ children, arrastrandoImagen = false, onCanvasReady }) {
+// Permite girar la cámara a posiciones fijas desde fuera (botones).
+// usamos el OrbitControls makeDefault que expone drei en state.controls.
+function OrbitadorAzimuth({ azimuth, bump }) {
+  const controls = useThree((s) => s.controls);
+  useEffect(() => {
+    if (controls && bump > 0) {
+      if (typeof controls.setAzimuthalAngle === "function") {
+        controls.setAzimuthalAngle(azimuth);
+        controls.update();
+      }
+    }
+  }, [azimuth, bump, controls]);
+  return null;
+}
+
+function Visor3D({ children, arrastrandoImagen = false, onCanvasReady, azimuth = 0, azimuthBump = 0 }) {
   return (
     <div
       style={{
@@ -1106,6 +1132,7 @@ function Visor3D({ children, arrastrandoImagen = false, onCanvasReady }) {
         camera={{ position: [0, 0.15, 4.15], fov: 45, near: 0.1, far: 100 }}
         style={{ touchAction: "none" }}
       >
+        <OrbitadorAzimuth azimuth={azimuth} bump={azimuthBump} />
         <hemisphereLight args={["#ffffff", "#445566", 0.9]} />
         <directionalLight intensity={1.6} position={[2.5, 3.5, 4]} />
         <directionalLight intensity={1.0} position={[-2, 1.5, -3]} />
@@ -1136,7 +1163,7 @@ function VistaMugGltf(props) {
   // no se fragmenta por cara y permanece visible al orbitar.
   const esCilindrico = props.tipo === "mug" || props.tipo === "mug_magico" || props.tipo === "jarra_cervecera";
   return (
-    <Visor3D arrastrandoImagen={props.arrastrandoImagen} onCanvasReady={props.onCanvasReady}>
+    <Visor3D arrastrandoImagen={props.arrastrandoImagen} onCanvasReady={props.onCanvasReady} azimuth={props.azimuth} azimuthBump={props.azimuthBump}>
       <Suspense fallback={null}>
         <ModeloGltf url={url} preparar={preparar} unaSuperficie={esCilindrico} {...props} />
       </Suspense>
