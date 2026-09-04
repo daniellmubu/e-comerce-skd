@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS password_reset_token (
     token VARCHAR(255) NOT NULL UNIQUE,
     usuario_id BIGINT NOT NULL,
     fecha_expiracion TIMESTAMP NOT NULL,
-    usado BOOLEAN NOT NULL DEFAULT FALSE,
+    usado BOOLEAN NOT NULL DEFAUL T FALSE,
     fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW(),
     fecha_uso TIMESTAMP,
     CONSTRAINT fk_password_reset_token_usuario
