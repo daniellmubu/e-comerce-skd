@@ -35,10 +35,14 @@ import mugMagicoDerecha from "../assets/images/products/base/mug-magico-derecha.
 import jarraFrente from "../assets/images/products/base/jarra-cervecera-frente.png";
 import jarraIzquierda from "../assets/images/products/base/jarra-cervecera-izquierda.png";
 import jarraDerecha from "../assets/images/products/base/jarra-cervecera-derecha.png";
-// 3D oculto temporalmente — constantes de escala para slider 2D (antes en Prenda3D)
-const ESCALA_MIN_3D = 0.2;
-const ESCALA_MAX_3D = 4.5;
+// Escala unificada visor 3D / editor 2D / print. 0.1 = 10% , 10 = 1000% del tamaño base.
+// El tamaño base (escala=1) = anchoBase * INSET del área imprimible (producto-dependiente).
+// No depende del naturalWidth: una imagen 512px puede escalarse hasta 1000% sin límite artificial.
+// Solo se advierte por DPI, no se impide.
+export const ESCALA_MIN_3D = 0.1;
+export const ESCALA_MAX_3D = 10;
 import { Panel2D } from "../components/ui/Editor2D";
+import Prenda3D from "../components/ui/Prenda3D";
 import { removeBackground } from "@imgly/background-removal";
 import procesarDiseno from "../utils/quitarFondoBlanco";
 import {
@@ -241,10 +245,27 @@ function calcularDpi(naturalWidth, anchoRenderizadoPx) {
 }
 
 // DPI efectivo de una imagen ya colocada, con su escala actual.
-function dpiDeImagen(img) {
-  const ancho =
-    TAMANO_LIENZO * ANCHO_IMAGEN_BASE * (img.escala ?? 1);
-  return calcularDpi(img.naturalWidth, ancho);
+// Para mugs/jarras el ancho base es 0.22/0.28 sobre el lienzo rectangular, no 0.38 (camiseta).
+// Se calcula sobre el ancho físico real del print-ready (20cm/24cm) para que la advertencia
+// sea coherente con el archivo que va a imprenta.
+function anchoBasePorProducto(tipo) {
+  if (tipo === "jarra_cervecera") return 0.28;
+  return 0.22; // mug y mug_magico
+}
+function dpiDeImagen(img, tipoProducto = null) {
+  // Usa anchoBase real del producto (cilindro) para que 512px escalada a 300% advierta pero no bloquee
+  const tipo = tipoProducto ?? "mug";
+  const anchoBaseReal = anchoBasePorProducto(tipo);
+  // El print-ready cilíndrico tiene W=2362/2835; el lienzo legacy cuadrado 1000 se mantiene para
+  // compatibilidad: se convierte proporcionalmente (anchoPrint ≈ 2.36* TAMANO_LIENZO para mug)
+  const esJarra = tipo === "jarra_cervecera";
+  const anchoPrint = esJarra ? JARRA_PRINT_WIDTH_PX : MUG_PRINT_WIDTH_PX;
+  const factorPrint = anchoPrint / TAMANO_LIENZO;
+  const ancho = TAMANO_LIENZO * anchoBaseReal * (img.escala ?? 1) * factorPrint;
+  // Pulgadas físicas del mug: 20cm=7.87in (ancho desplegado), jarra 24cm=9.45in
+  const pulgadasFisicas = esJarra ? 9.45 : 7.874;
+  const pulgadas = (ancho / anchoPrint) * pulgadasFisicas;
+  return pulgadas > 0 ? (img.naturalWidth || 0) / pulgadas : 0;
 }
 
 function descargarDataUrl(dataUrl, nombreArchivo) {
@@ -428,20 +449,24 @@ function Personalizador() {
   const emojiActivo = emojis.find((e) => e.id === emojiActivoId) ?? null;
 
   // DPI estimado de la imagen seleccionada (para avisar si quedará pixelada).
-  const dpiImagenActiva = imagenActiva ? dpiDeImagen(imagenActiva) : 0;
+  // Se calcula con el producto actual para que sea coherente con el print-ready cilíndrico.
+  const dpiImagenActiva = imagenActiva ? dpiDeImagen(imagenActiva, selectedProduct) : 0;
   const imagenActivaBajaCalidad =
     imagenActiva != null &&
     imagenActiva.naturalWidth > 0 &&
     dpiImagenActiva < DPI_MINIMO;
   const hayImagenesBajaCalidad = imagenes.some(
-    (img) => img.naturalWidth > 0 && dpiDeImagen(img) < DPI_MINIMO
+    (img) => img.naturalWidth > 0 && dpiDeImagen(img, selectedProduct) < DPI_MINIMO
   );
 
   const caraDe = (img) => img.cara ?? "frente";
-  // Emojis de la cara activa (se dibujan en la imagen final guardada).
-  const emojisEnCaraActiva = emojis.filter((e) => (e.cara ?? "frente") === caraActiva);
+  // Para producto cilíndrico el diseño pertenece al cilindro completo, no a una cara exclusiva.
+  // "cara" se conserva como metadato de origen/edición pero NO particiona el render:
+  // todas las imágenes se dibujan en la textura cilíndrica única.
+  const esProductoCilindrico = selectedProduct === "mug" || selectedProduct === "mug_magico" || selectedProduct === "jarra_cervecera";
+  const emojisEnCaraActiva = esProductoCilindrico ? emojis : emojis.filter((e) => (e.cara ?? "frente") === caraActiva);
 
-  const capasTextoEnCaraActiva = capasTexto.filter((t) => (t.cara ?? "frente") === caraActiva);
+  const capasTextoEnCaraActiva = esProductoCilindrico ? capasTexto : capasTexto.filter((t) => (t.cara ?? "frente") === caraActiva);
   const textoActivoLayer = capasTexto.find((t) => t.id === textoActivoId) ?? null;
   const hayDiseno = Boolean(
     imagenes.length || emojis.length || capasTexto.length || colorSeleccionado || textoDiseno.trim()
@@ -1112,17 +1137,13 @@ function Personalizador() {
     const ctxDiseno = capaDiseno.getContext("2d");
 
     for (const imagen of imagenes) {
-      // Mismo procesamiento que el editor 2D y la textura 3D: sin esto, la
-      // imagen guardada conservaría el fondo blanco que en pantalla no se ve.
       const procesada = await procesarDiseno(imagen.url);
       const el = await cargarImagenElemento(procesada?.dataUrl ?? imagen.url);
       if (!el) continue;
 
-      // Se utiliza directamente el aspect ratio natural sin multiplicar escalas duplicadas
-      const baseW = TAMANO_LIENZO * ANCHO_IMAGEN_BASE * (imagen.escala ?? 1);
+      const anchoBaseReal = anchoBasePorProducto(selectedProduct);
+      const baseW = TAMANO_LIENZO * anchoBaseReal * (imagen.escala ?? 1) * 0.88;
       const baseH = baseW * (el.naturalHeight / el.naturalWidth);
-      // Posición en coordenadas UV [0,1]; si viniera de un diseño antiguo en
-      // %, se usa ese valor como respaldo.
       const cx = (imagen.uv ? imagen.uv.u : (imagen.x ?? 50) / 100) * TAMANO_LIENZO;
       const cy = (imagen.uv ? imagen.uv.v : (imagen.y ?? 50) / 100) * TAMANO_LIENZO;
 
@@ -1133,9 +1154,10 @@ function Personalizador() {
       ctxDiseno.restore();
     }
 
+    const usarTodoCilindro = esProductoCilindrico;
     // Compatibilidad: capa legacy (textoDiseno) si existe y no hay capas Canva
     const capasTextoParaDibujar = capasTexto.length
-      ? capasTexto.filter((t) => (t.cara ?? "frente") === caraActiva)
+      ? (usarTodoCilindro ? capasTexto : capasTexto.filter((t) => (t.cara ?? "frente") === caraActiva))
       : textoDiseno.trim()
         ? [
             {
@@ -1253,14 +1275,16 @@ function Personalizador() {
     if (!imagenes.length && !emojis.length && !capasTexto.length && !textoDiseno.trim()) return null;
 
     const cfg = CONFIG_SUPERFICIE_PRINT[selectedProduct]?.[caraDestino] ?? CONFIG_SUPERFICIE_PRINT.mug.frente;
-    const grupos = agruparDisenosPorCaraLocal(imagenes);
-    const disenosCara = grupos[caraDestino] ?? [];
+    // Cilindro unificado: todo el diseño va en la textura panorámica única, no se particiona por cara.
+    // Para compatibilidad, si hay diseños con cara "izquierda"/"derecha" se incluyen igualmente.
+    const esCilindroPrint = esProductoCilindrico;
+    const disenosCara = esCilindroPrint ? imagenes : (agruparDisenosPorCaraLocal(imagenes)[caraDestino] ?? []);
 
     // Reproduce exactamente la construcción de textosConfig del visor 3D
     const textosConfig = [];
     if (capasTexto.length) {
       for (const capa of capasTexto) {
-        if ((capa.cara ?? "frente") !== caraDestino && cfg.conTexto) {
+        if (!esCilindroPrint && (capa.cara ?? "frente") !== caraDestino && cfg.conTexto) {
           if (caraDestino !== (capa.cara ?? "frente")) continue;
         }
         textosConfig.push({
@@ -1293,8 +1317,7 @@ function Personalizador() {
       });
     }
     for (const em of emojis ?? []) {
-      // Solo emojis de la cara destino (el visor filtra por cara)
-      if ((em.cara ?? "frente") !== caraDestino && cfg.conTexto) continue;
+      if (!esCilindroPrint && (em.cara ?? "frente") !== caraDestino && cfg.conTexto) continue;
       textosConfig.push({
         contenido: em.emoji,
         color: "#000000",
@@ -1352,12 +1375,12 @@ function Personalizador() {
   const componerImagenMockupPreview = async (caraDestino = caraActiva) => {
     if (!imagenes.length && !emojis.length && !capasTexto.length && !textoDiseno.trim()) return null;
     const cfg = CONFIG_SUPERFICIE_PRINT[selectedProduct]?.[caraDestino] ?? CONFIG_SUPERFICIE_PRINT.mug.frente;
-    const grupos = agruparDisenosPorCaraLocal(imagenes);
-    const disenosCara = grupos[caraDestino] ?? [];
+    const esCilindroMockup = esProductoCilindrico;
+    const disenosCara = esCilindroMockup ? imagenes : (agruparDisenosPorCaraLocal(imagenes)[caraDestino] ?? []);
     const textosConfig = [];
     if (capasTexto.length) {
       for (const capa of capasTexto) {
-        if ((capa.cara ?? "frente") !== caraDestino && cfg.conTexto) {
+        if (!esCilindroMockup && (capa.cara ?? "frente") !== caraDestino && cfg.conTexto) {
           if (caraDestino !== (capa.cara ?? "frente")) continue;
         }
         textosConfig.push({
@@ -1390,7 +1413,7 @@ function Personalizador() {
       });
     }
     for (const em of emojis ?? []) {
-      if ((em.cara ?? "frente") !== caraDestino && cfg.conTexto) continue;
+      if (!esCilindroMockup && (em.cara ?? "frente") !== caraDestino && cfg.conTexto) continue;
       textosConfig.push({
         contenido: em.emoji,
         color: "#000000",
@@ -1950,28 +1973,33 @@ function Personalizador() {
                             : ""}
                         </p>
 
-                        <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
-                          Tamaño:{" "}
-                          {Math.round((imagenActiva.escala ?? 1) * 100)}%
-                        </label>
-                        <input
-                          type="range"
-                          min={ESCALA_MIN_3D}
-                          max={ESCALA_MAX_3D}
-                          step={0.05}
-                          value={imagenActiva.escala ?? 1}
-                          onChange={(e) => {
-                            const valor = Number(e.target.value);
-                            actualizarImagen(imagenActiva.id, {
-                              escala: valor,
-                            });
-                          }}
-                          className="w-full accent-indigo-600 dark:accent-cyan-500"
-                        />
-                        <p className="text-[10px] text-gray-400 dark:text-slate-500">
-                          Arrastra la imagen sobre la prenda para moverla; usa
-                          este deslizador para escalarla.
+                        {/* Controles de transformación mejorados: +/- , porcentaje , slider 10-1000% */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-gray-700 dark:text-slate-300">Tamaño</span>
+                          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:bg-cyan-500/20 dark:text-cyan-300">{Math.round((imagenActiva.escala ?? 1) * 100)}%</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => actualizarImagen(imagenActiva.id, { escala: Math.max(ESCALA_MIN_3D, (imagenActiva.escala ?? 1) - 0.1) })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-sm font-bold hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">−</button>
+                          <input
+                            type="range"
+                            min={ESCALA_MIN_3D}
+                            max={ESCALA_MAX_3D}
+                            step={0.05}
+                            value={imagenActiva.escala ?? 1}
+                            onChange={(e) => actualizarImagen(imagenActiva.id, { escala: Number(e.target.value) })}
+                            className="flex-1 accent-indigo-600 dark:accent-cyan-500"
+                          />
+                          <button type="button" onClick={() => actualizarImagen(imagenActiva.id, { escala: Math.min(ESCALA_MAX_3D, (imagenActiva.escala ?? 1) + 0.1) })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-sm font-bold hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">+</button>
+                        </div>
+                        <input type="number" min={Math.round(ESCALA_MIN_3D*100)} max={Math.round(ESCALA_MAX_3D*100)} step={5} value={Math.round((imagenActiva.escala ?? 1)*100)} onChange={(e)=>{ const v=Number(e.target.value)/100; if(!isNaN(v)) actualizarImagen(imagenActiva.id, { escala: Math.max(ESCALA_MIN_3D, Math.min(ESCALA_MAX_3D, v)) });}} className="w-full rounded-lg border border-gray-200 bg-white p-1.5 text-center text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+                        <p className="text-[10px] leading-tight text-gray-400 dark:text-slate-500">
+                          10% → 1000% · 100% = tamaño base del producto (no del archivo). Arrastra sobre el 3D/2D para mover.
                         </p>
+                        {imagenActivaBajaCalidad && (
+                          <p className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">⚠ La imagen puede perder calidad al imprimir a este tamaño ({Math.round(dpiImagenActiva)} DPI &lt; {DPI_MINIMO}).</p>
+                        )}
+                        <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Rotación {imagenActiva.rotacion ?? 0}°</label>
+                        <input type="range" min={0} max={360} step={5} value={imagenActiva.rotacion ?? 0} onChange={(e)=> actualizarImagen(imagenActiva.id, { rotacion: Number(e.target.value)})} className="w-full accent-indigo-600" />
 
                         <div className="flex gap-2">
                           <button
@@ -2459,11 +2487,55 @@ function Personalizador() {
             )}
           </div>
 
-          {/* Editor 2D: tres vistas frente / izquierda / derecha editables */}
-          <div className="flex min-h-[560px] flex-1 flex-col rounded-2xl border border-gray-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          {/* Visor 3D cilíndrico + Editor 2D: el diseño vive en el cilindro 360°, la cámara orbita */}
+          <div className="flex min-h-[560px] flex-1 flex-col gap-4">
+            {/* Visor 3D: única fuente de verdad cilíndrica — el diseño permanece pegado al girar */}
+            <div className="flex h-[360px] flex-col rounded-2xl border border-gray-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400">Visor 3D · Arrastra para orbitar</h2>
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">Cilindro 360°</span>
+              </div>
+              <div className="flex-1 overflow-hidden rounded-xl border bg-gradient-to-b from-gray-50 to-white dark:from-slate-950 dark:to-slate-900">
+                <Prenda3D
+                  tipo={selectedProduct}
+                  color={colorProducto2D}
+                  imagenes={imagenes}
+                  emojis={emojis}
+                  capasTexto={capasTexto}
+                  texto={textoDiseno}
+                  colorTexto={colorTexto}
+                  fuenteTexto={fuenteTexto}
+                  tamanoTexto={tamanoTexto}
+                  esNegrita={esNegrita}
+                  esCursiva={esCursiva}
+                  esSubrayado={esSubrayado}
+                  posicionTexto={posicionTexto}
+                  rotacionTexto={rotacionTexto}
+                  escalaTexto={escalaTexto}
+                  interactivo={true}
+                  imagenActivaId={imagenActivaId}
+                  imagenPendiente={imagenPendiente}
+                  textoActivoId={textoActivoId}
+                  emojiActivoId={emojiActivoId}
+                  onColocar={colocarImagen}
+                  onMover={moverImagen}
+                  onMoverTexto={moverCapaTexto3D}
+                  onMoverEmoji={moverEmoji3D}
+                  onSeleccionar={seleccionarImagen}
+                  onSeleccionarTexto={seleccionarCapaTexto}
+                  onSeleccionarEmoji={seleccionarEmoji}
+                  arrastrandoImagen={arrastrandoImagen}
+                  onArrastrarImagen={setArrastrandoImagen}
+                  dragPreview={dragPreview}
+                />
+              </div>
+              <p className="pt-2 text-center text-[10px] text-gray-400 dark:text-slate-500">El logo está pegado al cilindro. Gira el mug: si queda cerca del borde seguirá viéndose parcialmente por curvatura.</p>
+            </div>
+
+            <div className="flex flex-1 flex-col rounded-2xl border border-gray-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400">
-                Editor 2D · Frente, Izquierda y Derecha
+                Editor 2D · Vista desplegada (WYSIWYG con print)
               </h2>
               {hayDiseno && (
                 <button
@@ -2495,53 +2567,81 @@ function Personalizador() {
                 {imagenPendiente && <span className="ml-auto text-[11px] font-semibold text-indigo-600 dark:text-cyan-300">↳ Coloca en {etiquetaCaraActiva}</span>}
               </div>
 
-              {/* Un solo lienzo grande — la cara que marque la pestaña (como la camiseta) */}
+              {/* Panel 2D unificado: para cilindro muestra TODOS los diseños en lienzo desplegado 360° */}
               {(() => {
                 const caraActual = carasProducto.find((c) => c.id === caraActiva) ?? carasProducto[0];
+                const mostrarUnificado = esProductoCilindrico;
                 return (
                   <div className="mx-auto w-full max-w-[720px] lg:max-w-[760px]">
-                    <Panel2D
-                      cara={caraActual.id}
-                      titulo={caraActual.label}
-                      selectedProduct={selectedProduct}
-                      baseImagen={obtenerBaseMockup(selectedProduct, caraActual.id)}
-                      imagenes={imagenes.filter((im) => (im.cara ?? "frente") === caraActual.id)}
-                      emojis={emojis.filter((em) => (em.cara ?? "frente") === caraActual.id)}
-                      capasTexto={capasTexto.filter((t) => (t.cara ?? "frente") === caraActual.id)}
-                      imagenActivaId={imagenActivaId}
-                      textoActivoId={textoActivoId}
-                      emojiActivoId={emojiActivoId}
-                      imagenPendiente={imagenPendiente}
-                      onColocar={handleColocar2D}
-                      onMoverImagen={handleMoverImagen2D}
-                      onMoverTexto={handleMoverTexto2D}
-                      onMoverEmoji={handleMoverEmoji2D}
-                      onSeleccionarImagen={seleccionarImagen}
-                      onSeleccionarTexto={seleccionarCapaTexto}
-                      onSeleccionarEmoji={seleccionarEmoji}
-                      onDeseleccionarTodo={handleDeseleccionarTodo}
-                      activa={true}
-                      colorProducto={colorProducto2D}
-                    />
+                    {mostrarUnificado ? (
+                      <Panel2D
+                        cara="frente"
+                        titulo="Desplegado 360° (cilindro)"
+                        selectedProduct={selectedProduct}
+                        baseImagen={null}
+                        imagenes={imagenes}
+                        emojis={emojis}
+                        capasTexto={capasTexto}
+                        imagenActivaId={imagenActivaId}
+                        textoActivoId={textoActivoId}
+                        emojiActivoId={emojiActivoId}
+                        imagenPendiente={imagenPendiente}
+                        onColocar={handleColocar2D}
+                        onMoverImagen={handleMoverImagen2D}
+                        onMoverTexto={handleMoverTexto2D}
+                        onMoverEmoji={handleMoverEmoji2D}
+                        onSeleccionarImagen={seleccionarImagen}
+                        onSeleccionarTexto={seleccionarCapaTexto}
+                        onSeleccionarEmoji={seleccionarEmoji}
+                        onDeseleccionarTodo={handleDeseleccionarTodo}
+                        activa={true}
+                        colorProducto={colorProducto2D}
+                      />
+                    ) : (
+                      <Panel2D
+                        cara={caraActual.id}
+                        titulo={caraActual.label}
+                        selectedProduct={selectedProduct}
+                        baseImagen={obtenerBaseMockup(selectedProduct, caraActual.id)}
+                        imagenes={imagenes.filter((im) => (im.cara ?? "frente") === caraActual.id)}
+                        emojis={emojis.filter((em) => (em.cara ?? "frente") === caraActual.id)}
+                        capasTexto={capasTexto.filter((t) => (t.cara ?? "frente") === caraActual.id)}
+                        imagenActivaId={imagenActivaId}
+                        textoActivoId={textoActivoId}
+                        emojiActivoId={emojiActivoId}
+                        imagenPendiente={imagenPendiente}
+                        onColocar={handleColocar2D}
+                        onMoverImagen={handleMoverImagen2D}
+                        onMoverTexto={handleMoverTexto2D}
+                        onMoverEmoji={handleMoverEmoji2D}
+                        onSeleccionarImagen={seleccionarImagen}
+                        onSeleccionarTexto={seleccionarCapaTexto}
+                        onSeleccionarEmoji={seleccionarEmoji}
+                        onDeseleccionarTodo={handleDeseleccionarTodo}
+                        activa={true}
+                        colorProducto={colorProducto2D}
+                      />
+                    )}
                   </div>
                 );
               })()}
 
               <div className="rounded-xl bg-indigo-50 p-3 dark:bg-cyan-500/10">
-                <p className="text-xs font-semibold text-indigo-700 dark:text-cyan-300">¿Cómo editar? — como el 3D pero en 2D grande</p>
+                <p className="text-xs font-semibold text-indigo-700 dark:text-cyan-300">¿Cómo editar? — cilindro 360°</p>
                 <ul className="mt-1 list-disc pl-4 text-[11px] leading-relaxed text-indigo-600/80 dark:text-cyan-200/70">
-                  <li><b>Frente</b>, <b>Izquierda</b> y <b>Derecha</b> son fotos del vaso a tamaño grande — <b>haz clic directamente sobre el vaso</b> para colocar la imagen.</li>
-                  <li>El vaso se ve grande y editable, igual que el visor 3D. Arrastra sobre el vaso para mover. El archivo <b>print-ready 2362×1063</b> (mug) / 2835×1417 (jarra) se genera igual.</li>
-                  <li>Selecciona y <b>arrastra</b> cualquier elemento sobre el vaso para moverlo. Tamaño/rotación en el panel izquierdo.</li>
-                  <li>Cambia la <b>cara activa</b> o haz clic en otro vaso para decidir dónde cae la próxima subida/plantilla/IA.</li>
+                  <li>El diseño vive en el <b>cilindro 360°</b>: x=0-100% es la vuelta completa. El 3D orbita alrededor — el logo permanece pegado.</li>
+                  <li><b>Cerca del borde?</b> Gira el mug en el 3D y verás la parte correspondiente por curvatura (no desaparece).</li>
+                  <li>El panel 2D es el <b>desplegado WYSIWYG</b> 2362×1063 (mug) / 2835×1417 (jarra) que va a imprenta — misma posición/escala.</li>
+                  <li>“Cara activa” es solo dónde cae la próxima imagen si haces clic en 2D; el diseño no se fragmenta por cara.</li>
                 </ul>
               </div>
             </div>
             <p className="pt-3 text-center text-xs text-gray-400 dark:text-slate-500">
               {imagenPendiente
-                ? `Haz clic sobre el vaso en ${etiquetaCaraActiva} para colocar la imagen (vaso grande).`
-                : "Tip: sube o genera una imagen y haz clic directamente sobre el vaso grande (Frente, Izquierda o Derecha). Luego arrastra sobre el vaso."}
+                ? `Haz clic sobre el cilindro desplegado o sobre el modelo 3D para colocar la imagen.`
+                : "Tip: el visor 3D es la fuente de verdad. El 2D es el desplegado imprimible."}
             </p>
+          </div>
           </div>
 
             {/* Acciones y resumen del diseño */}

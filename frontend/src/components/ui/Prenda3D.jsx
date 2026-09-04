@@ -7,8 +7,8 @@ import {
   componerTexturaCamiseta,
 } from "../../utils/texturaPrenda";
 
-export const ESCALA_MIN_3D = 0.2;
-export const ESCALA_MAX_3D = 4.5;
+export const ESCALA_MIN_3D = 0.1;
+export const ESCALA_MAX_3D = 10;
 // Límite ampliado para plantillas y mug (eran muy pequeñas con 3x)
 
 /* ------------------------------------------------------------------ */
@@ -482,7 +482,10 @@ function prepararModeloMug(escenaOriginal) {
   };
 
   const capaFrente = crearCapa();
-  const capaAtras = crearCapa();
+  // Para cilindro se usa ÚNICA capa panorámica. La segunda capa "atrás" duplicada
+  // causaba z-fighting y fragmentaba el diseño por caras. Ahora un solo mesh con
+  // textura 360° da continuidad física al girar: el diseño cerca del borde frontal
+  // sigue visible lateralmente porque es la misma textura cilíndrica.
 
   return {
     raiz,
@@ -498,23 +501,11 @@ function prepararModeloMug(escenaOriginal) {
         espejoX: false,
         espejoY: false,
       },
-      {
-        clave: "atras",
-        material: capaAtras.material,
-        mesh: capaAtras.capa,
-        transparencia: true,
-        silueta: false,
-        conTexto: false,
-        anchoBase: ANCHO_IMAGEN_MUG,
-        espejoX: false,
-        espejoY: false,
-      },
     ],
     materialesLisos: [...materialesGltf.values()],
     materialesTodos: [
       ...materialesGltf.values(),
       capaFrente.material,
-      capaAtras.material,
     ].filter(Boolean),
     geometriasPropias: [...geometriasHorneadas, ...(uvPared ? [uvPared] : [])],
   };
@@ -642,30 +633,33 @@ function prepararModeloJarra(escenaOriginal) {
     capa.renderOrder = 2; capa.visible = false; raiz.add(capa);
     return { material: mat, capa };
   };
-  const capaFrente = crearCapa(); const capaAtras = crearCapa();
+  const capaFrente = crearCapa();
   return {
     raiz,
     superficies: [
       { clave: "frente", material: capaFrente.material, mesh: capaFrente.capa, transparencia: true, silueta: false, conTexto: true, anchoBase: 0.28, espejoX: false, espejoY: false },
-      { clave: "atras", material: capaAtras.material, mesh: capaAtras.capa, transparencia: true, silueta: false, conTexto: false, anchoBase: 0.28, espejoX: false, espejoY: false },
     ],
     materialesLisos: [...materialesGltf.values()],
-    materialesTodos: [...materialesGltf.values(), capaFrente.material, capaAtras.material].filter(Boolean),
+    materialesTodos: [...materialesGltf.values(), capaFrente.material].filter(Boolean),
     geometriasPropias: [...geosHorneadas, ...(uvPared ? [uvPared] : [])],
   };
 }
 
 /* ------------------------------------------------------------------ */
 /* Modelo glTF genérico (color uniforme + estampado por superficie)    */
+// Para productos cilíndricos (mug/jarra) la superficie es CILÍNDRICA ÚNICA:
+// todo el diseño vive en una sola textura panorámica 360° (u 0-1 = vuelta completa).
+// "cara" se conserva solo como metadato de origen para compatibilidad, pero el render
+// usa unaSuperficie=true y agrupa todo en "frente" (cilindro). La cámara orbita
+// alrededor del mismo cilindro; el diseño permanece pegado y visible desde cualquier ángulo.
 
 const CARAS_VALIDAS = ["frente", "atras"];
 
 function agruparDisenosPorCara(imagenes, unaSuperficie = false) {
   const grupos = {};
   for (const d of imagenes ?? []) {
-    // "asa" es el nombre antiguo de la vista trasera del mug: se mapea para
-    // no perder los diseños guardados antes del renombre.
     const caraNormalizada = d.cara === "asa" ? "atras" : d.cara;
+    // Si es cilíndrico unificado, todo va a "frente" (única textura panorámica)
     const cara =
       unaSuperficie || !CARAS_VALIDAS.includes(caraNormalizada)
         ? "frente"
@@ -1135,10 +1129,13 @@ function Visor3D({ children, arrastrandoImagen = false }) {
 function VistaMugGltf(props) {
   const url = MODELOS_3D[props.tipo] || MODELOS_3D.mug;
   const preparar = props.tipo === "jarra_cervecera" ? prepararModeloJarra : prepararModeloMug;
+  // Mug/jarra son cilíndricos: textura única 360° (unaSuperficie) => el diseño
+  // no se fragmenta por cara y permanece visible al orbitar.
+  const esCilindrico = props.tipo === "mug" || props.tipo === "mug_magico" || props.tipo === "jarra_cervecera";
   return (
     <Visor3D arrastrandoImagen={props.arrastrandoImagen}>
       <Suspense fallback={null}>
-        <ModeloGltf url={url} preparar={preparar} {...props} />
+        <ModeloGltf url={url} preparar={preparar} unaSuperficie={esCilindrico} {...props} />
       </Suspense>
     </Visor3D>
   );

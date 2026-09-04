@@ -155,7 +155,10 @@ export function Panel2D({
     setDrag(null);
   };
 
-  // tamaño visual de una imagen en px dentro del contenedor
+  // Tamaño visual coherente con 3D/print: escala=1 => anchoBase*INSET fracción del lienzo rectangular.
+  // La escala es visual y no depende del naturalWidth: una 512px a escala 3 muestra 3x más grande
+  // y solo se advierte por DPI. Se permite hasta 90% ancho/alto del contenedor (suficiente para
+  // cubrir gran parte del producto); esa es la única limitación razonable.
   const estiloImagen = (img) => {
     if (!size.w || !size.h) return { width: "18%", height: "auto" };
     const escala = img.escala ?? 1;
@@ -163,27 +166,25 @@ export function Panel2D({
       img.naturalWidth && img.naturalHeight
         ? img.naturalHeight / img.naturalWidth
         : 1;
-    const baseW = size.w * anchoBase * escala * INSET;
-    // clamp similar a texturaPrenda
-    const MAX_ANCHO = size.w * 0.9;
-    const baseWM = Math.min(baseW, MAX_ANCHO);
-    // altura corregida cilíndrica
-    let baseH = baseWM * aspect * factorRect;
-    const MAX_ALTO = size.h * 0.9;
-    if (baseH > MAX_ALTO) {
-      const r = MAX_ALTO / baseH;
-      baseH *= r;
-      // mantener aspecto -> ajustar baseWM también
+    let baseW = size.w * anchoBase * escala * INSET;
+    let baseH = baseW * aspect * factorRect;
+
+    // Límites razonables: 90% del contenedor. Si excede, se escala proporcionalmente hacia abajo
+    // manteniendo aspect ratio (evita deformación y recorte).
+    const MAX_ANCHO = size.w * 0.92;
+    const MAX_ALTO = size.h * 0.92;
+    if (baseW > MAX_ANCHO || baseH > MAX_ALTO) {
+      const r = Math.min(MAX_ANCHO / baseW, MAX_ALTO / baseH);
+      baseW *= r;
+      baseH = baseW * aspect * factorRect;
+      // Si tras ajustar ancho aún excede alto (por factorRect alto), se ajusta de nuevo por alto
+      if (baseH > MAX_ALTO) {
+        const r2 = MAX_ALTO / baseH;
+        baseH *= r2;
+        baseW = baseH / (aspect * factorRect);
+      }
     }
-    // si clamp por alto, recalcular ancho proporcional para no deformar
-    // (aprox: si baseH se clampó, el ancho efectivo es baseH / (aspect*factorRect))
-    let wFinal = baseWM;
-    let hFinal = baseH;
-    if (baseH > MAX_ALTO) {
-      hFinal = MAX_ALTO;
-      wFinal = hFinal / (aspect * factorRect);
-    }
-    return { width: `${wFinal}px`, height: `${hFinal}px` };
+    return { width: `${baseW}px`, height: `${baseH}px` };
   };
 
   const estiloTexto = (t) => {
