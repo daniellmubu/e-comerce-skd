@@ -413,6 +413,9 @@ function Personalizador() {
   const [descargandoPrint, setDescargandoPrint] = useState(false);
   const [descargandoMockup, setDescargandoMockup] = useState(false);
   const [descargandoVista3D, setDescargandoVista3D] = useState(false);
+  const [azimuthCamara, setAzimuthCamara] = useState(0);
+  const [azimuthCamaraBump, setAzimuthCamaraBump] = useState(0);
+  const [borradoresTick, setBorradoresTick] = useState(0);
   const [mostrarGuiasImpresion, setMostrarGuiasImpresion] = useState(true);
   const [mensaje, setMensaje] = useState(null);
   const [procesandoImagen, setProcesandoImagen] = useState(false);
@@ -1625,6 +1628,81 @@ function Personalizador() {
     }
   };
 
+  // ---------- #4 Guardar/reutilizar borradores EDITABLES (localStorage) ----------
+  const STORAGE_BORRADORES = "skd_disenos_editables";
+
+  const serializarDisenoEditable = () => ({
+    selectedProduct,
+    imagenes: imagenes.map((i) => ({
+      id: i.id, url: i.url, naturalWidth: i.naturalWidth, naturalHeight: i.naturalHeight,
+      x: i.x, y: i.y, escala: i.escala, rotacion: i.rotacion, cara: i.cara ?? "frente",
+    })),
+    emojis: emojis.map((e) => ({ id: e.id, emoji: e.emoji, cara: e.cara, x: e.x, y: e.y, escala: e.escala, rotacion: e.rotacion, tamano: e.tamano })),
+    capasTexto: capasTexto.map((t) => ({ id: t.id, contenido: t.contenido, color: t.color, fuente: t.fuente, tamano: t.tamano, negrita: t.negrita, cursiva: t.cursiva, subrayado: t.subrayado, x: t.x, y: t.y, rotacion: t.rotacion, escala: t.escala, cara: t.cara })),
+    textoDiseno, colorTexto, fuenteTexto, tamanoTexto, esNegrita, esCursiva, esSubrayado,
+    posicionTexto, rotacionTexto, escalaTexto, colorSeleccionado,
+  });
+
+  const aplicarDisenoEditable = (d) => {
+    if (!d) return;
+    if (d.selectedProduct) cambiarProducto(d.selectedProduct);
+    setImagenes(Array.isArray(d.imagenes) ? d.imagenes : []);
+    setEmojis(Array.isArray(d.emojis) ? d.emojis : []);
+    setCapasTexto(Array.isArray(d.capasTexto) ? d.capasTexto : []);
+    setTextoDiseno(d.textoDiseno ?? "");
+    setColorTexto(d.colorTexto ?? "#111111");
+    if (d.fuenteTexto) setFuenteTexto(d.fuenteTexto);
+    if (d.tamanoTexto) setTamanoTexto(d.tamanoTexto);
+    setEsNegrita(!!d.esNegrita); setEsCursiva(!!d.esCursiva); setEsSubrayado(!!d.esSubrayado);
+    if (d.posicionTexto) setPosicionTexto(d.posicionTexto);
+    if (d.rotacionTexto != null) setRotacionTexto(d.rotacionTexto);
+    if (d.escalaTexto != null) setEscalaTexto(d.escalaTexto);
+    if (d.colorSeleccionado) setColorSeleccionado(d.colorSeleccionado);
+    setImagenActivaId(null); setEmojiActivoId(null); setTextoActivoId(null);
+    setImagenPendiente(null);
+    setMensaje({ tipo: "ok", texto: "Borrador cargado. Revisa el lienzo." });
+  };
+
+  const leerBorradores = () => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_BORRADORES)) || []; }
+    catch { return []; }
+  };
+  const guardarBorradores = (lista) => {
+    try { localStorage.setItem(STORAGE_BORRADORES, JSON.stringify(lista)); } catch {}
+  };
+
+  const handleGuardarBorrador = () => {
+    if (!hayDiseno) { setMensaje({ tipo: "error", texto: "Aún no hay diseño editable para guardar." }); return; }
+    const lista = leerBorradores();
+    const borrador = {
+      id: Date.now(),
+      nombre: `Borrador ${lista.length + 1}`,
+      fecha: new Date().toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+      snapshot: serializarDisenoEditable(),
+    };
+    guardarBorradores([borrador, ...lista].slice(0, 10));
+    setBorradoresTick((t) => t + 1);
+    setMensaje({ tipo: "ok", texto: `Borrador editable guardado (${borrador.nombre}).` });
+  };
+
+  const handleCargarBorrador = (id) => {
+    const b = leerBorradores().find((x) => x.id === id);
+    if (b) aplicarDisenoEditable(b.snapshot);
+  };
+  const handleEliminarBorrador = (id) => {
+    guardarBorradores(leerBorradores().filter((x) => x.id !== id));
+    setBorradoresTick((t) => t + 1);
+  };
+
+  const rotarCamara = (delta) => {
+    setAzimuthCamara((a) => a + delta);
+    setAzimuthCamaraBump((b) => b + 1);
+  };
+  const resetCamara = () => {
+    setAzimuthCamara(0);
+    setAzimuthCamaraBump((b) => b + 1);
+  };
+
   const handleAgregarAlCarrito = async () => {
     if (!usuario) {
       navigate("/login");
@@ -2585,12 +2663,39 @@ function Personalizador() {
             {/* Visor 3D: única fuente de verdad cilíndrica — el diseño permanece pegado al girar */}
             <div className="flex h-[360px] flex-col rounded-2xl border border-gray-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
               <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400">Visor 3D · Arrastra para orbitar</h2>
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">Cilindro 360°</span>
+                <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400">Visor 3D</h2>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => rotarCamara(-0.9)}
+                    className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+                    title="Girar hacia la izquierda"
+                  >
+                    ⟲
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetCamara}
+                    className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+                    title="Volver al frente"
+                  >
+                    Frente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => rotarCamara(0.9)}
+                    className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+                    title="Girar hacia la derecha"
+                  >
+                    ⟳
+                  </button>
+                </div>
               </div>
               <div className="flex-1 overflow-hidden rounded-xl border bg-gradient-to-b from-gray-50 to-white dark:from-slate-950 dark:to-slate-900">
                 <Prenda3D
                   tipo={selectedProduct}
+                  azimuth={azimuthCamara}
+                  azimuthBump={azimuthCamaraBump}
                   onCanvasReady={(el) => (canvas3DRef.current = el)}
                   color={colorProducto2D}
                   imagenes={imagenes}
@@ -2780,6 +2885,48 @@ function Personalizador() {
               )}
               {descargandoVista3D ? "Generando..." : "Descargar vista completa"}
             </button>
+
+            <button
+              type="button"
+              onClick={handleGuardarBorrador}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-violet-300 bg-violet-50 py-2.5 text-sm font-semibold text-violet-800 transition hover:bg-violet-100 disabled:opacity-50 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20"
+              title="Guarda el estado editable (capas/textos) para seguir editándolo después"
+            >
+              <FaSave /> Guardar borrador editable
+            </button>
+
+            {borradoresTick >= 0 && leerBorradores().length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {leerBorradores().map((b) => (
+                  <div
+                    key={b.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-800/60"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-medium text-gray-700 dark:text-slate-200">{b.nombre}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-slate-500">{b.fecha}</p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleCargarBorrador(b.id)}
+                        className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-indigo-700 dark:bg-cyan-500"
+                      >
+                        Cargar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarBorrador(b.id)}
+                        aria-label="Eliminar borrador"
+                        className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] text-red-500 transition hover:bg-red-50 dark:border-slate-600 dark:hover:bg-red-500/10"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* TEMP: Print-ready oculto — descomentar para restaurar exportación transparente 2362×1063 para producción
             <button
