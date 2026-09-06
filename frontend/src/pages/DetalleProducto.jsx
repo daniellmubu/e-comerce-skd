@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { FaStar, FaShoppingCart, FaArrowLeft, FaUpload, FaSpinner, FaShareAlt } from "react-icons/fa";
+import { FaStar, FaShoppingCart, FaArrowLeft, FaUpload, FaSpinner, FaShareAlt, FaWhatsapp, FaFacebookF, FaMugHot } from "react-icons/fa";
 
 import mug from "../assets/images/products/mug.png";
 import {
@@ -53,6 +53,7 @@ function DetalleProducto() {
   const [variantes, setVariantes] = useState([]);
   const [imagenesProducto, setImagenesProducto] = useState([]);
   const [imagenActiva, setImagenActiva] = useState(0);
+  const [imgCargando, setImgCargando] = useState(true);
   const [tallaSel, setTallaSel] = useState(null);
   const [colorSel, setColorSel] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -291,6 +292,11 @@ function DetalleProducto() {
     }
   };
 
+  const urlPagina = window.location.href;
+  const textoCompartir = `Mira ${producto.nombre} en SKD: ${urlPagina}`;
+  const urlWhatsApp = `https://wa.me/?text=${encodeURIComponent(textoCompartir)}`;
+  const urlFacebook = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(urlPagina)}`;
+
   return (
     <section className="min-h-screen bg-gray-50 px-6 py-16 text-gray-900 dark:bg-slate-950 dark:text-white">
       <div className="mx-auto max-w-6xl">
@@ -317,12 +323,21 @@ function DetalleProducto() {
                 <FaShareAlt />
               </button>
               {imagenActivaUrl ? (
-                <img
-                  src={imagenActivaUrl}
-                  alt={producto.nombre}
-                  className="h-full w-full object-contain"
-                  onError={(e) => { e.currentTarget.style.display = "none"; }}
-                />
+                <>
+                  {imgCargando && (
+                    <div className="absolute inset-0 animate-pulse bg-white/40 dark:bg-white/10" />
+                  )}
+                  <img
+                    key={imagenActivaUrl}
+                    src={imagenActivaUrl}
+                    alt={producto.nombre}
+                    className={`h-full w-full object-contain transition-opacity duration-500 ${
+                      imgCargando ? "opacity-0" : "opacity-100"
+                    }`}
+                    onLoad={() => setImgCargando(false)}
+                    onError={(e) => { setImgCargando(false); e.currentTarget.style.display = "none"; }}
+                  />
+                </>
               ) : (
                 <FaMugHot className="text-8xl text-white/70 dark:text-white/60" />
               )}
@@ -335,7 +350,7 @@ function DetalleProducto() {
                   <button
                     key={`${url}-${i}`}
                     type="button"
-                    onClick={() => setImagenActiva(i)}
+                    onClick={() => { setImgCargando(true); setImagenActiva(i); }}
                     aria-label={`Ver imagen ${i + 1} de ${galeria.length}`}
                     className={`flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border-2 bg-gray-100 transition dark:bg-slate-800 ${
                       i === imagenActiva
@@ -346,6 +361,7 @@ function DetalleProducto() {
                     <img
                       src={url}
                       alt={`${producto.nombre} - vista ${i + 1}`}
+                      loading="lazy"
                       className="h-full w-full object-contain"
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
@@ -373,6 +389,33 @@ function DetalleProducto() {
             <p className="mt-6 text-4xl font-bold text-indigo-600 dark:text-cyan-300">
               {formatPrice(precioMostrar)}
             </p>
+
+            {/* Compartir en redes */}
+            <div className="mt-4 flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-500 dark:text-slate-400">
+                Compartir:
+              </span>
+              <a
+                href={urlWhatsApp}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Compartir en WhatsApp"
+                title="Compartir en WhatsApp"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-white transition hover:scale-110 hover:bg-emerald-600"
+              >
+                <FaWhatsapp />
+              </a>
+              <a
+                href={urlFacebook}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Compartir en Facebook"
+                title="Compartir en Facebook"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white transition hover:scale-110 hover:bg-blue-700"
+              >
+                <FaFacebookF />
+              </a>
+            </div>
 
             {variantes.length > 0 && (
               <div className="mt-6 space-y-5">

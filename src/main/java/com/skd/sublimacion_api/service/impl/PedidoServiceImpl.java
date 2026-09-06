@@ -8,10 +8,12 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoRequest;
 import com.skd.sublimacion_api.dto.pedido.ItemPedidoRequest;
 import com.skd.sublimacion_api.dto.pedido.ItemPedidoResponse;
 import com.skd.sublimacion_api.dto.pedido.PedidoRequest;
 import com.skd.sublimacion_api.dto.pedido.PedidoResponse;
+import com.skd.sublimacion_api.entity.Carrito;
 import com.skd.sublimacion_api.entity.Cupon;
 import com.skd.sublimacion_api.entity.Direccion;
 import com.skd.sublimacion_api.entity.Empaque;
@@ -20,8 +22,10 @@ import com.skd.sublimacion_api.entity.ItemPedido;
 import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.entity.Usuario;
+import com.skd.sublimacion_api.exeption.BadRequestException;
 import com.skd.sublimacion_api.exeption.ForbiddenException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
+import com.skd.sublimacion_api.repository.CarritoRepository;
 import com.skd.sublimacion_api.repository.CuponRepository;
 import com.skd.sublimacion_api.repository.DireccionRepository;
 import com.skd.sublimacion_api.repository.EmpaqueRepository;
@@ -30,6 +34,7 @@ import com.skd.sublimacion_api.repository.ItemPedidoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
+import com.skd.sublimacion_api.service.ItemCarritoService;
 import com.skd.sublimacion_api.service.PedidoService;
 
 import lombok.RequiredArgsConstructor;
@@ -46,6 +51,8 @@ public class PedidoServiceImpl implements PedidoService {
     private final CuponRepository cuponRepository;
     private final ProductoRepository productoRepository;
     private final FacturaRepository facturaRepository;
+    private final CarritoRepository carritoRepository;
+    private final ItemCarritoService itemCarritoService;
 
     @Override
     public PedidoResponse obtenerPorId(Long id, Long usuarioId) {
@@ -228,7 +235,54 @@ public class PedidoServiceImpl implements PedidoService {
                 .subtotal(item.getPrecioUnitario().multiply(BigDecimal.valueOf(item.getCantidad())))
                 .disenoId(item.getDiseno() != null ? item.getDiseno().getId() : null)
                 .imagenDisenoUrl(item.getDiseno() != null ? item.getDiseno().getImagenUrl() : null)
+                .varianteId(item.getVariante() != null ? item.getVariante().getId() : null)
+                .talla(item.getVariante() != null ? item.getVariante().getTalla() : null)
+                .color(item.getVariante() != null ? item.getVariante().getColor() : null)
                 .build();
+    }
+
+    @Override
+    public Map<String, Object> reordenar(Long pedidoId, Long usuarioId) {
+
+        Pedido pedido = pedidoRepository.findById(pedidoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido no encontrado"));
+
+        if (!pedido.getUsuario().getId().equals(usuarioId)) {
+            throw new ForbiddenException("No puedes reordenar un pedido que no te pertenece.");
+        }
+
+        Carrito carrito = carritoRepository.findByUsuarioId(usuarioId)
+                .orElseGet(() -> carritoRepository.save(
+                        Carrito.builder().usuario(pedido.getUsuario()).build()));
+
+        int agregados = 0;
+        int omitidos = 0;
+        String motivo = null;
+
+        for (ItemPedido item : itemPedidoRepository.findByPedidoId(pedidoId)) {
+            ItemCarritoRequest request = new ItemCarritoRequest();
+            request.setCarritoId(carrito.getId());
+            request.setProductoId(item.getProducto().getId());
+            request.setCantidad(item.getCantidad());
+            request.setDisenoId(item.getDiseno() != null ? item.getDiseno().getId() : null);
+            request.setVarianteId(item.getVariante() != null ? item.getVariante().getId() : null);
+
+            try {
+                itemCarritoService.guardar(request, usuarioId);
+                agregados++;
+            } catch (BadRequestException e) {
+                omitidos++;
+                motivo = e.getMessage();
+            } catch (RuntimeException e) {
+                omitidos++;
+            }
+        }
+
+        return Map.of(
+                "agregados", agregados,
+                "omitidos", omitidos,
+                "motivo", motivo == null ? "" : motivo,
+                "carritoId", carrito.getId());
     }
 
 }

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaShoppingBag, FaFilePdf } from "react-icons/fa";
+import { FaShoppingBag, FaFilePdf, FaCartPlus } from "react-icons/fa";
 
 import { toast } from "sonner";
 import api from "../services/api";
-import { listarPedidosPorUsuario } from "../services/pedidoService";
+import { listarPedidosPorUsuario, reordenarPedido } from "../services/pedidoService";
 import { getErrorMessage } from "../services/api";
 
 function formatPrice(value) {
@@ -37,6 +37,7 @@ function MisPedidos() {
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [reordenandoId, setReordenandoId] = useState(null);
 
   useEffect(() => {
     cargarPedidos();
@@ -53,6 +54,26 @@ function MisPedidos() {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function reordenar(pedido) {
+    setReordenandoId(pedido.id);
+    try {
+      const res = await reordenarPedido(pedido.id);
+      const { agregados = 0, omitidos = 0, motivo = "" } = res;
+      if (omitidos > 0) {
+        toast.warning(
+          `${agregados} producto(s) agregados. ${omitidos} no estaban disponibles${motivo ? `: ${motivo}` : ""}.`
+        );
+      } else {
+        toast.success("Productos agregados al carrito");
+      }
+      navigate("/carrito");
+    } catch (err) {
+      toast.error("No se pudo reordenar: " + getErrorMessage(err));
+    } finally {
+      setReordenandoId(null);
     }
   }
 
@@ -166,6 +187,21 @@ function MisPedidos() {
                 </div>
 
                 <div className="mt-4 flex justify-end gap-2">
+                  {pedido.estado !== "cancelado" && (
+                    <button
+                      type="button"
+                      disabled={reordenandoId === pedido.id}
+                      onClick={() => reordenar(pedido)}
+                      className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:scale-105 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+                    >
+                      {reordenandoId === pedido.id ? (
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                      ) : (
+                        <FaCartPlus />
+                      )}
+                      Comprar de nuevo
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => navigate(`/pedidos/${pedido.id}/seguimiento`)}

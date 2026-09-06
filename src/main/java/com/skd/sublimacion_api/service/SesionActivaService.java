@@ -109,6 +109,20 @@ public class SesionActivaService {
                 .collect(Collectors.toList());
     }
 
+    /** Revoca la sesión actual (jti) solo si pertenece al usuario indicado. */
+    @Transactional
+    public void revocarSesionActualDe(Long usuarioId, String jtiActual) {
+        if (jtiActual == null || jtiActual.isBlank() || usuarioId == null) {
+            return;
+        }
+        sesionRepository.findByTokenJti(jtiActual).ifPresent(sesion -> {
+            if (sesion.getUsuario().getId().equals(usuarioId)) {
+                sesion.setRevocada(true);
+                sesionRepository.save(sesion);
+            }
+        });
+    }
+
     /** Revoca la sesión asociada a un jti (logout o cierre remoto por token). */
     public void revocarPorJti(String jti) {
         if (jti == null || jti.isBlank()) {

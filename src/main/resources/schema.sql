@@ -88,3 +88,8 @@ CREATE INDEX IF NOT EXISTS idx_registro_codigo_correo ON registro_codigo(correo)
 
 -- Cupón: monto mínimo para aplicar el descuento (TC cupón monto mínimo)
 ALTER TABLE cupon ADD COLUMN IF NOT EXISTS monto_minimo NUMERIC(12,2);
+
+-- Guardar la variante (talla/color) elegida en cada línea del pedido, para
+-- poder ofrecer "Comprar de nuevo" con exactitud y registrar la talla.
+ALTER TABLE item_pedido ADD COLUMN IF NOT EXISTS variante_id BIGINT;
+CREATE INDEX IF NOT EXISTS idx_item_pedido_variante ON item_pedido(variante_id);

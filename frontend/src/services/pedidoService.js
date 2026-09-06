@@ -23,3 +23,8 @@ export async function crearPedido(pedido) {
 export async function eliminarPedido(id) {
   await api.delete(`/pedidos/${id}`);
 }
+
+export async function reordenarPedido(id) {
+  const { data } = await api.post(`/pedidos/${id}/reordenar`);
+  return data;
+}

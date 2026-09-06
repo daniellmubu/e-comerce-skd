@@ -47,6 +47,16 @@ public class AuthenticationController {
         return ResponseEntity.ok(respuesta);
     }
 
+    @PostMapping("/google")
+    public ResponseEntity<AuthResponse> loginConGoogle(
+            @RequestBody Map<String, String> body,
+            HttpServletRequest httpRequest) {
+
+        AuthResponse respuesta = authenticationService.loginConGoogle(body.get("idToken"));
+        registrarSesionActiva(respuesta, httpRequest);
+        return ResponseEntity.ok(respuesta);
+    }
+
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(
             @Valid @RequestBody LoginRequest request,

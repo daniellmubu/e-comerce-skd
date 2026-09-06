@@ -43,6 +43,12 @@ export async function login(username, password) {
   return data;
 }
 
+export async function loginConGoogle(idToken) {
+  const { data } = await api.post("/auth/google", { idToken });
+  guardarSesion(data);
+  return data;
+}
+
 export async function registrarse({ nombre, username, correo, password, codigoReferido, codigo }) {
   const { data } = await api.post("/auth/registro", {
     nombre,

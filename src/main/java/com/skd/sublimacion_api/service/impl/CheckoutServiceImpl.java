@@ -406,6 +406,7 @@ public class CheckoutServiceImpl implements CheckoutService {
                         .cantidad(item.getCantidad())
                         .precioUnitario(item.getPrecioUnitario())
                         .diseno(item.getDiseno())
+                        .variante(item.getVariante())
                         .build())
                 .toList();
 

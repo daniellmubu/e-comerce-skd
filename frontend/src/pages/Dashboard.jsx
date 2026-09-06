@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -26,10 +26,13 @@ import {
   FaTimes,
   FaTrash,
   FaExclamationTriangle,
+  FaDesktop,
+  FaMobileAlt,
 } from "react-icons/fa";
 
 import { obtenerUsuarioActual, reenviarVerificacion, verificarEmail, cambiarPassword, verificarPasswordActual } from "../services/authService";
 import { solicitarCancelacionCuenta, verificarCodigoCancelacion, eliminarCuenta } from "../services/cuentaService";
+import { listarMisSesiones, cerrarSesionDe, cerrarOtrasSesiones } from "../services/sesionesService";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import { obtenerMiCodigo } from "../services/referidoService";
@@ -71,6 +74,23 @@ const ESTADO_BADGE = {
   cancelado: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300",
 };
 
+function esDispositivoMovil(dispositivo) {
+  return /ios|android|móvil|movil/i.test(dispositivo || "");
+}
+
+function formatearFechaSesion(fecha) {
+  if (!fecha) return "—";
+  const d = new Date(fecha);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("es-CO", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function Dashboard() {
   const navigate = useNavigate();
   const { cerrarSesion } = useAuth();
@@ -108,6 +128,55 @@ function Dashboard() {
   const [mostrarConfirmacionFinal, setMostrarConfirmacionFinal] = useState(false);
   const [eliminandoCuenta, setEliminandoCuenta] = useState(false);
 
+  // Dispositivos conectados (Seguridad)
+  const [mostrarSesiones, setMostrarSesiones] = useState(false);
+  const [sesiones, setSesiones] = useState([]);
+  const [cargandoSesiones, setCargandoSesiones] = useState(false);
+  const [cerrandoSesion, setCerrandoSesion] = useState(null);
+  const [cerrandoTodas, setCerrandoTodas] = useState(false);
+  const [errorSesiones, setErrorSesiones] = useState(null);
+
+  const cargarSesiones = useCallback(async () => {
+    setCargandoSesiones(true);
+    setErrorSesiones(null);
+    try {
+      const data = await listarMisSesiones();
+      setSesiones(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setErrorSesiones(getErrorMessage(e));
+    } finally {
+      setCargandoSesiones(false);
+    }
+  }, []);
+
+  const handleCerrarSesion = async (id) => {
+    setCerrandoSesion(id);
+    setErrorSesiones(null);
+    try {
+      await cerrarSesionDe(id);
+      toast.success("Sesión cerrada en ese dispositivo");
+      setSesiones((prev) => prev.filter((s) => s.id !== id));
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    } finally {
+      setCerrandoSesion(null);
+    }
+  };
+
+  const handleCerrarOtrasSesiones = async () => {
+    setCerrandoTodas(true);
+    setErrorSesiones(null);
+    try {
+      await cerrarOtrasSesiones();
+      toast.success("Se cerraron las sesiones en los otros dispositivos");
+      setSesiones((prev) => prev.filter((s) => s.esActual));
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    } finally {
+      setCerrandoTodas(false);
+    }
+  };
+
   useEffect(() => {
     if (!usuario) return undefined;
     let activo = true;
@@ -121,7 +190,6 @@ function Dashboard() {
         if (!activo) return;
         const lista = Array.isArray(data) ? data : [];
         setPedidos(lista);
-        const activos = lista.filter((p) => !["entregado", "cancelado"].includes(p.estado));
         const gastado = lista
           .filter((p) => p.estado !== "cancelado")
           .reduce((acc, p) => acc + Number(p.total || 0), 0);
@@ -820,6 +888,114 @@ function Dashboard() {
                     </Button>
                   </form>
                 </>
+              )}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              const abrir = !mostrarSesiones;
+              setMostrarSesiones(abrir);
+              if (abrir) cargarSesiones();
+            }}
+            className="mt-4 flex w-full max-w-md items-center justify-between rounded-xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-semibold text-gray-700 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+          >
+            <span className="flex items-center gap-2">
+              <FaDesktop /> Dispositivos conectados
+            </span>
+            {mostrarSesiones ? <FaChevronUp /> : <FaChevronDown />}
+          </button>
+
+          {mostrarSesiones && (
+            <div className="mt-4 max-w-md rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-slate-800 dark:bg-slate-950/40">
+              {cargandoSesiones ? (
+                <p className="text-sm text-gray-500 dark:text-slate-400">
+                  Cargando dispositivos…
+                </p>
+              ) : sesiones.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-slate-400">
+                  No hay otros dispositivos con tu cuenta abierta.
+                </p>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    {sesiones.map((s) => (
+                      <div
+                        key={s.id}
+                        className={`flex items-start justify-between gap-3 rounded-xl border p-4 ${
+                          s.esActual
+                            ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-500/20 dark:bg-emerald-500/10"
+                            : "border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800/60"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div
+                            className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                              s.esActual
+                                ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300"
+                                : "bg-indigo-100 text-indigo-600 dark:bg-cyan-500/20 dark:text-cyan-300"
+                            }`}
+                          >
+                            {esDispositivoMovil(s.dispositivo) ? <FaMobileAlt /> : <FaDesktop />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+                              {s.esActual ? "Este dispositivo" : s.dispositivo || "Dispositivo"}
+                              {s.esActual && (
+                                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+                                  Actual
+                                </span>
+                              )}
+                            </p>
+                            <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">
+                              {s.navegador || "Navegador"}
+                              {s.ip ? ` · ${s.ip}` : ""}
+                            </p>
+                            <p className="text-xs text-gray-400 dark:text-slate-500">
+                              Conectado el {formatearFechaSesion(s.creadoEn)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {!s.esActual && (
+                          <button
+                            type="button"
+                            disabled={cerrandoSesion === s.id}
+                            onClick={() => handleCerrarSesion(s.id)}
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-950/30"
+                          >
+                            {cerrandoSesion === s.id ? (
+                              <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-300 border-t-red-600" />
+                            ) : (
+                              <FaTimes className="text-xs" />
+                            )}
+                            Cerrar
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {sesiones.some((s) => !s.esActual) && (
+                    <Button
+                      onClick={handleCerrarOtrasSesiones}
+                      loading={cerrandoTodas}
+                      variant="outline"
+                      size="sm"
+                      fullWidth
+                      className="mt-4"
+                    >
+                      Cerrar sesiones en otros dispositivos
+                    </Button>
+                  )}
+                </>
+              )}
+
+              {errorSesiones && (
+                <p className="mt-3 text-xs font-medium text-red-500 dark:text-red-400">
+                  {errorSesiones}
+                </p>
               )}
             </div>
           )}

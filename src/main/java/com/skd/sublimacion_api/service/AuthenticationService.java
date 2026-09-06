@@ -18,6 +18,7 @@ import com.skd.sublimacion_api.repository.EmailVerificationTokenRepository;
 import com.skd.sublimacion_api.repository.PasswordResetTokenRepository;
 import com.skd.sublimacion_api.repository.RegistroCodigoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
+import com.skd.sublimacion_api.security.GoogleIdTokenValidator;
 import com.skd.sublimacion_api.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -31,6 +32,8 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -50,6 +53,7 @@ public class AuthenticationService {
     private final RegistroCodigoRepository registroCodigoRepository;
     private final CuponRepository cuponRepository;
     private final CuponUsuarioRepository cuponUsuarioRepository;
+    private final GoogleIdTokenValidator googleIdTokenValidator;
 
     @Transactional
     public AuthResponse registrar(RegistroRequest request) {
@@ -109,6 +113,104 @@ public class AuthenticationService {
                         .fechaVencimiento(cuponBienvenida.getFechaFin())
                         .build())
                 .build();
+    }
+
+    /**
+     * Autenticación con "Ingresar con Google". Recibe el ID token verificado
+     * en servidor y, si el correo no existe todavía, crea la cuenta cliente
+     * automáticamente (el correo ya viene verificado por Google).
+     */
+    @Transactional
+    public AuthResponse loginConGoogle(String idToken) {
+
+        GoogleIdTokenValidator.PerfilGoogle perfil = googleIdTokenValidator.validar(idToken);
+
+        Optional<Usuario> existente = usuarioRepository.findByCorreo(perfil.email());
+
+        Usuario usuario;
+        CuponBienvenidaResponse cuponBienvenida = null;
+
+        if (existente.isPresent()) {
+            usuario = existente.get();
+
+            if (Boolean.TRUE.equals(usuario.getBloqueado())) {
+                throw new ForbiddenException(
+                        "Cuenta bloqueada por múltiples intentos fallidos. Contacta al administrador."
+                );
+            }
+
+            // Google ya confirmó el correo: activa la cuenta si seguía pendiente.
+            if (!Boolean.TRUE.equals(usuario.getVerificado())) {
+                usuario.setVerificado(true);
+                usuarioRepository.save(usuario);
+            }
+        } else {
+            String nombre = (perfil.nombre() == null || perfil.nombre().isBlank())
+                    ? perfil.email().split("@")[0]
+                    : perfil.nombre();
+            String username = usernameUnico(perfil.email());
+
+            usuario = Usuario.builder()
+                    .nombre(nombre)
+                    .username(username)
+                    .correo(perfil.email())
+                    .contrasenaHash(passwordEncoder.encode(UUID.randomUUID().toString()))
+                    // Siempre cliente: los roles admin/disenador nunca vienen de un login público.
+                    .rol(Rol.cliente)
+                    .verificado(true)
+                    .codigoReferido(generarCodigoReferido(username))
+                    .build();
+
+            usuarioRepository.save(usuario);
+
+            cuponBienvenida = CuponBienvenidaResponse.builder()
+                    .codigo(crearCuponBienvenida(usuario).getCodigo())
+                    .descuentoPorcentaje(new BigDecimal("10"))
+                    .fechaVencimiento(LocalDate.now().plusDays(30))
+                    .build();
+
+            emailService.enviarBienvenida(usuario.getCorreo(), usuario.getNombre());
+        }
+
+        String token = jwtService.generateToken(usuario);
+        String refreshToken = jwtService.generateRefreshToken(usuario);
+
+        return AuthResponse.builder()
+                .token(token)
+                .refreshToken(refreshToken)
+                .id(usuario.getId())
+                .nombre(usuario.getNombre())
+                .username(usuario.getUsername())
+                .correo(usuario.getCorreo())
+                .rol(usuario.getRol().name())
+                .verificado(usuario.getVerificado())
+                .creadoEn(usuario.getCreadoEn())
+                .cuponBienvenida(cuponBienvenida)
+                .build();
+    }
+
+    /**
+     * Deriva un username disponible a partir del correo de Google
+     * (p. ej. "juan.perez@gmail.com" -> "juan.perez"; si está ocupado,
+     * se añade un sufijo numérico hasta encontrar uno libre).
+     */
+    private String usernameUnico(String email) {
+        String local = email.split("@")[0].toLowerCase(Locale.ROOT);
+        String base = local.replaceAll("[^a-z0-9._-]", "").replaceAll("^\\.+|\\.+$", "");
+        if (base.length() < 3) {
+            base = "usuario" + base;
+        }
+        if (base.length() > 20) {
+            base = base.substring(0, 20);
+        }
+
+        String candidato = base;
+        int sufijo = 1;
+        while (usuarioRepository.existsByUsername(candidato)) {
+            String suf = String.valueOf(sufijo++);
+            candidato = base.substring(0, Math.min(base.length(), 20 - suf.length())) + suf;
+        }
+        return candidato;
     }
 
     private Cupon crearCuponBienvenida(Usuario usuario) {

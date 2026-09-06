@@ -35,4 +35,8 @@ public class ItemPedido {
 
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "diseno_id")
     private Diseno diseno;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "variante_id")
+    private VarianteProducto variante;
 }

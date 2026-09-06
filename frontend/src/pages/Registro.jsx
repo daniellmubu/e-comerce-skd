@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { FaGift } from "react-icons/fa";
+import { GoogleLogin } from "@react-oauth/google";
 
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
-import { registrarse, enviarCodigoRegistro } from "../services/authService";
+import { registrarse, enviarCodigoRegistro, loginConGoogle } from "../services/authService";
 import { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // "2026-09-18" -> "18/09/2026"
@@ -147,6 +149,27 @@ function Registro() {
       } else {
         setErrors({ general: message });
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (idToken) => {
+    setErrors({});
+    setLoading(true);
+    try {
+      const respuesta = await loginConGoogle(idToken);
+      actualizarSesion();
+      if (respuesta.cuponBienvenida) {
+        setBienvenida({
+          nombre: respuesta.nombre || form.nombre,
+          ...respuesta.cuponBienvenida,
+        });
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (err) {
+      setErrors({ general: getErrorMessage(err) });
     } finally {
       setLoading(false);
     }
@@ -301,6 +324,30 @@ function Registro() {
                 : "Crear cuenta"}
           </Button>
         </form>
+
+        {GOOGLE_CLIENT_ID && (
+          <>
+            <div className="my-6 flex items-center gap-3">
+              <span className="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
+              <span className="text-xs font-medium text-gray-400 dark:text-slate-500">
+                o regístrate con
+              </span>
+              <span className="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
+            </div>
+
+            <div className="flex justify-center">
+              <GoogleLogin
+                onSuccess={(response) => handleGoogleSuccess(response.credential)}
+                onError={() =>
+                  setErrors({ general: "No se pudo iniciar sesión con Google. Intenta de nuevo." })
+                }
+                shape="pill"
+                theme="outline"
+                text="signup_with"
+              />
+            </div>
+          </>
+        )}
 
         <p className="mt-8 text-center text-gray-500 dark:text-slate-400">
           ¿Ya tienes cuenta?{" "}

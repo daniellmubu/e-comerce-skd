@@ -21,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/pedidos")
 @RequiredArgsConstructor
@@ -51,6 +53,13 @@ public class PedidoController {
     public void eliminar(@PathVariable Long id,
                          @AuthenticationPrincipal Usuario usuario) {
         pedidoService.eliminar(id, usuario.getId());
+    }
+
+    /** Vuelve a agregar al carrito los productos de un pedido anterior. */
+    @PostMapping("/{id}/reordenar")
+    public Map<String, Object> reordenar(@PathVariable Long id,
+                                         @AuthenticationPrincipal Usuario usuario) {
+        return pedidoService.reordenar(id, usuario.getId());
     }
 
 }

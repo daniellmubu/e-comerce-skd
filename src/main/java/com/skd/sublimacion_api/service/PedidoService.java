@@ -4,6 +4,7 @@ import com.skd.sublimacion_api.dto.pedido.PedidoRequest;
 import com.skd.sublimacion_api.dto.pedido.PedidoResponse;
 
 import java.util.List;
+import java.util.Map;
 
 public interface PedidoService {
 
@@ -14,5 +15,8 @@ public interface PedidoService {
     PedidoResponse guardar(PedidoRequest request, Long usuarioId);
 
     void eliminar(Long id, Long usuarioId);
+
+    /** Vuelve a agregar al carrito los productos de un pedido anterior. */
+    Map<String, Object> reordenar(Long pedidoId, Long usuarioId);
 
 }
