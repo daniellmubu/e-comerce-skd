@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import {
   FaUpload,
   FaSyncAlt,
@@ -23,6 +24,7 @@ import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { guardarPersonalizacion } from "../services/personalizacionService";
 import { generarDiseno, subirDiseno } from "../services/disenoService";
+import { listarBorradoresNube, guardarBorradorNube, obtenerBorradorNube, eliminarBorradorNube } from "../services/borradorService";
 import { listarPlantillas } from "../services/plantillaService";
 import { listarProductos } from "../services/productService";
 import { getErrorMessage, getMensajeAmigableIA } from "../services/api";
@@ -290,6 +292,7 @@ function normalizarHexParaPicker(valor) {
 function Personalizador() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { usuario } = useAuth();
   const { agregarProducto } = useCart();
   const fileInputRef = useRef(null);
@@ -418,8 +421,13 @@ function Personalizador() {
   // Modo vitrina: la cámara 3D rota sola para exhibir el diseño (ideal stand/demo).
   const [autoGiro3D, setAutoGiro3D] = useState(false);
   const [borradoresTick, setBorradoresTick] = useState(0);
-  const [mostrarGuiasImpresion, setMostrarGuiasImpresion] = useState(true);
-  const [mensaje, setMensaje] = useState(null);
+  // Borradores en la nube (por cuenta) + QR para continuar en el celular.
+  const [nubeAbierta, setNubeAbierta] = useState(false);
+  const [cloudBorradores, setCloudBorradores] = useState([]);
+  const [cargandoNube, setCargandoNube] = useState(false);
+  const [guardandoNube, setGuardandoNube] = useState(false);
+  const [qrBorrador, setQrBorrador] = useState(null);
+  const [mostrarGuiasImpresion, setMostrarGuiasImpresion] = useState(true);  const [mensaje, setMensaje] = useState(null);
   const [procesandoImagen, setProcesandoImagen] = useState(false);
   // Recorte inteligente de fondo al subir imágenes (@imgly): activado por
   // defecto; el usuario puede apagarlo para subir la imagen tal cual, con su
@@ -1695,6 +1703,111 @@ function Personalizador() {
     guardarBorradores(leerBorradores().filter((x) => x.id !== id));
     setBorradoresTick((t) => t + 1);
   };
+
+  // ---------- Borradores en la nube (por cuenta) + QR ----------
+  const linkBorrador = (id) =>
+    `${window.location.origin}/personalizador?borrador=${id}`;
+
+  const cargarNube = async () => {
+    if (!usuario) return;
+    setCargandoNube(true);
+    try {
+      const datos = await listarBorradoresNube();
+      setCloudBorradores(Array.isArray(datos) ? datos : []);
+    } catch {
+      setCloudBorradores([]);
+    } finally {
+      setCargandoNube(false);
+    }
+  };
+
+  const toggleNube = () => {
+    const abrir = !nubeAbierta;
+    setNubeAbierta(abrir);
+    if (abrir) {
+      if (!usuario) {
+        setMensaje({ tipo: "error", texto: "Inicia sesión para guardar y abrir tus diseños en la nube." });
+        navigate("/login");
+        return;
+      }
+      cargarNube();
+    }
+  };
+
+  const handleGuardarNube = async () => {
+    if (!hayDiseno) {
+      setMensaje({ tipo: "error", texto: "Aún no hay diseño editable para guardar." });
+      return;
+    }
+    if (!usuario) {
+      setMensaje({ tipo: "error", texto: "Inicia sesión para guardar tu diseño en la nube." });
+      navigate("/login");
+      return;
+    }
+    setGuardandoNube(true);
+    try {
+      const hoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+      const creado = await guardarBorradorNube(`Diseño ${hoy}`, JSON.stringify(serializarDisenoEditable()));
+      setNubeAbierta(true);
+      setMensaje({ tipo: "ok", texto: "Diseño guardado en la nube. Usa su QR para continuarlo en tu celular." });
+      setQrBorrador({ id: creado.id, nombre: creado.nombre });
+      await cargarNube();
+    } catch (err) {
+      setMensaje({ tipo: "error", texto: "No se pudo guardar en la nube: " + getErrorMessage(err) });
+    } finally {
+      setGuardandoNube(false);
+    }
+  };
+
+  const handleCargarNube = async (id) => {
+    if (!usuario) {
+      setMensaje({ tipo: "error", texto: "Inicia sesión para abrir tu diseño." });
+      navigate("/login");
+      return;
+    }
+    try {
+      const b = await obtenerBorradorNube(id);
+      const snap = typeof b.snapshot === "string" ? JSON.parse(b.snapshot) : b.snapshot;
+      aplicarDisenoEditable(snap);
+    } catch {
+      setMensaje({ tipo: "error", texto: "No se pudo abrir el borrador. Verifica que sea tuyo." });
+    }
+  };
+
+  const handleEliminarNube = async (id) => {
+    try {
+      await eliminarBorradorNube(id);
+      setCloudBorradores((prev) => prev.filter((x) => x.id !== id));
+      setMensaje({ tipo: "ok", texto: "Borrador de la nube eliminado." });
+    } catch {
+      setMensaje({ tipo: "error", texto: "No se pudo eliminar el borrador." });
+    }
+  };
+
+  // Apertura directa por QR/enlace: /personalizador?borrador={id}
+  useEffect(() => {
+    const borradorParam = searchParams.get("borrador");
+    if (!borradorParam) return undefined;
+    let activo = true;
+    (async () => {
+      try {
+        const b = await obtenerBorradorNube(borradorParam);
+        if (!activo) return;
+        const snap = typeof b.snapshot === "string" ? JSON.parse(b.snapshot) : b.snapshot;
+        aplicarDisenoEditable(snap);
+        setMensaje({ tipo: "ok", texto: `Borrador "${b.nombre}" cargado desde la nube.` });
+      } catch {
+        if (activo) {
+          setMensaje({ tipo: "error", texto: "No se pudo abrir el borrador. Inicia sesión con la cuenta que lo guardó." });
+        }
+      } finally {
+        if (activo) setSearchParams({}, { replace: true });
+      }
+    })();
+    return () => { activo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   const rotarCamara = (delta) => {
     setAzimuthCamara((a) => a + delta);
@@ -3054,6 +3167,78 @@ function Personalizador() {
               </div>
             )}
 
+            {/* Nube: borradores por cuenta + QR para continuar en el celular */}
+            <button
+              type="button"
+              onClick={toggleNube}
+              className="mt-3 flex w-full items-center justify-between rounded-xl border border-sky-300 bg-sky-50 px-3 py-2.5 text-sm font-semibold text-sky-800 transition hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200 dark:hover:bg-sky-500/20"
+            >
+              <span className="flex items-center gap-2">☁ Mis diseños en la nube</span>
+              {nubeAbierta ? "▴" : "▾"}
+            </button>
+
+            {nubeAbierta && (
+              <div className="mt-2 space-y-2">
+                {cargandoNube && (
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500">Cargando…</p>
+                )}
+                {!cargandoNube && cloudBorradores.length === 0 && (
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500">
+                    Aún no guardas diseños en la nube.
+                  </p>
+                )}
+                {cloudBorradores.map((b) => (
+                  <div
+                    key={b.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50/60 px-2.5 py-1.5 dark:border-sky-500/20 dark:bg-sky-500/5"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-medium text-gray-700 dark:text-slate-200">{b.nombre}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-slate-500">
+                        {b.creadoEn
+                          ? new Date(b.creadoEn).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleCargarNube(b.id)}
+                        className="rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-sky-700"
+                      >
+                        Cargar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQrBorrador({ id: b.id, nombre: b.nombre })}
+                        title="QR para continuar en tu celular"
+                        className="rounded-lg border border-sky-300 px-2 py-1 text-[11px] font-semibold text-sky-700 transition hover:bg-sky-100 dark:border-sky-500/40 dark:text-sky-300 dark:hover:bg-sky-500/20"
+                      >
+                        QR
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarNube(b.id)}
+                        aria-label="Eliminar borrador de la nube"
+                        className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] text-red-500 transition hover:bg-red-50 dark:border-slate-600 dark:hover:bg-red-500/10"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={handleGuardarNube}
+                  disabled={guardandoNube || !hayDiseno}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-sky-400 bg-sky-500 py-2 text-xs font-semibold text-white transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {guardandoNube ? <FaSpinner className="animate-spin" /> : "☁"}
+                  Guardar diseño actual en la nube
+                </button>
+              </div>
+            )}
+
             {/* TEMP: Print-ready oculto — descomentar para restaurar exportación transparente 2362×1063 para producción
             <button
               type="button"
@@ -3120,6 +3305,52 @@ function Personalizador() {
         </div>
       </div>
       </section>
+
+      {/* Modal QR: continuar el diseño en el celular */}
+      {qrBorrador && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setQrBorrador(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Continúa en tu celular</h3>
+              <button
+                type="button"
+                onClick={() => setQrBorrador(null)}
+                aria-label="Cerrar"
+                className="rounded-lg p-1 text-gray-400 transition hover:text-gray-600 dark:hover:text-white"
+              >
+                <FaTimes />
+              </button>
+            </div>
+            <p className="mt-1 truncate text-sm text-gray-500 dark:text-slate-400">{qrBorrador.nombre}</p>
+
+            <div className="mx-auto mt-5 w-fit rounded-2xl border border-gray-200 bg-white p-3 dark:border-slate-700">
+              <QRCodeSVG value={linkBorrador(qrBorrador.id)} size={200} />
+            </div>
+
+            <p className="mt-4 text-xs leading-relaxed text-gray-500 dark:text-slate-400">
+              Escanea con tu celular e <b>inicia sesión con la misma cuenta</b> para seguir
+              editando este diseño donde lo dejaste.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(linkBorrador(qrBorrador.id));
+                setMensaje({ tipo: "ok", texto: "Enlace del diseño copiado." });
+              }}
+              className="mt-4 w-full rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-gradient-to-r dark:from-cyan-500 dark:to-violet-600"
+            >
+              Copiar enlace
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

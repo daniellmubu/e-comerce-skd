@@ -93,3 +93,14 @@ ALTER TABLE cupon ADD COLUMN IF NOT EXISTS monto_minimo NUMERIC(12,2);
 -- poder ofrecer "Comprar de nuevo" con exactitud y registrar la talla.
 ALTER TABLE item_pedido ADD COLUMN IF NOT EXISTS variante_id BIGINT;
 CREATE INDEX IF NOT EXISTS idx_item_pedido_variante ON item_pedido(variante_id);
+
+-- Borradores del personalizador guardados en la nube por cuenta
+-- (continuar el diseno desde otro dispositivo con un QR).
+CREATE TABLE IF NOT EXISTS borrador_editable (
+    id BIGSERIAL PRIMARY KEY,
+    usuario_id BIGINT NOT NULL REFERENCES usuario(id),
+    nombre VARCHAR(160) NOT NULL,
+    snapshot TEXT NOT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_borrador_editable_usuario ON borrador_editable(usuario_id);
