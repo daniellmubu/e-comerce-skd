@@ -415,6 +415,8 @@ function Personalizador() {
   const [descargandoVista3D, setDescargandoVista3D] = useState(false);
   const [azimuthCamara, setAzimuthCamara] = useState(0);
   const [azimuthCamaraBump, setAzimuthCamaraBump] = useState(0);
+  // Modo vitrina: la cámara 3D rota sola para exhibir el diseño (ideal stand/demo).
+  const [autoGiro3D, setAutoGiro3D] = useState(false);
   const [borradoresTick, setBorradoresTick] = useState(0);
   const [mostrarGuiasImpresion, setMostrarGuiasImpresion] = useState(true);
   const [mensaje, setMensaje] = useState(null);
@@ -1703,6 +1705,94 @@ function Personalizador() {
     setAzimuthCamaraBump((b) => b + 1);
   };
 
+  // Vitrina: rota el visor 3D solo mientras está activo (una vuelta cada ~20 s).
+  useEffect(() => {
+    if (!autoGiro3D) return undefined;
+    const id = setInterval(() => {
+      setAzimuthCamara((a) => (a + 0.02) % (Math.PI * 2));
+    }, 60);
+    return () => clearInterval(id);
+  }, [autoGiro3D]);
+
+  // ---------- Deshacer / Rehacer (historial de la composición) ----------
+  const historialRef = useRef([]); // snapshots (el último == estado actual)
+  const futuroRef = useRef([]); // estados para rehacer tras un deshacer
+  const restaurandoRef = useRef(false);
+  const claveHistorialRef = useRef("");
+  const [puedeDeshacer, setPuedeDeshacer] = useState(false);
+  const [puedeRehacer, setPuedeRehacer] = useState(false);
+
+  const sincronizarBotonesHistoria = () => {
+    setPuedeDeshacer(historialRef.current.length > 1);
+    setPuedeRehacer(futuroRef.current.length > 0);
+  };
+
+  const snapshotDiseno = useCallback(() => ({
+    imagenes,
+    emojis,
+    capasTexto,
+    textoDiseno,
+    colorSeleccionado,
+  }), [imagenes, emojis, capasTexto, textoDiseno, colorSeleccionado]);
+
+  // Tras cada cambio real de la composición, registra un punto de historial.
+  useEffect(() => {
+    const clave = JSON.stringify([
+      imagenes,
+      emojis,
+      capasTexto,
+      textoDiseno,
+      colorSeleccionado,
+    ]);
+    if (restaurandoRef.current) {
+      restaurandoRef.current = false;
+      claveHistorialRef.current = clave;
+      sincronizarBotonesHistoria();
+      return;
+    }
+    if (clave === claveHistorialRef.current) return;
+    const pila = historialRef.current;
+    if (pila.length === 0 || claveHistorialRef.current === "") {
+      pila.push(snapshotDiseno());
+    } else {
+      // Un cambio del usuario descarta las ramas "rehacer" pendientes.
+      futuroRef.current = [];
+      pila.push(snapshotDiseno());
+      if (pila.length > 50) pila.shift();
+    }
+    claveHistorialRef.current = clave;
+    sincronizarBotonesHistoria();
+  }, [imagenes, emojis, capasTexto, textoDiseno, colorSeleccionado, snapshotDiseno]);
+
+  const restaurarSnapshot = (snap) => {
+    restaurandoRef.current = true;
+    setImagenes(snap.imagenes ?? []);
+    setEmojis(snap.emojis ?? []);
+    setCapasTexto(snap.capasTexto ?? []);
+    setTextoDiseno(snap.textoDiseno ?? "");
+    setColorSeleccionado(snap.colorSeleccionado ?? null);
+  };
+
+  const deshacer = () => {
+    const pila = historialRef.current;
+    if (pila.length <= 1) return;
+    const actual = pila[pila.length - 1];
+    pila.pop();
+    const anterior = pila[pila.length - 1];
+    futuroRef.current.push(actual);
+    sincronizarBotonesHistoria();
+    restaurarSnapshot(anterior);
+  };
+
+  const rehacer = () => {
+    const pila = futuroRef.current;
+    if (pila.length === 0) return;
+    const snap = pila.pop();
+    historialRef.current.push(snap);
+    sincronizarBotonesHistoria();
+    restaurarSnapshot(snap);
+  };
+
   const handleAgregarAlCarrito = async () => {
     if (!usuario) {
       navigate("/login");
@@ -2667,6 +2757,18 @@ function Personalizador() {
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
+                    onClick={() => setAutoGiro3D((v) => !v)}
+                    className={`rounded-lg border px-2 py-1 text-xs font-semibold transition ${
+                      autoGiro3D
+                        ? "border-indigo-400 bg-indigo-600 text-white dark:border-cyan-400 dark:bg-cyan-500 dark:text-slate-950"
+                        : "border-gray-200 text-gray-600 hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+                    }`}
+                    title={autoGiro3D ? "Pausar auto-giro" : "Activar modo vitrina (auto-giro)"}
+                  >
+                    {autoGiro3D ? "⏸ Auto-giro" : "▶ Vitrina"}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => rotarCamara(-0.9)}
                     className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
                     title="Girar hacia la izquierda"
@@ -2856,6 +2958,27 @@ function Personalizador() {
               <h2 className="mb-4 text-sm font-semibold text-gray-500 dark:text-slate-400">
                 Acciones
               </h2>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={deshacer}
+                  disabled={!puedeDeshacer}
+                  title="Deshacer último cambio"
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 py-2 text-xs font-semibold text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+                >
+                  ↶ Deshacer
+                </button>
+                <button
+                  type="button"
+                  onClick={rehacer}
+                  disabled={!puedeRehacer}
+                  title="Rehacer cambio"
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 py-2 text-xs font-semibold text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
+                >
+                  ↷ Rehacer
+                </button>
+              </div>
 
               <button
                 type="button"
