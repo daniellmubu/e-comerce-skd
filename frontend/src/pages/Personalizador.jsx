@@ -1705,12 +1705,15 @@ function Personalizador() {
     setAzimuthCamaraBump((b) => b + 1);
   };
 
-  // Vitrina: rota el visor 3D solo mientras está activo (una vuelta cada ~20 s).
+  // Vitrina: rota el visor 3D solo mientras está activo (una vuelta cada ~15 s).
   useEffect(() => {
     if (!autoGiro3D) return undefined;
     const id = setInterval(() => {
-      setAzimuthCamara((a) => (a + 0.02) % (Math.PI * 2));
-    }, 60);
+      setAzimuthCamara((a) => (a + 0.03) % (Math.PI * 2));
+      // OrbitadorAzimuth solo aplica el ángulo cuando bump > 0; sin esto la
+      // cámara no se movería aunque cambie azimuth (bump inicia en 0).
+      setAzimuthCamaraBump((b) => b + 1);
+    }, 80);
     return () => clearInterval(id);
   }, [autoGiro3D]);
 
