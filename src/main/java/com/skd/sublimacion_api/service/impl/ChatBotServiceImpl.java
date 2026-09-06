@@ -36,7 +36,8 @@ public class ChatBotServiceImpl implements ChatBotService {
     private static final String GEMINI_URL_FALLBACK =
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
 
-    private static final Duration TIMEOUT = Duration.ofSeconds(20);
+    /** Timeout por intento. Gemini en plan gratuito a veces tarda más de 20 s. */
+    private static final Duration TIMEOUT = Duration.ofSeconds(45);
 
     private static final String SYSTEM_PROMPT = """
             Eres el asistente virtual oficial de SKD, una tienda e-commerce de sublimación especializada exclusivamente en artículos cilíndricos: mugs tradicionales, mugs mágicos y jarras cerveceras. Tu objetivo es ayudar a los clientes a perfilar sus ideas de diseño, explicarles cómo funciona el proceso de personalización y guiarlos en el flujo de compra.
@@ -61,7 +62,6 @@ public class ChatBotServiceImpl implements ChatBotService {
 
         if (request.getHistorial() != null) {
             for (ChatMensajeDto m : request.getHistorial()) {
-                // Evitar roles inválidos o textos nulos/vacíos que rompen Map.of
                 if (m.getRol() == null || m.getTexto() == null || m.getTexto().isBlank()) {
                     continue;
                 }
@@ -76,22 +76,15 @@ public class ChatBotServiceImpl implements ChatBotService {
             }
         }
 
-        // Mensaje actual como role "user"
         contents.add(Map.of(
                 "role", "user",
                 "parts", List.of(Map.of("text", request.getMensaje()))
         ));
 
         // Gemini exige que contents empiece con role "user".
-        // El frontend envía el saludo inicial del bot ("Hola, ¿en qué puedo ayudarte?")
-        // como primer elemento con rol "model", lo que provoca 400 Bad Request.
-        // Eliminamos mensajes iniciales con rol "model" hasta encontrar el primer "user".
         while (!contents.isEmpty() && !"user".equals(contents.get(0).get("role"))) {
             contents.remove(0);
         }
-
-        // Si tras filtrar no queda nada (no debería pasar porque siempre añadimos el mensaje actual),
-        // protegemos contra lista vacía.
         if (contents.isEmpty()) {
             contents.add(Map.of(
                     "role", "user",
@@ -104,14 +97,27 @@ public class ChatBotServiceImpl implements ChatBotService {
                 "parts", List.of(Map.of("text", SYSTEM_PROMPT))
         ));
         body.put("contents", contents);
+        // Respuestas cortas y rápidas (el prompt pide máximo un párrafo).
+        body.put("generationConfig", Map.of(
+                "maxOutputTokens", 350,
+                "temperature", 0.6
+        ));
 
         WebClient client = webClientBuilder.build();
 
-        try {
-            Map<String, Object> respuesta = null;
+        // Intentos en orden: modelo principal y luego el de respaldo. Se usa el
+        // respaldo cuando el principal falla por cuota (429), saturación (503)
+        // o lentitud (timeout > 45 s), que era el caso visto en producción.
+        List<String> urls = List.of(GEMINI_URL, GEMINI_URL_FALLBACK);
+        Map<String, Object> respuesta = null;
+        Exception ultimoError = null;
+
+        for (int i = 0; i < urls.size() && respuesta == null; i++) {
+            String url = urls.get(i);
             try {
+                log.info("Llamando a Gemini (intento {}): {}", i + 1, url);
                 respuesta = client.post()
-                        .uri(GEMINI_URL)
+                        .uri(url)
                         .header("x-goog-api-key", geminiApiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .bodyValue(body)
@@ -120,32 +126,42 @@ public class ChatBotServiceImpl implements ChatBotService {
                         .timeout(TIMEOUT)
                         .block();
             } catch (WebClientResponseException ex) {
-                // Fallback si cuota diaria (20/día) o alta demanda en 3.5-flash / 3.6-flash
+                ultimoError = ex;
                 int status = ex.getStatusCode().value();
                 String detalle = ex.getResponseBodyAsString();
-                log.warn("Gemini primario {} falló {}: {}", GEMINI_URL, status, detalle);
-                if (status == 429 || status == 503) {
-                    log.info("Reintentando con modelo fallback {}", GEMINI_URL_FALLBACK);
-                    respuesta = client.post()
-                            .uri(GEMINI_URL_FALLBACK)
-                            .header("x-goog-api-key", geminiApiKey)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .bodyValue(body)
-                            .retrieve()
-                            .bodyToMono(Map.class)
-                            .timeout(TIMEOUT)
-                            .block();
-                } else {
-                    throw ex;
+                log.warn("Gemini {} falló (HTTP {}): {}", url, status, detalle);
+                // Solo se prueba el respaldo por cuota o saturación; otros errores
+                // (400, 401, 500...) no se resuelven cambiando de modelo.
+                if (status != 429 && status != 503) {
+                    break;
+                }
+            } catch (RuntimeException ex) {
+                ultimoError = ex;
+                boolean timeout = esTimeout(ex);
+                log.warn("Gemini {} falló ({})", url, timeout ? "timeout" : ex.getMessage());
+                if (!timeout) {
+                    break;
                 }
             }
+        }
 
-            if (respuesta == null) {
-                log.error("Gemini devolvió respuesta nula");
-                throw new BadRequestException("Ocurrió un error al procesar tu mensaje. Inténtalo de nuevo más tarde.");
+        if (respuesta == null) {
+            log.error("Todos los intentos a Gemini fallaron", ultimoError);
+            if (ultimoError instanceof WebClientResponseException ex
+                    && ex.getStatusCode().value() == 429) {
+                throw new TooManyRequestsException(
+                        "El asistente alcanzó el límite de uso de la IA. Espera 1 minuto e inténtalo de nuevo. Si persiste, la cuota diaria gratuita (20/día) se agotó y se reinicia mañana.");
             }
+            if (ultimoError instanceof WebClientResponseException ex
+                    && ex.getStatusCode().value() == 503) {
+                throw new TooManyRequestsException(
+                        "El asistente está saturado por alta demanda. Espera unos segundos e inténtalo de nuevo.");
+            }
+            throw new BadRequestException("Ocurrió un error al procesar tu mensaje. Inténtalo de nuevo más tarde.");
+        }
 
-            // Extraer candidates[0].content.parts[0].text
+        // Extraer candidates[0].content.parts[0].text
+        try {
             List<Map<String, Object>> candidates = (List<Map<String, Object>>) respuesta.get("candidates");
             if (candidates == null || candidates.isEmpty()) {
                 log.error("Gemini respuesta sin candidates: {}", respuesta);
@@ -166,37 +182,20 @@ public class ChatBotServiceImpl implements ChatBotService {
 
             String texto = (String) parts.get(0).get("text");
             return new ChatResponse(texto);
-
-        } catch (WebClientResponseException ex) {
-            String detalle = ex.getResponseBodyAsString();
-            log.error("Gemini respondió {}: {}", ex.getStatusCode().value(), detalle);
-            if (ex.getStatusCode().value() == 429) {
-                throw new TooManyRequestsException(
-                        "El asistente alcanzó el límite de uso de la IA. Espera 1 minuto e inténtalo de nuevo. Si persiste, la cuota diaria gratuita (20/día) se agotó y se reinicia mañana.");
-            }
-            if (ex.getStatusCode().value() == 503) {
-                throw new TooManyRequestsException(
-                        "El asistente está saturado por alta demanda. Espera unos segundos e inténtalo de nuevo.");
-            }
-            throw new BadRequestException("Ocurrió un error al procesar tu mensaje. Inténtalo de nuevo más tarde.");
+        } catch (BadRequestException | TooManyRequestsException e) {
+            throw e;
         } catch (RuntimeException ex) {
-            if (ex instanceof BadRequestException) {
-                throw ex;
-            }
-            if (ex instanceof TooManyRequestsException) {
-                throw ex;
-            }
-            if (ex.getCause() instanceof java.util.concurrent.TimeoutException) {
-                log.error("Timeout al llamar a Gemini (20s)", ex);
-                throw new BadRequestException("Ocurrió un error al procesar tu mensaje. Inténtalo de nuevo más tarde.");
-            }
-            String msg = ex.getMessage() != null ? ex.getMessage().toLowerCase() : "";
-            if (msg.contains("timeout") || msg.contains("timed out")) {
-                log.error("Timeout al llamar a Gemini", ex);
-                throw new BadRequestException("Ocurrió un error al procesar tu mensaje. Inténtalo de nuevo más tarde.");
-            }
-            log.error("Error inesperado al llamar a Gemini", ex);
+            log.error("Error parseando respuesta de Gemini", ex);
             throw new BadRequestException("Ocurrió un error al procesar tu mensaje. Inténtalo de nuevo más tarde.");
         }
+    }
+
+    /** Detecta timeouts (WebFlux los envuelve de distintas formas). */
+    private static boolean esTimeout(RuntimeException ex) {
+        if (ex.getCause() instanceof java.util.concurrent.TimeoutException) {
+            return true;
+        }
+        String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+        return msg.contains("timeout") || msg.contains("timed out") || msg.contains("read timed out");
     }
 }
