@@ -707,25 +707,6 @@ function Checkout() {
                   </select>
                 </div>
 
-                {metodoPago === "tarjeta" && (
-                  <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
-                    <p className="text-sm font-semibold text-indigo-900 dark:text-white">Tarjeta de crédito / débito</p>
-                    <p className="mt-1 text-xs leading-relaxed text-indigo-700/70 dark:text-slate-400">Serás redirigido a la pasarela segura de Wompi (PCI-DSS, 3D Secure). No guardamos tu tarjeta.</p>
-                  </div>
-                )}
-                {metodoPago === "nequi" && (
-                  <div className="mb-4 rounded-2xl border border-pink-200 bg-pink-50 p-4 dark:border-pink-500/20 dark:bg-pink-500/10">
-                    <p className="text-sm font-semibold text-pink-900 dark:text-pink-200">Nequi</p>
-                    <p className="mt-1 text-xs leading-relaxed text-pink-700/70 dark:text-slate-400">Pago inmediato con notificación push a tu celular. En el siguiente paso confirmarás tu número Nequi y autorizarás el cobro. Procesado por Wompi de forma segura.</p>
-                  </div>
-                )}
-                {metodoPago === "pse" && (
-                  <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-                    <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">PSE</p>
-                    <p className="mt-1 text-xs leading-relaxed text-emerald-700/70 dark:text-slate-400">Pago debitado de tu cuenta bancaria. En el siguiente paso elegirás tu banco y completarás la autorización en la pasarela segura de Wompi.</p>
-                  </div>
-                )}
-
                 <Input
                   type="date"
                   label="Fecha de entrega deseada (opcional)"
