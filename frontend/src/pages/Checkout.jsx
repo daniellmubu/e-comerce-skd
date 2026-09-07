@@ -710,8 +710,7 @@ function Checkout() {
                 {metodoPago === "tarjeta" && (
                   <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                     <p className="text-sm font-semibold text-indigo-900 dark:text-white">Tarjeta de crédito / débito</p>
-                    <p className="mt-1 text-xs leading-relaxed text-indigo-700/70 dark:text-slate-400">Serás llevado a nuestra pasarela de pago segura con branding SKD para ingresar los datos. Procesamos con Wompi (PCI-DSS, 3D Secure). No guardamos tu tarjeta.</p>
-                    <p className="mt-2 text-[11px] text-indigo-600 dark:text-cyan-300">En el siguiente paso podrás ingresar: número, fecha y CVV de forma cifrada.</p>
+                    <p className="mt-1 text-xs leading-relaxed text-indigo-700/70 dark:text-slate-400">Serás redirigido a la pasarela segura de Wompi (PCI-DSS, 3D Secure). No guardamos tu tarjeta.</p>
                   </div>
                 )}
                 {metodoPago === "nequi" && (
