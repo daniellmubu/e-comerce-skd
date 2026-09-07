@@ -14,9 +14,12 @@ export function AuthProvider({ children }) {
     setUsuario(obtenerUsuarioActual());
   }, []);
 
-  const cerrarSesion = useCallback(() => {
-    logoutService();
-    setUsuario(null);
+  const cerrarSesion = useCallback(async () => {
+    try {
+      await logoutService();
+    } finally {
+      setUsuario(null);
+    }
   }, []);
 
   return (

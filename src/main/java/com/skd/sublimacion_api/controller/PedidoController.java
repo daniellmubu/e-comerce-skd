@@ -18,7 +18,7 @@ import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.service.PedidoService;
 
 import lombok.RequiredArgsConstructor;
-
+import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.util.Map;
@@ -43,7 +43,7 @@ public class PedidoController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public PedidoResponse guardar(@RequestBody PedidoRequest request,
+    public PedidoResponse guardar(@Valid @RequestBody PedidoRequest request,
                                   @AuthenticationPrincipal Usuario usuario) {
         return pedidoService.guardar(request, usuario.getId());
     }

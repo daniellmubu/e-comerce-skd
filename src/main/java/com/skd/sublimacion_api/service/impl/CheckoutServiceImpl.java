@@ -69,12 +69,14 @@ public class CheckoutServiceImpl implements CheckoutService {
     @Transactional
     public CheckoutResponse procesarCheckout(CheckoutRequest request, Long usuarioId) {
 
+        validarMetodoPago(request.getMetodoPago());
         Usuario usuario = obtenerUsuario(usuarioId);
 
         Direccion direccion = obtenerDireccion(request.getDireccionId());
         validarDireccionPertenece(direccion, usuarioId);
 
         Empaque empaque = obtenerEmpaque(request.getEmpaqueId());
+        validarEmpaqueRegalo(empaque, request.getDestinatarioRegalo());
 
         Cupon cupon = null;
 
@@ -149,6 +151,24 @@ public class CheckoutServiceImpl implements CheckoutService {
             .estado(pedido.getEstado())
             .mensaje("Checkout realizado correctamente")
             .build();
+    }
+
+    private void validarMetodoPago(String metodoPago) {
+        if (metodoPago == null || metodoPago.isBlank()) {
+            throw new IllegalArgumentException("El método de pago es obligatorio");
+        }
+        String m = metodoPago.toLowerCase();
+        if (!m.equals("tarjeta") && !m.equals("pse") && !m.equals("nequi") && !m.equals("efectivo")) {
+            throw new IllegalArgumentException("Método de pago no válido: " + metodoPago);
+        }
+    }
+
+    private void validarEmpaqueRegalo(Empaque empaque, String destinatario) {
+        if (empaque != null && "regalo".equalsIgnoreCase(empaque.getTipo())) {
+            if (destinatario == null || destinatario.trim().isEmpty()) {
+                throw new IllegalArgumentException("El empaque de regalo requiere el nombre del destinatario");
+            }
+        }
     }
 
     private Usuario obtenerUsuario(Long usuarioId) {

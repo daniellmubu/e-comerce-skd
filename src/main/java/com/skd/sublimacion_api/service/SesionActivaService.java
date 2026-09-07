@@ -8,7 +8,6 @@ import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.SesionActivaRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
 import com.skd.sublimacion_api.security.JwtService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,15 +26,24 @@ import java.util.stream.Collectors;
  * activo en cada petición y revocar sesiones de forma remota.
  */
 @Service
-@RequiredArgsConstructor
 public class SesionActivaService {
 
     /** Tope de sesiones activas simultáneas por cuenta (se depuran las más viejas). */
-    private static final int MAX_SESIONES_POR_USUARIO = 20;
+    private final int maxSesionesPorUsuario;
 
     private final SesionActivaRepository sesionRepository;
     private final UsuarioRepository usuarioRepository;
     private final JwtService jwtService;
+
+    public SesionActivaService(SesionActivaRepository sesionRepository,
+                               UsuarioRepository usuarioRepository,
+                               JwtService jwtService,
+                               @org.springframework.beans.factory.annotation.Value("${app.sesiones.max-por-usuario:5}") int maxSesionesPorUsuario) {
+        this.sesionRepository = sesionRepository;
+        this.usuarioRepository = usuarioRepository;
+        this.jwtService = jwtService;
+        this.maxSesionesPorUsuario = maxSesionesPorUsuario;
+    }
 
     /**
      * Registra la sesión del token de acceso recién emitido.
@@ -161,16 +169,22 @@ public class SesionActivaService {
 
     private void depurarExceso(Long usuarioId) {
         List<SesionActiva> activas = sesionRepository.findByUsuarioIdAndRevocadaFalse(usuarioId);
-        if (activas.size() <= MAX_SESIONES_POR_USUARIO) {
+        if (activas.size() <= maxSesionesPorUsuario) {
             return;
         }
         activas.stream()
                 .sorted(Comparator.comparing(SesionActiva::getCreadoEn).reversed())
-                .skip(MAX_SESIONES_POR_USUARIO)
+                .skip(maxSesionesPorUsuario)
                 .forEach(s -> {
                     s.setRevocada(true);
                     sesionRepository.save(s);
                 });
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 3600000)
+    @Transactional
+    public void limpiarExpiradasProgramadas() {
+        sesionRepository.deleteByExpiraEnBefore(LocalDateTime.now());
     }
 
     private SesionActivaResponse aResponse(SesionActiva sesion, String jtiActual) {

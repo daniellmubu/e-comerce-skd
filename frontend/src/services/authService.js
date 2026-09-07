@@ -67,7 +67,21 @@ export async function enviarCodigoRegistro(correo) {
   return data;
 }
 
-export function logout() {
+export async function logout() {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) {
+    try {
+      await api.post("/auth/logout");
+    } catch {
+      // Silenciar error de logout, igual limpiamos local
+    }
+  }
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
+export function logoutLocal() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);

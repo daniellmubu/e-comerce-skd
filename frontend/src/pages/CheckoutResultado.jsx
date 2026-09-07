@@ -40,6 +40,23 @@ function CheckoutResultado() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Polling automático cada 3s mientras esté pendiente (máx 10 intentos) para UX profesional
+  useEffect(() => {
+    if (!estado || estado.aprobado) return;
+    if (estado.estadoPago === "rechazado") return;
+    let intentos = 0;
+    const id = setInterval(async () => {
+      intentos += 1;
+      if (intentos > 10) { clearInterval(id); return; }
+      try {
+        const res = await consultarEstadoPago(pagoId);
+        setEstado(res);
+        if (res.aprobado || res.estadoPago === "rechazado") clearInterval(id);
+      } catch {}
+    }, 3000);
+    return () => clearInterval(id);
+  }, [estado, pagoId]);
+
   if (loading) {
     return (
       <section className="flex min-h-screen items-center justify-center bg-slate-950 px-6 py-16 text-white">

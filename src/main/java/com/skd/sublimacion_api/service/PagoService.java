@@ -16,6 +16,8 @@ public interface PagoService {
 
     IniciarPagoWompiResponse iniciarPagoWompi(Long pagoId, Long usuarioId);
 
+    IniciarPagoWompiResponse iniciarPagoWompi(Long pagoId, Long usuarioId, String phoneNumber);
+
     SimulacionPagoResponse consultarEstadoPago(Long pagoId, Long usuarioId);
 
     void eliminar(Long id);

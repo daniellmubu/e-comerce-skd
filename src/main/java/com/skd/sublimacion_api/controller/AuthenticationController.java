@@ -6,6 +6,8 @@ import com.skd.sublimacion_api.dto.LoginRequest;
 import com.skd.sublimacion_api.dto.OlvidePasswordRequest;
 import com.skd.sublimacion_api.dto.RegistroRequest;
 import com.skd.sublimacion_api.dto.RestablecerPasswordRequest;
+import com.skd.sublimacion_api.dto.VerificarEmailRequest;
+import com.skd.sublimacion_api.dto.VerificarPasswordRequest;
 import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.security.JwtService;
 import com.skd.sublimacion_api.service.AuthenticationService;
@@ -94,21 +96,27 @@ public class AuthenticationController {
                 obtenerIpCliente(httpRequest));
     }
 
-    /** Devuelve la IP real del cliente (respeta proxies con X-Forwarded-For). */
+    /** Devuelve la IP real del cliente (respeta proxies con X-Forwarded-For solo si viene de proxy confiable). */
     private String obtenerIpCliente(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+        String remote = request.getRemoteAddr();
+        // Solo confía en X-Forwarded-For si la petición viene de loopback/proxy local
+        boolean esProxyConfiable = remote != null && (remote.equals("127.0.0.1") || remote.equals("0:0:0:0:0:0:0:1") || remote.startsWith("10.") || remote.startsWith("172.16."));
+        if (esProxyConfiable && forwarded != null && !forwarded.isBlank()) {
+            String ip = forwarded.split(",")[0].trim();
+            if (ip.matches("^([0-9]{1,3}\\.){3}[0-9]{1,3}$") || ip.contains(":")) {
+                return ip;
+            }
         }
-        return request.getRemoteAddr();
+        return remote;
     }
 
     @PostMapping("/verificar-password")
     public ResponseEntity<Map<String, String>> verificarPassword(
             @AuthenticationPrincipal Usuario usuario,
-            @RequestBody Map<String, String> body) {
+            @Valid @RequestBody VerificarPasswordRequest request) {
 
-        authenticationService.verificarPasswordActual(usuario.getId(), body.get("passwordActual"));
+        authenticationService.verificarPasswordActual(usuario.getId(), request.getPasswordActual());
 
         return ResponseEntity.ok(Map.of("message", "Contraseña verificada"));
     }
@@ -146,9 +154,9 @@ public class AuthenticationController {
 
     @PostMapping("/verificar-email")
     public ResponseEntity<Map<String, String>> verificarEmail(
-            @RequestBody Map<String, String> body) {
+            @Valid @RequestBody VerificarEmailRequest request) {
 
-        authenticationService.verificarEmail(body.get("token"));
+        authenticationService.verificarEmail(request.getToken());
 
         return ResponseEntity.ok(Map.of("message", "Correo verificado correctamente"));
     }

@@ -24,8 +24,9 @@ export async function simularPagoTarjeta(pagoId, datosTarjeta) {
   return data;
 }
 
-export async function iniciarPagoWompi(pagoId) {
-  const { data } = await api.post(`/pagos/${pagoId}/wompi`);
+export async function iniciarPagoWompi(pagoId, phoneNumber) {
+  const body = phoneNumber ? { phoneNumber } : {};
+  const { data } = await api.post(`/pagos/${pagoId}/wompi`, body);
   return data;
 }
 

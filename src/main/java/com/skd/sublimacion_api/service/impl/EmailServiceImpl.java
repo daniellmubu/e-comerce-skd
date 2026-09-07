@@ -226,7 +226,16 @@ public class EmailServiceImpl implements EmailService {
             String texto = "Hola " + evento.getNombre() + ",\n\n"
                     + "Gracias por tu compra en SKD. Adjunta encontrarás la factura electrónica "
                     + evento.getNumeroFactura() + ".\n\n¡Que lo disfrutes!";
-            enviarCore(evento.getCorreo(), subject, null, texto, pdf, evento.getNumeroFactura() + ".pdf");
+            String cuerpo = "<h2 style=\"margin:0 0 8px;color:#0f172a;font-size:20px;\">¡Gracias por tu compra, " + esc(evento.getNombre()) + "! 🎉</h2>"
+                    + "<p style=\"margin:0 0 16px;color:#334155;font-size:15px;line-height:1.7;\">Tu pedido ya está en producción. Adjuntamos tu <strong>factura electrónica " + esc(evento.getNumeroFactura()) + "</strong> en PDF con los colores de SKD (indigo/violet) y tus datos de compra.</p>"
+                    + "<div style=\"background:#eef2ff;border:1px solid #c7d2fe;border-radius:12px;padding:16px;margin:0 0 16px;\">"
+                    + "<p style=\"margin:0;color:#4338ca;font-size:12px;font-weight:bold;letter-spacing:0.5px;\">FACTURA</p>"
+                    + "<p style=\"margin:4px 0 0;color:#0f172a;font-size:16px;font-weight:bold;\">" + esc(evento.getNumeroFactura()) + "</p>"
+                    + "<p style=\"margin:4px 0 0;color:#64748b;font-size:12px;\">Pedido asociado al correo " + esc(evento.getCorreo()) + "</p>"
+                    + "</div>"
+                    + botonHtml(frontendUrl + "/mis-pedidos", "Ver mis pedidos", MARCA_PRIMARIO)
+                    + "<p style=\"margin:0;color:#64748b;font-size:13px;\">Este correo incluye el PDF adjunto con el nuevo diseño. Si no ves el adjunto, responde a este correo y te lo reenviamos.</p>";
+            enviarCore(evento.getCorreo(), subject, plantillaHtml(cuerpo), texto, pdf, evento.getNumeroFactura() + ".pdf");
             log.info("Correo de confirmación de compra enviado a {}", evento.getCorreo());
         } catch (Exception e) {
             log.error("No se pudo enviar el correo de la factura {}: {}", evento.getNumeroFactura(), e.getMessage(), e);

@@ -40,8 +40,15 @@ public class PagoController {
 
     @PostMapping("/{id}/wompi")
     public IniciarPagoWompiResponse iniciarPagoWompi(@PathVariable Long id,
-                                                     @AuthenticationPrincipal Usuario usuario) {
-        return pagoService.iniciarPagoWompi(id, usuario.getId());
+                                                     @AuthenticationPrincipal Usuario usuario,
+                                                     @RequestBody(required = false) java.util.Map<String, String> body) {
+        String phoneNumber = null;
+        if (body != null) {
+            phoneNumber = body.get("phoneNumber");
+            if (phoneNumber == null) phoneNumber = body.get("phone_number");
+            if (phoneNumber == null) phoneNumber = body.get("telefono");
+        }
+        return pagoService.iniciarPagoWompi(id, usuario.getId(), phoneNumber);
     }
 
     @GetMapping("/{id}/estado")

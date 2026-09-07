@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.skd.sublimacion_api.dto.direccion.DireccionRequest;
 import com.skd.sublimacion_api.dto.direccion.DireccionResponse;
 import com.skd.sublimacion_api.service.DireccionService;
+import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
@@ -40,12 +41,12 @@ public class DireccionController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public DireccionResponse guardar(@RequestBody DireccionRequest request){
+    public DireccionResponse guardar(@Valid @RequestBody DireccionRequest request){
         return direccionService.guardar(request);
     }
 
     @PutMapping("/{id}")
-    public DireccionResponse actualizar(@PathVariable Long id, @RequestBody DireccionRequest request, @AuthenticationPrincipal Usuario usuario){
+    public DireccionResponse actualizar(@PathVariable Long id, @Valid @RequestBody DireccionRequest request, @AuthenticationPrincipal Usuario usuario){
         return direccionService.actualizar(id, request, usuario.getId());
     }
 

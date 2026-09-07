@@ -22,6 +22,7 @@ const Generador = lazy(() => import("../pages/Generador"));
 const Personalizador = lazy(() => import("../pages/Personalizador"));
 const Carrito = lazy(() => import("../pages/Carrito"));
 const Checkout = lazy(() => import("../pages/Checkout"));
+const CheckoutPago = lazy(() => import("../pages/CheckoutPago"));
 const CheckoutResultado = lazy(() => import("../pages/CheckoutResultado"));
 const MisPedidos = lazy(() => import("../pages/MisPedidos"));
 const MisCupones = lazy(() => import("../pages/MisCupones"));
@@ -35,6 +36,7 @@ const PanelDisenador = lazy(() => import("../pages/PanelDisenador"));
 const DetalleProducto = lazy(() => import("../pages/DetalleProducto"));
 const SeguimientoPedido = lazy(() => import("../pages/SeguimientoPedido"));
 const Creditos = lazy(() => import("../pages/Creditos"));
+const MisDispositivos = lazy(() => import("../pages/MisDispositivos"));
 
 function Pagina({ title, description, children }) {
   useEffect(() => {
@@ -91,6 +93,16 @@ function AppRoutes() {
           <Pagina title="Finalizar compra | SKD">
             <RutaProtegida roles={ROLES_CLIENTE}>
               <Checkout />
+            </RutaProtegida>
+          </Pagina>
+        }
+      />
+      <Route
+        path="/checkout/pago"
+        element={
+          <Pagina title="Pago seguro | SKD">
+            <RutaProtegida roles={ROLES_CLIENTE}>
+              <CheckoutPago />
             </RutaProtegida>
           </Pagina>
         }
@@ -171,6 +183,16 @@ function AppRoutes() {
           <Pagina title="Bandeja de entrada | SKD">
             <RutaProtegida>
               <Bandeja />
+            </RutaProtegida>
+          </Pagina>
+        }
+      />
+      <Route
+        path="/mis-dispositivos"
+        element={
+          <Pagina title="Dispositivos | SKD">
+            <RutaProtegida>
+              <MisDispositivos />
             </RutaProtegida>
           </Pagina>
         }

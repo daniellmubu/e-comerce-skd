@@ -47,7 +47,7 @@ class LoginBloqueoIntegrationTest {
         mockMvc.perform(post("/api/auth/registro")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                            {"nombre":"Bloqueable","username":"bloqueable_x","correo":"bloqueablex@skd.com","password":"123456","codigo":"CODIGO"}
+                            {"nombre":"Bloqueable","username":"bloqueable_x","correo":"bloqueablex@skd.com","password":"Password123","codigo":"CODIGO"}
                             """.replace("CODIGO", codigo)))
                 .andExpect(status().isOk());
 
@@ -65,7 +65,7 @@ class LoginBloqueoIntegrationTest {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                            {"username":"bloqueable_x","password":"123456"}
+                            {"username":"bloqueable_x","password":"Password123"}
                             """))
                 .andExpect(status().isForbidden());
     }

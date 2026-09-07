@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS cuenta_cancelacion_token (
 );
 CREATE INDEX IF NOT EXISTS idx_cuenta_cancelacion_token_usuario ON cuenta_cancelacion_token(usuario_id);
 
+-- Wompi: id real de la transacción (para GET /transactions/{id}) - distinto de referencia_externa
+ALTER TABLE pago ADD COLUMN IF NOT EXISTS wompi_transaction_id VARCHAR(64);
+
 -- Código de verificación de email durante el registro (expira).
 CREATE TABLE IF NOT EXISTS registro_codigo (
     id BIGSERIAL PRIMARY KEY,

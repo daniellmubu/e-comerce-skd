@@ -111,24 +111,129 @@ public class PagoServiceImpl implements PagoService {
     @Override
     @Transactional
     public IniciarPagoWompiResponse iniciarPagoWompi(Long pagoId, Long usuarioId) {
+        return iniciarPagoWompi(pagoId, usuarioId, null);
+    }
+
+    @Override
+    @Transactional
+    public IniciarPagoWompiResponse iniciarPagoWompi(Long pagoId, Long usuarioId, String phoneNumber) {
 
         Pago pago = obtenerPagoPropio(pagoId, usuarioId);
         validarPagoParaWompi(pago);
 
+        String metodo = pago.getMetodo() != null ? pago.getMetodo().toLowerCase() : "";
+
+        // Idempotencia para PSE/Tarjeta: reutilizar link existente
+        // Para Nequi: solo reutiliza si NO se está cambiando de número (phoneNumber == null)
+        // y el pago sigue pendiente. Si el usuario da "Cambiar número" y reenvía push con nuevo teléfono,
+        // se crea una nueva transacción y se sobrescribe la anterior (la anterior queda huérfana y expira en Wompi).
+        boolean tieneTransaccion = (pago.getWompiTransactionId() != null && !pago.getWompiTransactionId().isBlank())
+                || (pago.getReferenciaExterna() != null && !pago.getReferenciaExterna().isBlank());
+        if (tieneTransaccion) {
+            if ("nequi".equals(metodo)) {
+                if (phoneNumber == null || phoneNumber.isBlank()) {
+                    // Polling/consulta sin nuevo teléfono -> reutilizar transacción pendiente
+                    return IniciarPagoWompiResponse.builder()
+                            .pagoId(pago.getId())
+                            .pedidoId(pago.getPedido().getId())
+                            .url(null)
+                            .referencia(pago.getReferenciaExterna())
+                            .build();
+                }
+                // Si viene phoneNumber nuevo, no retornamos: se creará nueva transacción abajo
+                // (para "Cambiar número" o reintento tras expiración)
+                if ("aprobado".equalsIgnoreCase(pago.getEstado())) {
+                    // Ya aprobado, no crear otra
+                    return IniciarPagoWompiResponse.builder()
+                            .pagoId(pago.getId())
+                            .pedidoId(pago.getPedido().getId())
+                            .url(null)
+                            .referencia(pago.getReferenciaExterna())
+                            .build();
+                }
+            } else {
+                String referenciaGuardada = pago.getReferenciaExterna();
+                String urlExistente = "https://checkout.wompi.co/l/" + (referenciaGuardada != null ? referenciaGuardada : pago.getWompiTransactionId());
+                return IniciarPagoWompiResponse.builder()
+                        .pagoId(pago.getId())
+                        .pedidoId(pago.getPedido().getId())
+                        .url(urlExistente)
+                        .referencia(referenciaGuardada)
+                        .build();
+            }
+        }
+
+        // Flujo directo Nequi: transacción push sin checkout hospedado
+        if ("nequi".equals(metodo)) {
+            if (phoneNumber == null || phoneNumber.isBlank()) {
+                throw new BadRequestException("Debes proporcionar tu número Nequi (10 dígitos, empieza por 3).");
+            }
+            String phone = phoneNumber.replaceAll("\\D", "");
+            if (!phone.matches("3\\d{9}")) {
+                throw new BadRequestException("Número Nequi inválido. Ej: 3001234567");
+            }
+            String email = pago.getPedido().getUsuario().getCorreo();
+            try {
+                WompiService.TransaccionNequi tx = wompiService.crearTransaccionNequi(
+                        pago.getMonto(),
+                        pago.getPedido().getId(),
+                        pago.getId(),
+                        phone,
+                        email
+                );
+                pago.setReferenciaExterna(tx.reference());
+                pago.setWompiTransactionId(tx.id());
+                pagoRepository.save(pago);
+                // No hay URL: el push ya fue enviado al celular
+                return IniciarPagoWompiResponse.builder()
+                        .pagoId(pago.getId())
+                        .pedidoId(pago.getPedido().getId())
+                        .url(null)
+                        .referencia(tx.reference())
+                        .build();
+            } catch (BadRequestException ex) {
+                String msgLower = ex.getMessage() != null ? ex.getMessage().toLowerCase() : "";
+                // Si es error de validación de teléfono/monto, propagar para que el usuario corrija
+                if (msgLower.contains("nequi") || msgLower.contains("phone") || msgLower.contains("celular") || msgLower.contains("monto")) {
+                    throw ex;
+                }
+                // Fallback: si Wompi no tiene Nequi habilitado o 422 por acceptance, usa checkout hospedado
+                System.err.println("[PagoService] Nequi directo falló, fallback a payment_link: " + ex.getMessage());
+                WompiService.LinkPago link = wompiService.crearLinkPago(
+                        pago.getMonto(),
+                        pago.getPedido().getId(),
+                        pago.getId()
+                );
+                String referenciaAGuardar = link.reference() != null ? link.reference() : link.id();
+                pago.setReferenciaExterna(referenciaAGuardar);
+                pago.setWompiTransactionId(link.id());
+                pagoRepository.save(pago);
+                return IniciarPagoWompiResponse.builder()
+                        .pagoId(pago.getId())
+                        .pedidoId(pago.getPedido().getId())
+                        .url(link.url())
+                        .referencia(referenciaAGuardar)
+                        .build();
+            }
+        }
+
+        // Flujo PSE/Tarjeta: link hospedado
         WompiService.LinkPago link = wompiService.crearLinkPago(
                 pago.getMonto(),
                 pago.getPedido().getId(),
                 pago.getId()
         );
 
-        pago.setReferenciaExterna(link.id());
+        String referenciaAGuardar = link.reference() != null ? link.reference() : link.id();
+        pago.setReferenciaExterna(referenciaAGuardar);
+        pago.setWompiTransactionId(link.id());
         pagoRepository.save(pago);
 
         return IniciarPagoWompiResponse.builder()
                 .pagoId(pago.getId())
                 .pedidoId(pago.getPedido().getId())
                 .url(link.url())
-                .referencia(link.reference())
+                .referencia(referenciaAGuardar)
                 .build();
     }
 
@@ -139,8 +244,11 @@ public class PagoServiceImpl implements PagoService {
         Pago pago = obtenerPagoPropio(pagoId, usuarioId);
 
         String estadoWompi = null;
-        if (pago.getReferenciaExterna() != null) {
-            estadoWompi = wompiService.consultarEstadoTransaccion(pago.getReferenciaExterna());
+        // Consulta unificada por id real (flujo Nequi) o por referencia (fallback/payment_link)
+        // Ambos, polling automático cada 4s y botón manual, usan este mismo endpoint.
+        if (pago.getWompiTransactionId() != null || pago.getReferenciaExterna() != null) {
+            estadoWompi = wompiService.consultarEstadoTransaccionUnificado(
+                    pago.getWompiTransactionId(), pago.getReferenciaExterna());
         }
 
         boolean aprobado = "APPROVED".equalsIgnoreCase(estadoWompi);
@@ -210,9 +318,10 @@ public class PagoServiceImpl implements PagoService {
 
         boolean esTarjeta = "tarjeta".equalsIgnoreCase(pago.getMetodo());
         boolean esPse = "pse".equalsIgnoreCase(pago.getMetodo());
+        boolean esNequi = "nequi".equalsIgnoreCase(pago.getMetodo());
 
-        if (!esTarjeta && !esPse) {
-            throw new BadRequestException("Este método de pago no se procesa en Wompi.");
+        if (!esTarjeta && !esPse && !esNequi) {
+            throw new BadRequestException("Este método de pago no se procesa en Wompi. Usa tarjeta, PSE o Nequi.");
         }
 
         if ("aprobado".equalsIgnoreCase(pago.getEstado())) {

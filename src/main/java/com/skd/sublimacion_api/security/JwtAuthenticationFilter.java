@@ -78,12 +78,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
 
                 if (jwtService.isTokenValid(jwt, userDetails)) {
-                    // Control de sesiones: los tokens emitidos por el login actual llevan
-                    // jti y deben tener una sesión activa (no revocada ni vencida) en la BD.
-                    // Los tokens antiguos sin jti se siguen aceptando (compatibilidad) hasta
-                    // que expiren; al volver a iniciar sesión ya quedan bajo control.
+                    // Control de sesiones: todos los tokens deben tener jti activo en BD.
+                    // Si el token no tiene jti es considerado inválido (exige re-login).
                     String jti = jwtService.extractTokenId(jwt);
-                    boolean sesionActiva = jti == null || sesionActivaService.esTokenActivo(jti);
+                    boolean sesionActiva = jti != null && sesionActivaService.esTokenActivo(jti);
 
                     if (sesionActiva) {
                         UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(

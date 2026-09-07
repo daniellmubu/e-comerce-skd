@@ -42,7 +42,7 @@ class RegistroIntegrationTest {
 
         // 2. Registrar con código (el rol admin debe ignorarse)
         String body = """
-            {"nombre":"Malicioso","username":"test_admin_x","correo":"testadminx@skd.com","password":"123456","rol":"admin","codigo":"CODIGO"}
+            {"nombre":"Malicioso","username":"test_admin_x","correo":"testadminx@skd.com","password":"Password123","rol":"admin","codigo":"CODIGO"}
             """.replace("CODIGO", codigo);
 
         String response = mockMvc.perform(post("/api/auth/registro")

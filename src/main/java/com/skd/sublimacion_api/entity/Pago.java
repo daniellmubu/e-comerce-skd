@@ -44,6 +44,9 @@ public class Pago {
     @Column(name = "referencia_externa")
     private String referenciaExterna;
 
+    @Column(name = "wompi_transaction_id")
+    private String wompiTransactionId;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal monto;
 

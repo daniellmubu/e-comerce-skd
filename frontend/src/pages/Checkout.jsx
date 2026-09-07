@@ -13,7 +13,6 @@ import {
 import { listarEmpaques } from "../services/empaqueService";
 import { listarCupones, listarMisCupones } from "../services/cuponService";
 import { procesarCheckout } from "../services/checkoutService";
-import { iniciarPagoWompi, simularPagoTarjeta } from "../services/pagoService";
 import { calcularEnvio } from "../services/envioService";
 import { getErrorMessage } from "../services/api";
 import Button from "../components/ui/Button";
@@ -84,10 +83,6 @@ function Checkout() {
   const [cuponAplicado, setCuponAplicado] = useState(null);
   const [errorCupon, setErrorCupon] = useState(null);
   const [metodoPago, setMetodoPago] = useState(METODOS_PAGO[0].value);
-  const [numeroTarjeta, setNumeroTarjeta] = useState("");
-  const [fechaExpiracion, setFechaExpiracion] = useState("");
-  const [cvv, setCvv] = useState("");
-  const [errorTarjeta, setErrorTarjeta] = useState(null);
   const [destinatarioRegalo, setDestinatarioRegalo] = useState("");
   const [ocasionRegalo, setOcasionRegalo] = useState("");
   const [fechaEntregaDeseada, setFechaEntregaDeseada] = useState("");
@@ -208,20 +203,26 @@ function Checkout() {
 
   const handleGuardarDireccion = async () => {
     const { calle, ciudad, departamento, codigoPostal } = nuevaDireccion;
-    if (!calle || !ciudad || !departamento) return;
+    if (!calle.trim() || !ciudad.trim() || !departamento.trim()) {
+      setErrorCarga("Completa calle, ciudad y departamento. Son obligatorios.");
+      return;
+    }
+    if (calle.trim().length > 150) { setErrorCarga("La calle no puede exceder 150 caracteres."); return; }
+    if (ciudad.trim().length > 80 || departamento.trim().length > 80) { setErrorCarga("Ciudad/departamento máximo 80 caracteres."); return; }
     try {
       const usuarioId = obtenerUsuarioId();
       if (editandoId) {
-        const actualizada = await actualizarDireccion(editandoId, { usuarioId, calle, ciudad, departamento, codigoPostal });
+        const actualizada = await actualizarDireccion(editandoId, { usuarioId, calle: calle.trim(), ciudad: ciudad.trim(), departamento: departamento.trim(), codigoPostal: codigoPostal.trim() });
         setDirecciones((prev) => prev.map((d) => d.id === editandoId ? actualizada : d));
         setEditandoId(null);
       } else {
-        const creada = await crearDireccion({ usuarioId, calle, ciudad, departamento, codigoPostal, predeterminada: direcciones.length === 0 });
+        const creada = await crearDireccion({ usuarioId, calle: calle.trim(), ciudad: ciudad.trim(), departamento: departamento.trim(), codigoPostal: codigoPostal.trim(), predeterminada: direcciones.length === 0 });
         setDirecciones((prev) => [...prev, creada]);
         setDireccionId(String(creada.id));
       }
       setMostrarFormDireccion(false);
       setNuevaDireccion({ calle: "", ciudad: "", departamento: "", codigoPostal: "" });
+      setErrorCarga(null);
     } catch (err) { setErrorCarga(getErrorMessage(err)); }
   };
 
@@ -303,21 +304,6 @@ function Checkout() {
         return;
       }
 
-      if (metodoPago === "tarjeta") {
-        if (!/^\d{13,19}$/.test(numeroTarjeta)) {
-          setErrorTarjeta("Número de tarjeta inválido (13 a 19 dígitos).");
-          return;
-        }
-        if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(fechaExpiracion)) {
-          setErrorTarjeta("La fecha de expiración debe tener el formato MM/AA.");
-          return;
-        }
-        if (!/^\d{3}$/.test(cvv)) {
-          setErrorTarjeta("El CVV debe tener 3 dígitos.");
-          return;
-        }
-      }
-
       const respuesta = await procesarCheckout({
         direccionId: Number(direccionId),
         empaqueId: Number(empaqueId),
@@ -328,26 +314,24 @@ function Checkout() {
         ocasionRegalo: esEmpaqueRegalo ? ocasionRegalo.trim() : undefined,
       });
 
-      if (metodoPago === "pse") {
-        const wompi = await iniciarPagoWompi(respuesta.pagoId);
-        window.location.href = wompi.url;
+      await recargarCarrito();
+
+      // Flujo profesional: todos los pagos pasan por la página de pagos con branding SKD.
+      // Esa página es la que, tras mostrar resumen y seguridad, redirige a Wompi por debajo.
+      // Evita el salto brusco y poco profesional de mandar directo a checkout.wompi.co.
+      if (metodoPago === "pse" || metodoPago === "nequi" || metodoPago === "tarjeta") {
+        const params = new URLSearchParams({
+          pagoId: String(respuesta.pagoId),
+          pedidoId: String(respuesta.pedidoId),
+          metodo: metodoPago,
+          total: String(respuesta.total ?? totalEstimado),
+        });
+        navigate(`/checkout/pago?${params.toString()}`);
         return;
       }
 
-      if (metodoPago === "tarjeta") {
-        const simulacion = await simularPagoTarjeta(respuesta.pagoId, {
-          numeroTarjeta,
-          fechaExpiracion,
-          cvv,
-        });
-        if (!simulacion.aprobado) {
-          setErrorCheckout(simulacion.mensaje || "El pago fue rechazado.");
-          return;
-        }
-      }
-
+      // Efectivo / otros: confirmación directa sin pasarela
       setResultado(respuesta);
-      await recargarCarrito();
     } catch (err) {
       setErrorCheckout(getErrorMessage(err));
     } finally {
@@ -724,52 +708,22 @@ function Checkout() {
                 </div>
 
                 {metodoPago === "tarjeta" && (
-                  <div className="mb-4 space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-slate-800 dark:bg-slate-950/50">
-                    <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">
-                      Datos de la tarjeta
-                    </p>
-                    <Input
-                      label="Número de tarjeta"
-                      placeholder="0000 0000 0000 0000"
-                      inputMode="numeric"
-                      value={numeroTarjeta}
-                      onChange={(e) =>
-                        setNumeroTarjeta(
-                          e.target.value.replace(/\D/g, "").slice(0, 19)
-                        )
-                      }
-                    />
-                    <div className="grid grid-cols-2 gap-3">
-                      <Input
-                        label="Expiración (MM/AA)"
-                        placeholder="12/28"
-                        inputMode="numeric"
-                        value={fechaExpiracion}
-                        onChange={(e) => {
-                          let v = e.target.value.replace(/\D/g, "").slice(0, 4);
-                          if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2);
-                          setFechaExpiracion(v);
-                        }}
-                      />
-                      <Input
-                        label="CVV"
-                        placeholder="123"
-                        type="password"
-                        inputMode="numeric"
-                        value={cvv}
-                        onChange={(e) =>
-                          setCvv(e.target.value.replace(/\D/g, "").slice(0, 3))
-                        }
-                      />
-                    </div>
-                    {errorTarjeta && (
-                      <p className="rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-                        {errorTarjeta}
-                      </p>
-                    )}
-                    <p className="text-xs text-gray-400 dark:text-slate-500">
-                      Demo: cualquier CVV aprueba, excepto 000 (rechaza).
-                    </p>
+                  <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+                    <p className="text-sm font-semibold text-indigo-900 dark:text-white">Tarjeta de crédito / débito</p>
+                    <p className="mt-1 text-xs leading-relaxed text-indigo-700/70 dark:text-slate-400">Serás llevado a nuestra pasarela de pago segura con branding SKD para ingresar los datos. Procesamos con Wompi (PCI-DSS, 3D Secure). No guardamos tu tarjeta.</p>
+                    <p className="mt-2 text-[11px] text-indigo-600 dark:text-cyan-300">En el siguiente paso podrás ingresar: número, fecha y CVV de forma cifrada.</p>
+                  </div>
+                )}
+                {metodoPago === "nequi" && (
+                  <div className="mb-4 rounded-2xl border border-pink-200 bg-pink-50 p-4 dark:border-pink-500/20 dark:bg-pink-500/10">
+                    <p className="text-sm font-semibold text-pink-900 dark:text-pink-200">Nequi</p>
+                    <p className="mt-1 text-xs leading-relaxed text-pink-700/70 dark:text-slate-400">Pago inmediato con notificación push a tu celular. En el siguiente paso confirmarás tu número Nequi y autorizarás el cobro. Procesado por Wompi de forma segura.</p>
+                  </div>
+                )}
+                {metodoPago === "pse" && (
+                  <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+                    <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">PSE</p>
+                    <p className="mt-1 text-xs leading-relaxed text-emerald-700/70 dark:text-slate-400">Pago debitado de tu cuenta bancaria. En el siguiente paso elegirás tu banco y completarás la autorización en la pasarela segura de Wompi.</p>
                   </div>
                 )}
 
