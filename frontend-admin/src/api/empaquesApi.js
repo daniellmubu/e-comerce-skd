@@ -27,6 +27,16 @@ export async function actualizarEmpaque(id, empaque) {
   return data;
 }
 
+// Sube la imagen del empaque (multipart) y la guarda como imagenUrl.
+export async function subirImagenEmpaque(id, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post(`/admin/empaques/${id}/imagen`, formData, {
+    headers: { "Content-Type": undefined },
+  });
+  return data;
+}
+
 // El backend rechaza eliminar si el empaque tiene pedidos asociados.
 export async function eliminarEmpaque(id) {
   await api.delete(`/admin/empaques/${id}`);

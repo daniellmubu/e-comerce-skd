@@ -15,5 +15,8 @@ public interface AdminEmpaqueService {
 
     EmpaqueResponse actualizar(Long id, EmpaqueRequest request);
 
+    /** Sube la imagen del empaque y la guarda como imagenUrl. */
+    EmpaqueResponse subirImagen(Long id, byte[] imagenBytes, String contentType, String nombreOriginal);
+
     void eliminar(Long id);
 }

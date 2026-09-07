@@ -13,4 +13,7 @@ public class EmpaqueRequest {
 
     private BigDecimal costoAdicional;
 
+    /** URL de la imagen (para conservarla al editar; la subida real es por multipart). */
+    private String imagenUrl;
+
 }

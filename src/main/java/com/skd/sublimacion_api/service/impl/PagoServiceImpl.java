@@ -11,6 +11,7 @@ import com.skd.sublimacion_api.exeption.BadRequestException;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.PagoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
+import com.skd.sublimacion_api.service.InventarioService;
 import com.skd.sublimacion_api.service.PagoService;
 import com.skd.sublimacion_api.service.WebSocketService;
 import com.skd.sublimacion_api.service.WompiService;
@@ -27,6 +28,7 @@ public class PagoServiceImpl implements PagoService {
     private final PagoRepository pagoRepository;
     private final PedidoRepository pedidoRepository;
     private final WompiService wompiService;
+    private final InventarioService inventarioService;
     private final WebSocketService webSocketService;
 
     @Override
@@ -78,6 +80,7 @@ public class PagoServiceImpl implements PagoService {
         boolean aprobado = !"000".equals(request.getCvv());
 
         String estadoPedidoAntes = pedido.getEstado();
+        String estadoPagoAntes = pago.getEstado();
         String mensaje;
         if (aprobado) {
             pago.setEstado("aprobado");
@@ -87,6 +90,10 @@ public class PagoServiceImpl implements PagoService {
             mensaje = "Pago aprobado correctamente.";
         } else {
             pago.setEstado("rechazado");
+            // La reserva de stock hecha en el checkout se libera si el pago no se concreta.
+            if ("pendiente".equalsIgnoreCase(estadoPagoAntes)) {
+                inventarioService.reponerPedido(pedido.getId());
+            }
             mensaje = "Pago rechazado. Intenta de nuevo con otro CVV.";
         }
 
@@ -119,6 +126,25 @@ public class PagoServiceImpl implements PagoService {
     public IniciarPagoWompiResponse iniciarPagoWompi(Long pagoId, Long usuarioId, String phoneNumber) {
 
         Pago pago = obtenerPagoPropio(pagoId, usuarioId);
+
+        // Reintento tras un pago rechazado o expirado: su reserva de stock ya fue
+        // liberada, así que se vuelve a reservar (si hay inventario) y se reactiva el
+        // pedido antes de generar una nueva transacción en Wompi.
+        String estadoActual = pago.getEstado() != null ? pago.getEstado().toLowerCase() : "";
+        Pedido pedidoPago = pago.getPedido();
+        if (("rechazado".equals(estadoActual) || "expirado".equals(estadoActual))
+                && pedidoPago != null
+                && ("recibido".equalsIgnoreCase(pedidoPago.getEstado())
+                        || "cancelado".equalsIgnoreCase(pedidoPago.getEstado()))) {
+            inventarioService.reservarPedido(pedidoPago.getId());
+            if ("cancelado".equalsIgnoreCase(pedidoPago.getEstado())) {
+                pedidoPago.setEstado("recibido");
+                pedidoRepository.save(pedidoPago);
+            }
+            pago.setEstado("pendiente");
+            pagoRepository.save(pago);
+        }
+
         validarPagoParaWompi(pago);
 
         String metodo = pago.getMetodo() != null ? pago.getMetodo().toLowerCase() : "";
@@ -268,8 +294,13 @@ public class PagoServiceImpl implements PagoService {
             pagoRepository.save(pago);
             pedidoRepository.save(pedido);
         } else if (rechazado && !"rechazado".equalsIgnoreCase(pago.getEstado())) {
+            String estadoPagoAntes = pago.getEstado();
             pago.setEstado("rechazado");
             pago.setProcesadoEn(LocalDateTime.now());
+            // Libera la reserva de stock si el pago aún estaba pendiente (nunca cobrado).
+            if ("pendiente".equalsIgnoreCase(estadoPagoAntes)) {
+                inventarioService.reponerPedido(pedido.getId());
+            }
             pagoRepository.save(pago);
         }
 

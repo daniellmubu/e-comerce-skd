@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -25,6 +26,8 @@ import com.skd.sublimacion_api.entity.Usuario;
 import com.skd.sublimacion_api.entity.ItemPedido;
 import com.skd.sublimacion_api.entity.ItemCarrito;
 import com.skd.sublimacion_api.entity.Diseno;
+import com.skd.sublimacion_api.entity.OrigenDiseno;
+import com.skd.sublimacion_api.entity.Personalizacion;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.CarritoRepository;
 import com.skd.sublimacion_api.repository.CuponRepository;
@@ -37,11 +40,11 @@ import com.skd.sublimacion_api.repository.ItemCarritoRepository;
 import com.skd.sublimacion_api.repository.ItemPedidoRepository;
 import com.skd.sublimacion_api.repository.PagoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
-import com.skd.sublimacion_api.repository.ProductoRepository;
+import com.skd.sublimacion_api.repository.PersonalizacionRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
-import com.skd.sublimacion_api.repository.VarianteProductoRepository;
 import com.skd.sublimacion_api.service.CheckoutService;
 import com.skd.sublimacion_api.service.EnvioService;
+import com.skd.sublimacion_api.service.InventarioService;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -52,6 +55,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final CarritoRepository carritoRepository;
     private final ItemCarritoRepository itemCarritoRepository;
     private final ItemPedidoRepository itemPedidoRepository;
+    private final PersonalizacionRepository personalizacionRepository;
     private final PedidoRepository pedidoRepository;
     private final PagoRepository pagoRepository;
     private final FacturaRepository facturaRepository;
@@ -59,10 +63,9 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final EmpaqueRepository empaqueRepository;
     private final CuponRepository cuponRepository;
     private final CuponUsuarioRepository cuponUsuarioRepository;
-    private final ProductoRepository productoRepository;
-    private final VarianteProductoRepository varianteProductoRepository;
     private final DisenoRepository disenoRepository;
     private final EnvioService envioService;
+    private final InventarioService inventarioService;
     private final ApplicationEventPublisher applicationEventPublisher;
 
     @Override
@@ -89,8 +92,9 @@ public class CheckoutServiceImpl implements CheckoutService {
         Carrito carrito = obtenerCarrito(usuario);
 
         List<ItemCarrito> items = obtenerItems(carrito);
-        // TC-CHK-17: bloqueo pesimista + decremento atómico para evitar venta de más en compra simultánea del último ítem
-        validarYDescontarStockBloqueando(items);
+        // TC-CHK-17: la reserva de stock se delega en el servicio único de inventario
+        // (bloqueo pesimista + validación para evitar vender de más el último ítem).
+        inventarioService.reservar(inventarioService.lineasDeCarrito(items));
 
         BigDecimal subtotal = calcularSubtotal(items);
 
@@ -289,51 +293,6 @@ public class CheckoutServiceImpl implements CheckoutService {
 
     return subtotal;
     }
-    // TC-CHK-17: validación + descuento con bloqueo pesimista para evitar venta de más en compras simultáneas del último ítem
-    // Maneja tanto producto base como variante (talla/color). Ordena IDs para evitar deadlocks.
-    private void validarYDescontarStockBloqueando(List<ItemCarrito> items) {
-        java.util.List<ItemCarrito> ordenados = items.stream()
-                .sorted(java.util.Comparator
-                        .comparing((ItemCarrito i) -> i.getVariante() != null ? i.getVariante().getId() : Long.MAX_VALUE)
-                        .thenComparing(i -> i.getProducto().getId()))
-                .toList();
-
-        for (ItemCarrito item : ordenados) {
-            int cantidad = item.getCantidad();
-            if (item.getVariante() != null && item.getVariante().getId() != null) {
-                Long varianteId = item.getVariante().getId();
-                com.skd.sublimacion_api.entity.VarianteProducto variante = varianteProductoRepository
-                        .findByIdForUpdate(varianteId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Variante no encontrada"));
-                int stockActual = variante.getStock() != null ? variante.getStock() : 0;
-                if (stockActual < cantidad) {
-                    throw new IllegalArgumentException(
-                            "No hay suficiente stock para la variante " + variante.getTalla() + "/"
-                                    + variante.getColor() + " de " + item.getProducto().getNombre()
-                                    + ". Stock disponible: " + stockActual + ", solicitas: " + cantidad + " (sin stock)");
-                }
-                int stockNuevo = stockActual - cantidad;
-                if (stockNuevo < 0) {
-                    throw new IllegalArgumentException("No hay suficiente stock para " + item.getProducto().getNombre() + " (sin stock)");
-                }
-                variante.setStock(stockNuevo);
-                varianteProductoRepository.save(variante);
-            } else {
-                Long productoId = item.getProducto().getId();
-                com.skd.sublimacion_api.entity.Producto producto = productoRepository
-                        .findByIdForUpdate(productoId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado"));
-                int stockActual = producto.getStock() != null ? producto.getStock() : 0;
-                if (stockActual < cantidad) {
-                    throw new IllegalArgumentException(
-                            "No hay suficiente stock para " + producto.getNombre()
-                                    + ". Stock disponible: " + stockActual + ", solicitas: " + cantidad + " (sin stock)");
-                }
-                producto.setStock(stockActual - cantidad);
-                productoRepository.save(producto);
-            }
-        }
-    }
     
     private BigDecimal calcularDescuento(BigDecimal subtotal, Cupon cupon) {
 
@@ -419,25 +378,74 @@ public class CheckoutServiceImpl implements CheckoutService {
     }
     private void crearItemsPedido(Pedido pedido, List<ItemCarrito> items) {
 
-        List<ItemPedido> itemsPedido = items.stream()
-                .map(item -> ItemPedido.builder()
-                        .pedido(pedido)
-                        .producto(item.getProducto())
-                        .cantidad(item.getCantidad())
-                        .precioUnitario(item.getPrecioUnitario())
-                        .diseno(item.getDiseno())
-                        .variante(item.getVariante())
-                        .build())
-                .toList();
+        List<ItemPedido> itemsPedido = new ArrayList<>();
+        List<Diseno> disenosPreexistentes = new ArrayList<>();
+
+        for (ItemCarrito item : items) {
+            Diseno diseno = item.getDiseno();
+
+            if (diseno != null) {
+                // Diseño elegido por el usuario (galería, IA o "Mis diseños"):
+                // se conserva tal cual en la línea del pedido.
+                disenosPreexistentes.add(diseno);
+            } else {
+                // Producto personalizado en el editor (Personalizador): la
+                // personalización vive ligada al ítem del carrito. Para que el
+                // admin pueda ver el diseño dentro del pedido, se convierte en
+                // un snapshot Diseno ANTES de vaciar el carrito (el borrado de
+                // los ítems eliminaría la personalización y se perdería).
+                diseno = snapshotDePersonalizacion(pedido, item);
+            }
+
+            itemsPedido.add(ItemPedido.builder()
+                    .pedido(pedido)
+                    .producto(item.getProducto())
+                    .cantidad(item.getCantidad())
+                    .precioUnitario(item.getPrecioUnitario())
+                    .diseno(diseno)
+                    .variante(item.getVariante())
+                    .build());
+        }
 
         itemPedidoRepository.saveAll(itemsPedido);
 
-        marcarDisenosComoUsados(items);
+        marcarDisenosComoUsados(disenosPreexistentes);
     }
-    private void marcarDisenosComoUsados(List<ItemCarrito> items) {
 
-        items.stream()
-                .map(ItemCarrito::getDiseno)
+    /**
+     * Crea un Diseno de solo lectura a partir de la personalización guardada en
+     * el ítem del carrito (imagen aplanada del diseño + descripción del editor),
+     * de modo que quede asociado al ítem del pedido y el admin pueda visualizarlo.
+     * Devuelve null si el ítem no tenía personalización con imagen.
+     */
+    private Diseno snapshotDePersonalizacion(Pedido pedido, ItemCarrito item) {
+
+        Personalizacion personalizacion = personalizacionRepository
+                .findByItemCarritoId(item.getId())
+                .orElse(null);
+
+        if (personalizacion == null
+                || personalizacion.getImagenUrl() == null
+                || personalizacion.getImagenUrl().isBlank()) {
+            return null;
+        }
+
+        Diseno snapshot = Diseno.builder()
+                .usuario(pedido.getUsuario())
+                .producto(item.getProducto())
+                .imagenUrl(personalizacion.getImagenUrl())
+                .textoPersonalizado(personalizacion.getTexto())
+                .origen(OrigenDiseno.USUARIO)
+                .usado(true)
+                .vecesUsado(1)
+                .build();
+
+        return disenoRepository.save(snapshot);
+    }
+
+    private void marcarDisenosComoUsados(List<Diseno> disenos) {
+
+        disenos.stream()
                 .filter(diseno -> diseno != null)
                 .forEach(diseno -> {
                     diseno.setUsado(true);

@@ -6,6 +6,131 @@
 
 ---
 
+## 0. Inventario / stock (implementado 2026-09-07)
+
+> Paquete "stock consistente y completo": un único servicio de inventario, liberación de reservas
+> cuando el pago no se concreta y stock agregado correcto en el panel admin.
+
+### Implementado
+
+- [x] **Servicio único de inventario** [`InventarioService`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/service/InventarioService.java)
+  con `reservar`, `reponer`, `reponerPedido` y `reservarPedido` (bloqueo pesimista + descuento
+  atómico). Centraliza la lógica que antes estaba duplicada en `CheckoutServiceImpl` y
+  `PedidoServiceImpl`.
+- [x] **Checkout usa el servicio**: [`CheckoutServiceImpl`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/service/impl/CheckoutServiceImpl.java:88)
+  delega el descuento de stock en `inventarioService.reservar(...)`. Se eliminó el método duplicado.
+- [x] **Stock agregado en admin**: al vender una variante baja la columna "Stock" de la lista de
+  productos. `GET/POST/PUT /api/admin/productos` exponen `stockEfectivo` (suma de variantes si el
+  producto tiene) y `tieneVariantes`. [`ProductoMapper`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/mapper/ProductoMapper.java)
+  no cambió su comportamiento público.
+- [x] **Liberación de reserva en rechazos**: [`WompiWebhookController`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/controller/WompiWebhookController.java:74),
+  `simularTarjeta` y `consultarEstadoPago` de [`PagoServiceImpl`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/service/impl/PagoServiceImpl.java:62)
+  reponen el stock cuando el pago pasa de "pendiente" a rechazado/voided/error.
+- [x] **Expiración automática de reservas**: [`ExpiracionPagoJob`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/config/ExpiracionPagoJob.java)
+  libera el stock y cancela el pedido de pagos online "pendiente" vencidos
+  (`app.expiracion-pago.minutos=30`, barrido cada `60000 ms`). La contraentrega no expira sola.
+- [x] **Reintento tras expiración/rechazo**: `iniciarPagoWompi` re-reserva el stock y reactiva el
+  pedido cancelado antes de generar una nueva transacción.
+- [x] **Frontend admin** [`Productos.jsx`](e-comerce-skd/frontend-admin/src/pages/Productos.jsx): la
+  columna Stock muestra el efectivo con la etiqueta "por variantes" y, al editar un producto con
+  variantes, se oculta la edición manual del stock global (se gestiona en "Variantes").
+- [x] **Frontend público** [`CheckoutPago.jsx`](e-comerce-skd/frontend/src/pages/CheckoutPago.jsx)
+  reconoce el estado "expirado" del pago y lo comunica al cliente.
+
+### Pendiente / nota
+
+- [ ] **Caso borde webhook tardío**: si un pago se aprueba en Wompi después de que el job expiró la
+  reserva (pedido ya "cancelado"), el webhook marca el pago "aprobado" pero no reactiva el pedido.
+  Revisar manualmente ese pedido (o implementar re-reserva en el webhook aprobado).
+- [ ] **Historial de stock**: no se guarda auditoría de movimientos de inventario (reserva,
+  liberación, ajuste manual). Útil para conciliar y auditar.
+
+---
+
+## 0b. Venta directa (implementado 2026-09-07)
+
+> Módulo para que el admin registre ventas hechas fuera de la tienda online (mostrador,
+> WhatsApp, ferias) manteniendo el inventario consistente. Vive en tablas propias y NO
+> entra al kanban/producción.
+
+### Implementado
+
+- [x] **Tablas propias**: `venta_directa` e `item_venta_directa` creadas en
+  [`schema.sql`](e-comerce-skd/src/main/resources/schema.sql) y espejo en
+  [`sql/crear_venta_directa.sql`](e-comerce-skd/sql/crear_venta_directa.sql). No toca `pedido`.
+- [x] **Backend**: entidades [`VentaDirecta`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/entity/VentaDirecta.java)
+  e [`ItemVentaDirecta`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/entity/ItemVentaDirecta.java),
+  DTOs, [`VentaDirectaService`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/service/VentaDirectaService.java)
+  e impl, y controller [`AdminVentaDirectaController`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/controller/admin/AdminVentaDirectaController.java)
+  bajo `/api/admin/ventas-directas` (protegido por rol admin).
+- [x] **Inventario**: al crear la venta se descuenta el stock (variante o producto) con el
+  servicio único de inventario; al **cancelar** se devuelve el stock; al **reactivar** se
+  vuelve a reservar (solo si hay disponibilidad). El estado "cobrada/pendiente" no toca stock.
+- [x] **Panel admin**: página [`VentaDirecta.jsx`](e-comerce-skd/frontend-admin/src/pages/VentaDirecta.jsx),
+  API [`ventasDirectasApi.js`](e-comerce-skd/frontend-admin/src/api/ventasDirectasApi.js), ruta
+  `/ventas-directas` y menú "Venta directa". Formulario con cliente libre, método de pago,
+  "¿ya cobrado?", productos con variantes (valida talla/color y stock) y total; listado con
+  filtros, detalle y acciones (Cobrar / Por cobrar / Cancelar / Reactivar).
+- [x] **Clientes guardados + autocompletado**: nueva entidad [`ClienteVentaDirecta`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/entity/ClienteVentaDirecta.java)
+  (tabla `cliente_venta_directa` + columna `venta_directa.cliente_id` en
+  [`schema.sql`](e-comerce-skd/src/main/resources/schema.sql) y
+  [`sql/crear_venta_directa.sql`](e-comerce-skd/sql/crear_venta_directa.sql)). Al registrar una
+  venta se crea/reutiliza el cliente (por `clienteId` o por nombre). Endpoint
+  `GET /api/admin/ventas-directas/clientes?q=` y búsqueda en vivo (debounce) en el formulario:
+  al elegir una coincidencia se autocompletan nombre y teléfono.
+
+### Pendiente / nota
+
+- [ ] Las ventas directas no cuentan en "Productos más vendidos" ni en reportes/estadísticas
+  basadas en `item_pedido`/`pago aprobado`. Si se quieren incluir, integrar el módulo en esos
+  reportes.
+- [ ] No genera factura (los pedidos online generan `factura`); opcional emitir documento para
+  ventas directas.
+
+---
+
+## 0c. Imágenes de tipos de empaque (implementado 2026-09-07)
+
+- [x] Campo `empaque.imagen_url` (migración en [`schema.sql`](e-comerce-skd/src/main/resources/schema.sql)
+  y espejo [`sql/agregar_imagen_empaque.sql`](e-comerce-skd/sql/agregar_imagen_empaque.sql)).
+- [x] Endpoint admin `POST /api/admin/empaques/{id}/imagen` (multipart) que sube a Supabase
+  Storage y guarda la URL en el empaque ([`AdminEmpaqueController`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/controller/admin/AdminEmpaqueController.java)).
+- [x] Panel [`Empaques.jsx`](e-comerce-skd/frontend-admin/src/pages/Empaques.jsx): columna Imagen
+  con miniatura y carga de imagen (con vista previa) al crear/editar un tipo de empaque.
+- [x] Tienda [`Checkout.jsx`](e-comerce-skd/frontend/src/pages/Checkout.jsx): muestra la imagen del
+  tipo de empaque elegido (mantiene el icono como respaldo cuando no hay imagen).
+
+---
+
+## 0d. Diseño del producto guardado automáticamente en la compra (implementado 2026-09-07)
+
+> Cuando el cliente personaliza un producto en el editor (Personalizador) y compra, el diseño
+> quedaba ligado al ítem del carrito (`personalizacion`) y se **perdía** al vaciar el carrito tras
+> el checkout: el admin no podía ver el diseño en el pedido. Ahora se persiste como snapshot.
+
+### Implementado
+
+- [x] **Snapshot del diseño en el checkout**: [`CheckoutServiceImpl`](e-comerce-skd/src/main/java/com/skd/sublimacion_api/service/impl/CheckoutServiceImpl.java:374)
+  convierte la `Personalizacion` de cada ítem personalizado (imagen aplanada + descripción del
+  editor) en un registro `Diseno` (`origen=USUARIO`, `usado=true`) y lo asocia al `item_pedido`
+  ANTES de vaciar el carrito. El método nuevo `snapshotDePersonalizacion` solo actúa cuando el ítem
+  no trae ya un diseño elegido (galería/IA/"Mis diseños"), que se conserva tal cual.
+- [x] **Admin ya visualizaba el diseño**: el detalle de pedido del panel
+  [`Pedidos.jsx`](e-comerce-skd/frontend-admin/src/pages/Pedidos.jsx:381) muestra `imagenDisenoUrl`
+  (miniatura + "Ver diseño" a pantalla completa) y el kanban
+  [`Produccion.jsx`](e-comerce-skd/frontend-admin/src/pages/Produccion.jsx:228) marca la insignia
+  "diseño". Con el snapshot, los productos personalizados ahora llegan con diseño visible.
+
+### Pendiente / nota
+
+- [ ] **Sin migración de BD**: se reutiliza la tabla `diseno` (columna `diseno_id` ya existente en
+  `item_pedido`). Los pedidos generados ANTES de este cambio conservan la pérdida (no recuperables).
+- [ ] **Imagen como data-URL**: la `personalizacion.imagen_url` la envía el editor aplanada en
+  base64 y se copia tal cual al snapshot. Para pedidos grandes esto puede agrandar el JSON del
+  detalle. Opcional futuro: re-subir el archivo a Supabase y guardar solo la URL.
+
+---
+
 ## 1. Seguridad
 
 - [ ] **Sin token en rutas protegidas devuelve 403, no 401**: `SecurityConfig` no configura
@@ -66,12 +191,13 @@
 
 - [ ] **Persistir la variante en `ItemPedido`**: el pedido aún no guarda qué talla/color se compró;
   mostrarla en el detalle de pedido, factura y panel admin.
-- [ ] **Descontar stock de la variante** al confirmar el pedido y validar disponibilidad antes de
-  pagar (evitar ventas sin stock).
+- [x] **Descontar stock de la variante** al confirmar el pedido y validar disponibilidad antes de
+  pagar (evitar ventas sin stock). *Implementado*: ver sección "Inventario / stock".
 - [ ] **Selector de talla/color en el catálogo público** (`DetalleProducto`/`ProductCard`) usando
   `GET /api/productos/{id}/variantes`.
-- [ ] **Coherencia de stock**: definir si `producto.stock` es la suma de las variantes o un valor
-  independiente, y mantenerlo consistente al crear/editar variantes.
+- [x] **Coherencia de stock**: definido — el stock operativo de un producto con variantes es la suma
+  del stock de sus variantes; `producto.stock` queda como valor base solo para productos sin
+  variantes. *Implementado*: ver sección "Inventario / stock".
 
 ## 4. Moderación de reseñas (CRUD de moderación implementado en panel admin)
 

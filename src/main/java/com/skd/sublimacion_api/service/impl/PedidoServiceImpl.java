@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.skd.sublimacion_api.dto.detallecarrito.ItemCarritoRequest;
 import com.skd.sublimacion_api.dto.pedido.ItemPedidoRequest;
@@ -34,6 +35,7 @@ import com.skd.sublimacion_api.repository.ItemPedidoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
 import com.skd.sublimacion_api.repository.UsuarioRepository;
+import com.skd.sublimacion_api.service.InventarioService;
 import com.skd.sublimacion_api.service.ItemCarritoService;
 import com.skd.sublimacion_api.service.PedidoService;
 
@@ -53,6 +55,7 @@ public class PedidoServiceImpl implements PedidoService {
     private final FacturaRepository facturaRepository;
     private final CarritoRepository carritoRepository;
     private final ItemCarritoService itemCarritoService;
+    private final InventarioService inventarioService;
 
     @Override
     public PedidoResponse obtenerPorId(Long id, Long usuarioId) {
@@ -85,6 +88,7 @@ public class PedidoServiceImpl implements PedidoService {
     }
 
     @Override
+    @Transactional
     public PedidoResponse guardar(PedidoRequest request, Long usuarioId) {
 
         Usuario usuario = usuarioRepository.findById(usuarioId)
@@ -106,16 +110,11 @@ public class PedidoServiceImpl implements PedidoService {
             throw new IllegalArgumentException("El pedido debe tener al menos un producto");
         }
 
+        // La validación de disponibilidad y el descuento de stock se delegan en el
+        // servicio único de inventario (bloqueo pesimista + descuento atómico).
         List<Producto> productos = request.getItems().stream()
-                .map(item -> {
-                    Producto producto = productoRepository.findById(item.getProductoId())
-                            .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado: " + item.getProductoId()));
-
-                    if (producto.getStock() < item.getCantidad()) {
-                        throw new IllegalArgumentException("Stock insuficiente para: " + producto.getNombre());
-                    }
-                    return producto;
-                })
+                .map(item -> productoRepository.findById(item.getProductoId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado: " + item.getProductoId())))
                 .toList();
 
         BigDecimal subtotal = BigDecimal.ZERO;
@@ -138,6 +137,12 @@ public class PedidoServiceImpl implements PedidoService {
                 .subtract(descuento)
                 .add(costoEnvio)
                 .add(costoEmpaque);
+
+        List<InventarioService.LineaInventario> lineas = request.getItems().stream()
+                .map(item -> new InventarioService.LineaInventario(
+                        item.getProductoId(), null, item.getCantidad()))
+                .toList();
+        inventarioService.reservar(lineas);
 
         Pedido pedido = Pedido.builder()
                 .usuario(usuario)
@@ -165,9 +170,6 @@ public class PedidoServiceImpl implements PedidoService {
                     .cantidad(itemRequest.getCantidad())
                     .precioUnitario(producto.getPrecio())
                     .build());
-
-            producto.setStock(producto.getStock() - itemRequest.getCantidad());
-            productoRepository.save(producto);
         }
         itemPedidoRepository.saveAll(itemsPedido);
 

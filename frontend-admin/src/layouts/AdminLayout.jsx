@@ -15,6 +15,7 @@ import {
   FaIndustry,
   FaPalette,
   FaShieldAlt,
+  FaStore,
 } from "react-icons/fa";
 
 import Navbar from "../components/Navbar";
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { label: "Cupones", to: "/cupones", icon: <FaTicketAlt /> },
   { label: "Empaques", to: "/empaques", icon: <FaBox /> },
   { label: "Pedidos", to: "/pedidos", icon: <FaClipboardList /> },
+  { label: "Venta directa", to: "/ventas-directas", icon: <FaStore /> },
   { label: "Producción", to: "/produccion", icon: <FaIndustry /> },
   { label: "Reseñas", to: "/resenas", icon: <FaStarHalfAlt /> },
   { label: "Diseños", to: "/disenos", icon: <FaPalette /> },
@@ -47,6 +49,7 @@ const TITULOS = {
   "/cupones": "Cupones",
   "/empaques": "Empaques",
   "/pedidos": "Pedidos",
+  "/ventas-directas": "Venta directa",
   "/produccion": "Producción",
   "/resenas": "Reseñas",
   "/disenos": "Diseños",

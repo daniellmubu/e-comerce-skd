@@ -3,6 +3,7 @@ package com.skd.sublimacion_api.repository;
 import com.skd.sublimacion_api.entity.Pago;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface PagoRepository extends JpaRepository<Pago,Long> {
@@ -10,4 +11,6 @@ public interface PagoRepository extends JpaRepository<Pago,Long> {
     Optional<Pago> findByPedidoId(Long pedidoId);
 
     Optional<Pago> findByReferenciaExterna(String referenciaExterna);
+
+    List<Pago> findByEstado(String estado);
 }

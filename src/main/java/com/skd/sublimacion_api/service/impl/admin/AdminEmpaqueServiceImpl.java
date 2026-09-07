@@ -6,6 +6,7 @@ import com.skd.sublimacion_api.entity.Empaque;
 import com.skd.sublimacion_api.exeption.ResourceNotFoundException;
 import com.skd.sublimacion_api.repository.EmpaqueRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
+import com.skd.sublimacion_api.service.SupabaseStorageService;
 import com.skd.sublimacion_api.service.admin.AdminEmpaqueService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +23,7 @@ public class AdminEmpaqueServiceImpl implements AdminEmpaqueService {
 
     private final EmpaqueRepository empaqueRepository;
     private final PedidoRepository pedidoRepository;
+    private final SupabaseStorageService supabaseStorageService;
 
     @Override
     public Page<EmpaqueResponse> listar(String tipo, Pageable pageable) {
@@ -70,7 +73,24 @@ public class AdminEmpaqueServiceImpl implements AdminEmpaqueService {
                 request.getCostoAdicional() == null
                         ? BigDecimal.ZERO
                         : request.getCostoAdicional());
+        // La imagen se conserva si el request no la trae (se sube por separado).
+        if (request.getImagenUrl() != null) {
+            empaque.setImagenUrl(request.getImagenUrl());
+        }
 
+        return convertir(empaqueRepository.save(empaque));
+    }
+
+    @Override
+    @Transactional
+    public EmpaqueResponse subirImagen(Long id, byte[] imagenBytes, String contentType, String nombreOriginal) {
+        if (imagenBytes == null || imagenBytes.length == 0) {
+            throw new IllegalArgumentException("Debes enviar una imagen válida.");
+        }
+        Empaque empaque = obtenerEmpaque(id);
+        String extension = extensionDe(nombreOriginal, contentType);
+        String url = supabaseStorageService.subirImagen(imagenBytes, extension, contentType);
+        empaque.setImagenUrl(url);
         return convertir(empaqueRepository.save(empaque));
     }
 
@@ -110,6 +130,23 @@ public class AdminEmpaqueServiceImpl implements AdminEmpaqueService {
                 });
     }
 
+    private String extensionDe(String nombreOriginal, String contentType) {
+        if (nombreOriginal != null) {
+            int idx = nombreOriginal.lastIndexOf('.');
+            if (idx >= 0 && idx < nombreOriginal.length() - 1) {
+                return nombreOriginal.substring(idx).toLowerCase(Locale.ROOT);
+            }
+        }
+        if (contentType != null) {
+            String tipo = contentType.toLowerCase(Locale.ROOT);
+            if (tipo.contains("png")) return ".png";
+            if (tipo.contains("webp")) return ".webp";
+            if (tipo.contains("gif")) return ".gif";
+            if (tipo.contains("jpeg") || tipo.contains("jpg")) return ".jpg";
+        }
+        return ".jpg";
+    }
+
     private EmpaqueResponse convertir(Empaque empaque) {
 
         return EmpaqueResponse.builder()
@@ -117,6 +154,7 @@ public class AdminEmpaqueServiceImpl implements AdminEmpaqueService {
                 .tipo(empaque.getTipo())
                 .descripcion(empaque.getDescripcion())
                 .costoAdicional(empaque.getCostoAdicional())
+                .imagenUrl(empaque.getImagenUrl())
                 .build();
     }
 }

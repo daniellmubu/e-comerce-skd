@@ -279,6 +279,9 @@ function Productos() {
     e.preventDefault();
     const precio = Number(form.precio);
     const stock = Number(form.stock);
+    // Si el producto ya gestiona inventario por variantes (talla/color), el stock
+    // global no se edita aquí: lo administran las variantes (suma automática).
+    const usaVariantes = Boolean(editando?.tieneVariantes);
 
     if (!form.nombre.trim()) {
       setFormError("El nombre es obligatorio");
@@ -288,7 +291,7 @@ function Productos() {
       setFormError("Ingresa un precio válido (mayor o igual a 0)");
       return;
     }
-    if (!form.stock || stock < 0) {
+    if (!usaVariantes && (!form.stock || stock < 0)) {
       setFormError("Ingresa un stock válido (mayor o igual a 0)");
       return;
     }
@@ -301,7 +304,9 @@ function Productos() {
       nombre: form.nombre.trim(),
       descripcion: form.descripcion.trim(),
       precio,
-      stock,
+      // En productos con variantes se conserva el stock base sin cambios (el
+      // stock real lo aporta la suma de sus variantes).
+      stock: usaVariantes ? (editando?.stock ?? 0) : stock,
       activo: form.activo,
       masVendido: form.masVendido,
       categoriaId: Number(form.categoriaId),
@@ -676,7 +681,14 @@ function Productos() {
                       {formatPrice(producto.precio)}
                     </td>
                     <td className="px-6 py-4 text-gray-600 dark:text-slate-300">
-                      {producto.stock}
+                      <div className="flex items-center gap-2">
+                        {producto.stockEfectivo ?? producto.stock}
+                        {producto.tieneVariantes && (
+                          <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-500/10 dark:text-cyan-300">
+                            por variantes
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="hidden px-6 py-4 md:table-cell">
                       {producto.activo ? (
@@ -999,15 +1011,34 @@ function Productos() {
               value={form.precio}
               onChange={(e) => setForm({ ...form, precio: e.target.value })}
             />
-            <Input
-              label="Stock"
-              type="number"
-              min="0"
-              step="1"
-              placeholder="0"
-              value={form.stock}
-              onChange={(e) => setForm({ ...form, stock: e.target.value })}
-            />
+            {editando?.tieneVariantes ? (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 px-3 py-2.5 text-xs text-indigo-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-300">
+                <p className="font-semibold">
+                  Stock disponible total: {editando.stockEfectivo ?? editando.stock ?? 0} und
+                </p>
+                <p className="mt-0.5 leading-relaxed text-indigo-600/80 dark:text-cyan-200/70">
+                  Este producto se vende por talla/color. Edita el inventario desde{" "}
+                  <button
+                    type="button"
+                    className="font-semibold underline"
+                    onClick={() => irAVariantes(editando)}
+                  >
+                    Variantes
+                  </button>
+                  .
+                </p>
+              </div>
+            ) : (
+              <Input
+                label="Stock"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="0"
+                value={form.stock}
+                onChange={(e) => setForm({ ...form, stock: e.target.value })}
+              />
+            )}
             <Select
               label="Categoría"
               placeholder="Selecciona una categoría"

@@ -34,4 +34,16 @@ public class ProductoResponse {
 
     private String imagenUrl;
 
+    /**
+     * Indica si el producto gestiona su inventario por variantes (talla/color).
+     * Cuando es {@code true}, el stock operativo real es la suma de las variantes.
+     */
+    private Boolean tieneVariantes;
+
+    /**
+     * Stock efectivo disponible para el módulo de administración: si el producto
+     * tiene variantes, es la suma del stock de sus variantes; si no, es su propio stock.
+     */
+    private Integer stockEfectivo;
+
 }

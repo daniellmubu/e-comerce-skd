@@ -29,4 +29,8 @@ public class Empaque {
     @Column(name = "costo_adicional", precision = 10, scale = 2)
     private BigDecimal costoAdicional = BigDecimal.ZERO;
 
+    /** URL pública de la imagen que representa este tipo de empaque. */
+    @Column(name = "imagen_url", columnDefinition = "TEXT")
+    private String imagenUrl;
+
 }

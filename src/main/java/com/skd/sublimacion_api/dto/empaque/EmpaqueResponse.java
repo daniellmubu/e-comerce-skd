@@ -17,4 +17,6 @@ public class EmpaqueResponse {
 
     private BigDecimal costoAdicional;
 
+    private String imagenUrl;
+
 }

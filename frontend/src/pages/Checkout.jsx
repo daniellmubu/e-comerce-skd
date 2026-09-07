@@ -541,11 +541,19 @@ function Checkout() {
                         {seleccionado && (
                           <FaCheckCircle className="absolute right-3 top-3 text-lg text-indigo-500 dark:text-cyan-300" />
                         )}
-                        <div
-                          className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${meta.bubble} text-lg text-white shadow`}
-                        >
-                          <Icono />
-                        </div>
+                        {emp.imagenUrl ? (
+                          <img
+                            src={emp.imagenUrl}
+                            alt={emp.tipo}
+                            className="h-16 w-16 rounded-xl border border-gray-200 bg-white object-contain p-1 dark:border-slate-700 dark:bg-slate-800"
+                          />
+                        ) : (
+                          <div
+                            className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${meta.bubble} text-lg text-white shadow`}
+                          >
+                            <Icono />
+                          </div>
+                        )}
                         <div className="mt-3 flex items-center gap-2">
                           <p className="font-semibold text-gray-900 dark:text-white">{emp.tipo}</p>
                           {meta.tag && (

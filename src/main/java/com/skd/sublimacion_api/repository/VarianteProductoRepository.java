@@ -18,6 +18,17 @@ public interface VarianteProductoRepository extends JpaRepository<VarianteProduc
 
     List<VarianteProducto> findByProductoId(Long productoId);
 
+    boolean existsByProductoId(Long productoId);
+
+    /** Suma el stock de todas las variantes de un producto (0 si no tiene variantes). */
+    @Query("SELECT COALESCE(SUM(v.stock), 0) FROM VarianteProducto v WHERE v.producto.id = :productoId")
+    Integer sumarStockPorProducto(@Param("productoId") Long productoId);
+
+    /** Sumas de stock agrupadas por producto para un conjunto de ids (evita N+1 en el listado). */
+    @Query("SELECT v.producto.id, COALESCE(SUM(v.stock), 0) "
+            + "FROM VarianteProducto v WHERE v.producto.id IN :productoIds GROUP BY v.producto.id")
+    List<Object[]> sumarStockPorProductoIds(@Param("productoIds") java.util.Collection<Long> productoIds);
+
     @Query("SELECT v FROM VarianteProducto v WHERE v.producto.id = :productoId AND v.talla = :talla AND v.color = :color")
     Optional<VarianteProducto> findByProductoIdAndTallaAndColor(
             @Param("productoId") Long productoId,

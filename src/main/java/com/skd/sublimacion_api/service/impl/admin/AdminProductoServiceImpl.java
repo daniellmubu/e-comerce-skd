@@ -6,6 +6,7 @@ import com.skd.sublimacion_api.entity.Producto;
 import com.skd.sublimacion_api.repository.CategoriaRepository;
 import com.skd.sublimacion_api.repository.ImagenProductoRepository;
 import com.skd.sublimacion_api.repository.ProductoRepository;
+import com.skd.sublimacion_api.repository.VarianteProductoRepository;
 import com.skd.sublimacion_api.service.SupabaseStorageService;
 import com.skd.sublimacion_api.service.admin.AdminProductoService;
 
@@ -13,8 +14,10 @@ import lombok.RequiredArgsConstructor;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -41,6 +44,7 @@ public class AdminProductoServiceImpl implements AdminProductoService {
         private final ProductoMapper productoMapper;
         private final CategoriaRepository categoriaRepository;
         private final ImagenProductoRepository imagenRepository;
+        private final VarianteProductoRepository varianteProductoRepository;
         private final SupabaseStorageService supabaseStorageService;
 
         @Override
@@ -59,14 +63,19 @@ public class AdminProductoServiceImpl implements AdminProductoService {
                         .and(ProductoSpecification.precioMayorIgual(precioMin))
                         .and(ProductoSpecification.precioMenorIgual(precioMax));
 
-                return productoRepository
-                        .findAll(specification, pageable)
-                        .map(productoMapper::toResponse);
+                Page<Producto> pagina = productoRepository.findAll(specification, pageable);
+
+                // Suma de stock de variantes en bloque para los productos de la página
+                // (evita N+1). Los productos con variantes quedan en el mapa; los que no
+                // tienen, usan su propio stock.
+                Map<Long, Integer> sumas = sumarStockEnBloque(pagina.getContent());
+
+                return pagina.map(producto -> aResponse(producto, sumas));
         }
         
         @Override
         public ProductoResponse obtenerPorId(Long id) {
-                return productoMapper.toResponse(buscarProducto(id));
+                return aResponse(buscarProducto(id));
         }
 
         @Override
@@ -93,7 +102,7 @@ public class AdminProductoServiceImpl implements AdminProductoService {
 
                 Producto guardado = productoRepository.save(producto);
 
-                return productoMapper.toResponse(guardado);
+                return aResponse(guardado);
         }
 
         @Override
@@ -107,7 +116,7 @@ public class AdminProductoServiceImpl implements AdminProductoService {
 
                 Producto actualizado = productoRepository.save(producto);
 
-                return productoMapper.toResponse(actualizado);
+                return aResponse(actualizado);
         }
         
         @Override
@@ -186,7 +195,7 @@ public class AdminProductoServiceImpl implements AdminProductoService {
 
                 imagenRepository.save(imagen);
 
-                return productoMapper.toResponse(producto);
+                return aResponse(producto);
         }
 
         @Override
@@ -208,7 +217,7 @@ public class AdminProductoServiceImpl implements AdminProductoService {
 
                 imagenRepository.save(imagen);
 
-                return productoMapper.toResponse(producto);
+                return aResponse(producto);
         }
 
         @Override
@@ -251,6 +260,59 @@ public class AdminProductoServiceImpl implements AdminProductoService {
                                 imagenRepository.save(i);
                         }
                 }
+        }
+
+        /**
+         * Construye la respuesta del módulo de administración con el stock efectivo:
+         * si el producto tiene variantes, el stock operativo es la suma de sus variantes.
+         */
+        private ProductoResponse aResponse(Producto producto) {
+                return aResponse(producto, null);
+        }
+
+        private ProductoResponse aResponse(Producto producto, Map<Long, Integer> sumasPorProducto) {
+                ProductoResponse respuesta = productoMapper.toResponse(producto);
+
+                boolean tieneVariantes;
+                int stockEfectivo;
+
+                if (sumasPorProducto != null) {
+                        // Listado paginado: ya vienen las sumas calculadas en bloque.
+                        Integer totalVariantes = sumasPorProducto.get(producto.getId());
+                        tieneVariantes = totalVariantes != null;
+                        stockEfectivo = totalVariantes != null
+                                ? totalVariantes
+                                : (producto.getStock() != null ? producto.getStock() : 0);
+                } else {
+                        // Detalle / creación / actualización: consulta puntual.
+                        tieneVariantes = varianteProductoRepository.existsByProductoId(producto.getId());
+                        Integer total = tieneVariantes
+                                ? varianteProductoRepository.sumarStockPorProducto(producto.getId())
+                                : null;
+                        stockEfectivo = tieneVariantes
+                                ? (total != null ? total : 0)
+                                : (producto.getStock() != null ? producto.getStock() : 0);
+                }
+
+                respuesta.setTieneVariantes(tieneVariantes);
+                respuesta.setStockEfectivo(stockEfectivo);
+                return respuesta;
+        }
+
+        /** Calcula, para un lote de productos, el total de stock de sus variantes (si tienen). */
+        private Map<Long, Integer> sumarStockEnBloque(List<Producto> productos) {
+                if (productos == null || productos.isEmpty()) {
+                        return java.util.Collections.emptyMap();
+                }
+
+                List<Long> ids = productos.stream().map(Producto::getId).toList();
+                Map<Long, Integer> sumas = new HashMap<>();
+                for (Object[] fila : varianteProductoRepository.sumarStockPorProductoIds(ids)) {
+                        Long productoId = ((Number) fila[0]).longValue();
+                        int total = ((Number) fila[1]).intValue();
+                        sumas.put(productoId, total);
+                }
+                return sumas;
         }
 
         private String extensionDe(String nombreOriginal, String contentType) {

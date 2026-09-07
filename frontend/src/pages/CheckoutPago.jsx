@@ -60,8 +60,12 @@ export default function CheckoutPago() {
       setUltimaVerificacion(new Date().toLocaleTimeString("es-CO"));
       if (estado.aprobado) {
         navigate(`/checkout/resultado?pagoId=${pagoId}`);
+      } else if (estado.estadoPago === "expirado") {
+        setError("El tiempo para completar el pago expiró. Vuelve a intentarlo o elige otro método.");
+        setNequiPendiente(false);
+        setExpiradoNequi(false);
       } else if (estado.estadoPago === "rechazado" || estado.estadoPago === "error" || estado.estadoPago === "voided") {
-        setError("El pago fue rechazado en Nequi (" + estado.estadoPago + "). Intenta de nuevo o usa otro método.");
+        setError("El pago fue rechazado (" + estado.estadoPago + "). Intenta de nuevo o usa otro método.");
         setNequiPendiente(false);
         setExpiradoNequi(false);
       } else {

@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { FaPlus, FaEdit, FaTrash, FaSearch, FaBox } from "react-icons/fa";
+import {
+  FaPlus,
+  FaEdit,
+  FaTrash,
+  FaSearch,
+  FaBox,
+  FaImage,
+  FaUpload,
+} from "react-icons/fa";
 
 import Button from "../components/Button";
 import EmptyState from "../components/EmptyState";
@@ -13,6 +21,7 @@ import {
   crearEmpaque,
   actualizarEmpaque,
   eliminarEmpaque,
+  subirImagenEmpaque,
 } from "../api/empaquesApi";
 import { formatPrice } from "../utils/formato";
 
@@ -35,6 +44,11 @@ function Empaques() {
   const [guardando, setGuardando] = useState(false);
   const [form, setForm] = useState(FORM_VACIO);
   const [formError, setFormError] = useState(null);
+
+  // Imagen del empaque
+  const [imagenFile, setImagenFile] = useState(null);
+  const [imagenPreview, setImagenPreview] = useState("");
+  const [subiendoImagen, setSubiendoImagen] = useState(false);
 
   // Modal eliminar
   const [eliminando, setEliminando] = useState(null);
@@ -75,10 +89,19 @@ function Empaques() {
     setPage(0);
   };
 
+  const manejarImagen = (e) => {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    setImagenFile(archivo);
+    setImagenPreview(URL.createObjectURL(archivo));
+  };
+
   const abrirCrear = () => {
     setEditando(null);
     setForm(FORM_VACIO);
     setFormError(null);
+    setImagenFile(null);
+    setImagenPreview("");
     setModalAbierto(true);
   };
 
@@ -90,6 +113,8 @@ function Empaques() {
       costoAdicional: empaque.costoAdicional ?? "",
     });
     setFormError(null);
+    setImagenFile(null);
+    setImagenPreview(empaque.imagenUrl || "");
     setModalAbierto(true);
   };
 
@@ -115,16 +140,25 @@ function Empaques() {
     setGuardando(true);
     setFormError(null);
     try {
+      let empaqueId = editando?.id;
       if (editando) {
         await actualizarEmpaque(editando.id, payload);
       } else {
-        await crearEmpaque(payload);
+        const creado = await crearEmpaque(payload);
+        empaqueId = creado?.id ?? empaqueId;
+      }
+      if (imagenFile && empaqueId) {
+        setSubiendoImagen(true);
+        await subirImagenEmpaque(empaqueId, imagenFile);
       }
       setModalAbierto(false);
+      setImagenFile(null);
+      setImagenPreview("");
       cargar();
     } catch (err) {
       setFormError(getErrorMessage(err));
     } finally {
+      setSubiendoImagen(false);
       setGuardando(false);
     }
   };
@@ -207,6 +241,7 @@ function Empaques() {
               <thead className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-slate-800 dark:text-slate-400">
                 <tr>
                   <th className="px-6 py-4">ID</th>
+                  <th className="px-6 py-4">Imagen</th>
                   <th className="px-6 py-4">Tipo</th>
                   <th className="hidden px-6 py-4 md:table-cell">Descripción</th>
                   <th className="px-6 py-4">Costo adicional</th>
@@ -221,6 +256,19 @@ function Empaques() {
                   >
                     <td className="px-6 py-4 text-gray-500 dark:text-slate-400">
                       #{empaque.id}
+                    </td>
+                    <td className="px-6 py-4">
+                      {empaque.imagenUrl ? (
+                        <img
+                          src={empaque.imagenUrl}
+                          alt={empaque.tipo}
+                          className="h-10 w-10 rounded-lg border border-gray-200 bg-white object-contain dark:border-slate-700 dark:bg-slate-800"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-300 dark:border-slate-700 dark:text-slate-600">
+                          <FaImage />
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 font-semibold text-gray-900 dark:text-white">
                       {empaque.tipo}
@@ -286,7 +334,7 @@ function Empaques() {
             <Button
               type="submit"
               form="form-empaque"
-              loading={guardando}
+              loading={guardando || subiendoImagen}
               leftIcon={<FaPlus />}
             >
               {editando ? "Guardar cambios" : "Crear empaque"}
@@ -316,6 +364,40 @@ function Empaques() {
             value={form.costoAdicional}
             onChange={(e) => setForm({ ...form, costoAdicional: e.target.value })}
           />
+
+          {/* Imagen del empaque */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-600 dark:text-slate-300">
+              Imagen del empaque (opcional)
+            </label>
+            <div className="flex items-center gap-4">
+              {imagenPreview ? (
+                <img
+                  src={imagenPreview}
+                  alt="Vista previa del empaque"
+                  className="h-16 w-16 rounded-xl border border-gray-200 bg-white object-contain dark:border-slate-700 dark:bg-slate-800"
+                />
+              ) : (
+                <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-gray-300 text-gray-300 dark:border-slate-700 dark:text-slate-600">
+                  <FaImage className="h-6 w-6" />
+                </div>
+              )}
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-cyan-400 dark:hover:text-cyan-400">
+                <FaUpload />
+                {imagenFile ? imagenFile.name : "Elegir imagen"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={manejarImagen}
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+              La imagen se sube automáticamente al guardar el empaque.
+            </p>
+          </div>
+
           {formError && (
             <p className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-500 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
               {formError}

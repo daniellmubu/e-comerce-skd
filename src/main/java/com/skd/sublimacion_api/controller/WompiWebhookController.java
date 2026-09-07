@@ -4,6 +4,7 @@ import com.skd.sublimacion_api.entity.Pago;
 import com.skd.sublimacion_api.entity.Pedido;
 import com.skd.sublimacion_api.repository.PagoRepository;
 import com.skd.sublimacion_api.repository.PedidoRepository;
+import com.skd.sublimacion_api.service.InventarioService;
 import com.skd.sublimacion_api.service.WebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,7 @@ public class WompiWebhookController {
 
     private final PagoRepository pagoRepository;
     private final PedidoRepository pedidoRepository;
+    private final InventarioService inventarioService;
     private final WebSocketService webSocketService;
 
     @Value("${wompi.events-key:}")
@@ -67,6 +69,7 @@ public class WompiWebhookController {
 
             Pedido pedido = pago.getPedido();
             String estadoAntes = pedido.getEstado();
+            String estadoPagoAntes = pago.getEstado();
             boolean aprobado = "APPROVED".equalsIgnoreCase(status);
             boolean rechazado = "DECLINED".equalsIgnoreCase(status) || "VOIDED".equalsIgnoreCase(status) || "ERROR".equalsIgnoreCase(status);
 
@@ -75,6 +78,12 @@ public class WompiWebhookController {
                 if ("recibido".equalsIgnoreCase(pedido.getEstado())) pedido.setEstado("disenando");
             } else if (rechazado) {
                 pago.setEstado("rechazado");
+                // El stock se reservó en el checkout. Como el pago no se concretó y la
+                // reserva seguía activa (pendiente, nunca cobrada), se devuelve al
+                // inventario para no descontar stock sin una venta real.
+                if ("pendiente".equalsIgnoreCase(estadoPagoAntes)) {
+                    inventarioService.reponerPedido(pedido.getId());
+                }
             } else {
                 pago.setEstado("pendiente");
             }

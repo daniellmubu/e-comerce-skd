@@ -69,6 +69,7 @@ public class EmpaqueServiceImpl implements EmpaqueService {
                 .tipo(empaque.getTipo())
                 .descripcion(empaque.getDescripcion())
                 .costoAdicional(empaque.getCostoAdicional())
+                .imagenUrl(empaque.getImagenUrl())
                 .build();
     }
 }

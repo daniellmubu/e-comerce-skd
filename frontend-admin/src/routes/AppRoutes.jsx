@@ -9,6 +9,7 @@ import Variantes from "../pages/Variantes";
 import Categorias from "../pages/Categorias";
 import Usuarios from "../pages/Usuarios";
 import Pedidos from "../pages/Pedidos";
+import VentaDirecta from "../pages/VentaDirecta";
 import Produccion from "../pages/Produccion";
 import Resenas from "../pages/Resenas";
 import Cupones from "../pages/Cupones";
@@ -43,6 +44,7 @@ function AppRoutes() {
         <Route path="cupones" element={<Cupones />} />
         <Route path="empaques" element={<Empaques />} />
         <Route path="pedidos" element={<Pedidos />} />
+        <Route path="ventas-directas" element={<VentaDirecta />} />
         <Route path="produccion" element={<Produccion />} />
         <Route path="resenas" element={<Resenas />} />
         <Route path="disenos" element={<Disenos />} />
